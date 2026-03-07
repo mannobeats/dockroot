@@ -31,6 +31,7 @@ FROM base AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+RUN apk add --no-cache docker-cli
 
 COPY --from=builder --chown=1001:0 /app/apps/web/.next/standalone ./
 COPY --from=builder /app/apps/web/public ./apps/web/public

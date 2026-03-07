@@ -11,9 +11,13 @@ services:
       - .env.local
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/lab_starter
+      DOCKROOT_DATA_DIR: /app/.dockroot
     depends_on:
       postgres:
         condition: service_healthy
+    volumes:
+      - dockroot_data:/app/.dockroot
+      - /var/run/docker.sock:/var/run/docker.sock
 
   postgres:
     image: postgres:17-alpine
@@ -35,3 +39,4 @@ services:
 
 volumes:
   postgres_data:
+  dockroot_data:

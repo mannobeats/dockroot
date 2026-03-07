@@ -8,6 +8,13 @@
       "when": 1770376570362,
       "tag": "0000_sharp_meteorite",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1772856000000,
+      "tag": "0001_platform_v1",
+      "breakpoints": true
     }
   ]
 }

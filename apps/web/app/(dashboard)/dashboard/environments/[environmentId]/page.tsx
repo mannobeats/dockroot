@@ -1,0 +1,142 @@
+import { CopyButton } from "@/components/copy-button";
+import { PageHeader } from "@/components/page-header";
+import { StatusBadge } from "@/components/status-badge";
+import { getEnvironmentById, getInstallCommand } from "@/lib/platform";
+import { getServerSession } from "@/lib/session";
+
+export default async function EnvironmentDetailPage({
+	params,
+}: {
+	params: Promise<{ environmentId: string }>;
+}) {
+	const session = await getServerSession();
+
+	if (!session?.user.id) {
+		return null;
+	}
+
+	const { environmentId } = await params;
+	const environment = await getEnvironmentById(environmentId, session.user.id);
+
+	if (!environment) {
+		return <div className="text-sm text-muted">Environment not found.</div>;
+	}
+
+	const installCommands =
+		environment.kind === "agent" ? await getInstallCommand(environment.id, session.user.id) : null;
+	const agent = environment.agent[0];
+
+	return (
+		<div className="space-y-6">
+			<PageHeader
+				kicker="Environment"
+				title={environment.name}
+				description={environment.description || "Remote server and agent state."}
+			/>
+
+			<div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+				<section className="rounded-[28px] border border-default/15 bg-surface/80 p-5">
+					<div className="flex items-center gap-2">
+						<h2 className="text-lg font-semibold tracking-tight">Connection</h2>
+						<StatusBadge status={environment.status} />
+					</div>
+					<div className="mt-5 grid gap-4 md:grid-cols-2">
+						<div className="rounded-2xl border border-default/15 bg-background/60 p-4">
+							<p className="text-xs text-muted">Environment kind</p>
+							<p className="mt-2 text-sm font-semibold capitalize">{environment.kind}</p>
+						</div>
+						<div className="rounded-2xl border border-default/15 bg-background/60 p-4">
+							<p className="text-xs text-muted">Manager URL</p>
+							<p className="mt-2 break-all text-sm font-semibold">{environment.managerUrl}</p>
+						</div>
+						<div className="rounded-2xl border border-default/15 bg-background/60 p-4">
+							<p className="text-xs text-muted">Hostname</p>
+							<p className="mt-2 text-sm font-semibold">{agent?.hostname || "Pending install"}</p>
+						</div>
+						<div className="rounded-2xl border border-default/15 bg-background/60 p-4">
+							<p className="text-xs text-muted">Docker version</p>
+							<p className="mt-2 text-sm font-semibold">
+								{agent?.dockerVersion || "Pending install"}
+							</p>
+						</div>
+					</div>
+
+					{installCommands ? (
+						<div className="mt-5 space-y-4">
+							<div className="rounded-2xl border border-default/15 bg-[#050914] p-4">
+								<div className="flex items-center justify-between gap-3">
+									<p className="text-sm font-semibold text-white">Quick install</p>
+									<CopyButton value={installCommands.quickInstall} />
+								</div>
+								<pre className="mt-3 overflow-auto text-xs leading-6 text-white/80">
+									{installCommands.quickInstall}
+								</pre>
+							</div>
+							<div className="rounded-2xl border border-default/15 bg-[#050914] p-4">
+								<div className="flex items-center justify-between gap-3">
+									<p className="text-sm font-semibold text-white">Download then run</p>
+									<CopyButton value={installCommands.downloadInstall} />
+								</div>
+								<pre className="mt-3 overflow-auto text-xs leading-6 text-white/80">
+									{installCommands.downloadInstall}
+								</pre>
+							</div>
+						</div>
+					) : null}
+				</section>
+
+				<section className="space-y-5">
+					<div className="rounded-[28px] border border-default/15 bg-surface/80 p-5">
+						<h2 className="text-lg font-semibold tracking-tight">Stacks</h2>
+						<div className="mt-4 space-y-3">
+							{environment.stacks.length ? (
+								environment.stacks.map((stack) => (
+									<div
+										key={stack.id}
+										className="flex items-center justify-between rounded-2xl border border-default/15 bg-background/60 px-4 py-3"
+									>
+										<div>
+											<p className="text-sm font-semibold">{stack.name}</p>
+											<p className="text-sm text-muted">{stack.description || stack.slug}</p>
+										</div>
+										<StatusBadge status={stack.status} />
+									</div>
+								))
+							) : (
+								<div className="rounded-2xl border border-dashed border-default/20 bg-background/60 p-6 text-sm text-muted">
+									No stacks assigned to this environment yet.
+								</div>
+							)}
+						</div>
+					</div>
+					<div className="rounded-[28px] border border-default/15 bg-surface/80 p-5">
+						<h2 className="text-lg font-semibold tracking-tight">Recent deployments</h2>
+						<div className="mt-4 space-y-3">
+							{environment.deployments.length ? (
+								environment.deployments.map((deployment) => (
+									<div
+										key={deployment.id}
+										className="rounded-2xl border border-default/15 bg-background/60 p-4"
+									>
+										<div className="flex items-center justify-between gap-3">
+											<p className="text-sm font-semibold">{deployment.stack.name}</p>
+											<StatusBadge status={deployment.status} />
+										</div>
+										<p className="mt-2 text-xs font-mono text-muted">{deployment.version}</p>
+										<p className="mt-2 text-sm text-muted">
+											{deployment.summary || "Deployment in progress."}
+										</p>
+									</div>
+								))
+							) : (
+								<div className="rounded-2xl border border-dashed border-default/20 bg-background/60 p-6 text-sm text-muted">
+									No deployments have targeted this environment yet.
+								</div>
+							)}
+						</div>
+					</div>
+				</section>
+			</div>
+		</div>
+	);
+}
