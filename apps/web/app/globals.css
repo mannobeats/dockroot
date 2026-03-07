@@ -1,0 +1,79 @@
+@import "tailwindcss";
+@import "@heroui/styles";
+
+@theme inline {
+	--font-sans: var(--font-geist-sans);
+	--font-mono: var(--font-geist-mono);
+
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-surface: var(--surface);
+
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+
+	--color-muted: var(--muted);
+
+	--color-border-default: var(--border);
+}
+
+:root {
+	/* UniFi-inspired Light Mode */
+	--background: #f4f5f7;
+	--foreground: #18181b;
+	--surface: #ffffff;
+
+	--accent: #0060ff;
+	--accent-foreground: #ffffff;
+
+	--muted: #71717a;
+	--border: #e4e4e5;
+
+	--success: #10b981;
+	--warning: #f59e0b;
+	--danger: #ef4444;
+}
+
+.dark {
+	/* UniFi-inspired Dark Mode */
+	--background: #09090b;
+	--foreground: #fafafa;
+	--surface: #18181b;
+
+	--accent: #3b82f6;
+	--accent-foreground: #ffffff;
+
+	--muted: #a1a1aa;
+	--border: #27272a;
+}
+
+body {
+	background-color: var(--background);
+	color: var(--foreground);
+	font-family: var(--font-sans);
+}
+
+/* Custom Scrollbar for that premium feel */
+::-webkit-scrollbar {
+	width: 6px;
+	height: 6px;
+}
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+::-webkit-scrollbar-thumb {
+	background: var(--border);
+	border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+	background: var(--muted);
+}
+
+/* Hide scrollbar on dropdown popovers */
+.dropdown__popover {
+	scrollbar-width: none;
+	overflow: hidden;
+}
+.dropdown__popover::-webkit-scrollbar {
+	display: none;
+}

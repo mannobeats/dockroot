@@ -1,0 +1,160 @@
+"use client";
+
+import { LayoutDashboard, LogOut, Menu, Server, Settings, X } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { signOut, useSession } from "@/lib/auth-client";
+import { publicEnv } from "@/lib/public-env";
+
+export function Navbar() {
+	const { data: session } = useSession();
+	const router = useRouter();
+	const [mobileOpen, setMobileOpen] = useState(false);
+
+	const handleSignOut = async () => {
+		await signOut();
+		router.push("/");
+	};
+
+	return (
+		<nav className="sticky top-0 z-50 border-b border-default/40 bg-background/70 backdrop-blur-xl backdrop-saturate-150">
+			<div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6">
+				<Link href="/" className="flex items-center gap-2.5">
+					<div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-white">
+						<Server className="h-4 w-4" />
+					</div>
+					<span className="text-[15px] font-semibold tracking-tight">{publicEnv.appName}</span>
+				</Link>
+
+				<div className="hidden items-center gap-1 sm:flex">
+					{session && (
+						<Link
+							href="/dashboard"
+							className="rounded-lg px-3 py-1.5 text-[13px] font-medium text-muted transition-colors hover:text-foreground"
+						>
+							Dashboard
+						</Link>
+					)}
+				</div>
+
+				<div className="hidden items-center gap-2 sm:flex">
+					<ThemeToggle />
+					{session ? (
+						<details className="relative">
+							<summary className="flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-full bg-accent/10 text-xs font-semibold text-accent transition-colors hover:bg-accent/20">
+								{session.user.name?.charAt(0)?.toUpperCase() || "U"}
+							</summary>
+							<div className="absolute right-0 top-10 z-50 min-w-52 rounded-xl border border-default/40 bg-surface p-1 shadow-lg">
+								<div className="px-3 py-2">
+									<p className="text-[13px] font-semibold">{session.user.name}</p>
+									<p className="text-[11px] text-muted">{session.user.email}</p>
+								</div>
+								<button
+									type="button"
+									onClick={() => router.push("/dashboard")}
+									className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] hover:bg-default/30"
+								>
+									<LayoutDashboard className="h-3.5 w-3.5" /> Dashboard
+								</button>
+								<button
+									type="button"
+									onClick={() => router.push("/dashboard/settings")}
+									className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] hover:bg-default/30"
+								>
+									<Settings className="h-3.5 w-3.5" /> Settings
+								</button>
+								<button
+									type="button"
+									onClick={handleSignOut}
+									className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] text-danger hover:bg-danger/10"
+								>
+									<LogOut className="h-3.5 w-3.5" /> Sign Out
+								</button>
+							</div>
+						</details>
+					) : (
+						<>
+							<button
+								type="button"
+								onClick={() => router.push("/sign-in")}
+								className="rounded-lg px-3 py-1.5 text-[13px] font-medium text-muted transition-colors hover:text-foreground"
+							>
+								Sign In
+							</button>
+							<button
+								type="button"
+								onClick={() => router.push("/sign-up")}
+								className="rounded-lg bg-accent px-3 py-1.5 text-[13px] font-medium text-white transition-colors hover:bg-accent/90"
+							>
+								Get Started
+							</button>
+						</>
+					)}
+				</div>
+
+				<div className="flex items-center gap-2 sm:hidden">
+					<ThemeToggle />
+					<button
+						type="button"
+						onClick={() => setMobileOpen(!mobileOpen)}
+						aria-label="Toggle menu"
+						className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-default/50"
+					>
+						{mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+					</button>
+				</div>
+			</div>
+
+			{mobileOpen && (
+				<div className="border-t border-default/40 bg-background px-4 pb-4 pt-2 sm:hidden">
+					<div className="flex flex-col gap-1">
+						{session ? (
+							<>
+								<Link
+									href="/dashboard"
+									className="rounded-lg px-3 py-2 text-[13px] font-medium hover:bg-default/50"
+									onClick={() => setMobileOpen(false)}
+								>
+									Dashboard
+								</Link>
+								<Link
+									href="/dashboard/settings"
+									className="rounded-lg px-3 py-2 text-[13px] font-medium hover:bg-default/50"
+									onClick={() => setMobileOpen(false)}
+								>
+									Settings
+								</Link>
+								<button
+									type="button"
+									onClick={handleSignOut}
+									className="rounded-lg px-3 py-2 text-left text-[13px] font-medium text-danger hover:bg-danger/10"
+								>
+									Sign Out
+								</button>
+							</>
+						) : (
+							<>
+								<Link
+									href="/sign-in"
+									className="rounded-lg px-3 py-2 text-[13px] font-medium hover:bg-default/50"
+									onClick={() => setMobileOpen(false)}
+								>
+									Sign In
+								</Link>
+								<Link
+									href="/sign-up"
+									className="rounded-lg px-3 py-2 text-[13px] font-medium text-accent hover:bg-accent/10"
+									onClick={() => setMobileOpen(false)}
+								>
+									Get Started
+								</Link>
+							</>
+						)}
+					</div>
+				</div>
+			)}
+		</nav>
+	);
+}

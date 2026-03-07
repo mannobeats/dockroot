@@ -1,0 +1,38 @@
+{
+	"name": "lab-starter",
+	"version": "0.1.0",
+	"private": true,
+	"packageManager": "pnpm@10.30.3",
+	"scripts": {
+		"dev": "dotenv -e .env.local -- pnpm --filter @lab-starter/web dev",
+		"build": "dotenv -e .env.local -- pnpm --filter @lab-starter/web build",
+		"start": "dotenv -e .env.local -- pnpm --filter @lab-starter/web start",
+		"lint": "biome check .",
+		"lint:fix": "biome check --write .",
+		"format": "biome format --write .",
+		"db:bundle-migrate": "pnpm exec esbuild packages/db/src/migrate.ts --bundle --platform=node --format=esm --outfile=migrate.mjs",
+		"db:generate": "dotenv -e .env.local -- pnpm exec drizzle-kit generate --config drizzle.config.ts",
+		"db:migrate": "dotenv -e .env.local -- pnpm exec drizzle-kit migrate --config drizzle.config.ts",
+		"db:push": "dotenv -e .env.local -- pnpm exec drizzle-kit push --config drizzle.config.ts",
+		"db:studio": "dotenv -e .env.local -- pnpm exec drizzle-kit studio --config drizzle.config.ts"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.4.6",
+		"dotenv-cli": "^11.0.0",
+		"drizzle-kit": "^0.31.9",
+		"esbuild": "^0.27.3",
+		"typescript": "^5.9.3"
+	},
+	"trustedDependencies": [
+		"esbuild",
+		"sharp",
+		"unrs-resolver"
+	],
+	"pnpm": {
+		"overrides": {
+			"@hono/node-server": "^1.19.11",
+			"hono": "^4.12.5",
+			"lodash": "^4.17.23"
+		}
+	}
+}
