@@ -12,12 +12,12 @@ export function StatCard({
 	icon: LucideIcon;
 }) {
 	return (
-		<div className="rounded-[24px] border border-default/20 bg-surface/80 p-5 shadow-[0_20px_50px_rgba(0,0,0,0.12)]">
+		<div className="rounded-xl border border-default/20 bg-surface p-4 sm:p-5">
 			<div className="flex items-center justify-between">
 				<span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted">
 					{label}
 				</span>
-				<div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-accent/10 text-accent">
+				<div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent/10 text-accent">
 					<Icon className="h-4 w-4" />
 				</div>
 			</div>
