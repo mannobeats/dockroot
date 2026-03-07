@@ -37,10 +37,10 @@ importers:
       '@heroui/styles':
         specifier: 3.0.0-beta.5
         version: 3.0.0-beta.5(tailwind-merge@3.4.0)(tailwindcss@4.2.1)
-      '@lab-starter/auth':
+      '@dockroot/auth':
         specifier: workspace:*
         version: link:../../packages/auth
-      '@lab-starter/db':
+      '@dockroot/db':
         specifier: workspace:*
         version: link:../../packages/db
       better-auth:
@@ -83,7 +83,7 @@ importers:
 
   packages/auth:
     dependencies:
-      '@lab-starter/db':
+      '@dockroot/db':
         specifier: workspace:*
         version: link:../db
       better-auth:

@@ -12,7 +12,7 @@ export function Footer() {
 					<span className="text-[13px] font-medium">{publicEnv.appName}</span>
 				</div>
 				<p className="text-[12px] text-muted">
-					&copy; {new Date().getFullYear()} Lab Starter. All rights reserved.
+					&copy; {new Date().getFullYear()} Dockroot. All rights reserved.
 				</p>
 			</div>
 		</footer>

@@ -1,4 +1,4 @@
-# Lab Starter
+# Dockroot
 
 A production-ready Next.js template for building self-hosted applications. Designed for IT professionals and homelab enthusiasts.
 
@@ -90,8 +90,8 @@ packages/
 ## Docker Production Build
 
 ```bash
-docker build -t lab-starter .
-docker run -p 3000:3000 --env-file .env.local lab-starter
+docker build -t dockroot .
+docker run -p 3000:3000 --env-file .env.local dockroot
 ```
 
 Or use the full stack with compose:

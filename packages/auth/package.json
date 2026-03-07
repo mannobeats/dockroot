@@ -1,12 +1,12 @@
 {
-	"name": "@lab-starter/auth",
+	"name": "@dockroot/auth",
 	"version": "0.1.0",
 	"private": true,
 	"exports": {
 		".": "./src/index.ts"
 	},
 	"dependencies": {
-		"@lab-starter/db": "workspace:*",
+		"@dockroot/db": "workspace:*",
 		"better-auth": "^1.5.4",
 		"drizzle-orm": "^0.45.1"
 	}

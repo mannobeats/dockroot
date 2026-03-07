@@ -8,7 +8,7 @@ ENV_EXAMPLE := .env.example
 .PHONY: help install env dev dev-full build start lint format docker-build docker-up docker-down docker-logs db-push db-generate db-migrate db-studio postgres-up postgres-down clean
 
 help:
-	@printf "\nLab Starter Commands\n\n"
+	@printf "\nDockroot Commands\n\n"
 	@printf "  make install      Install workspace dependencies\n"
 	@printf "  make env          Create %s from %s if missing\n" "$(ENV_FILE)" "$(ENV_EXAMPLE)"
 	@printf "  make dev          Start local app with Docker Postgres\n"

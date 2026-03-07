@@ -1,4 +1,4 @@
-import { db, schema } from "@lab-starter/db";
+import { db, schema } from "@dockroot/db";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 

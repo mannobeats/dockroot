@@ -132,7 +132,7 @@ export default function Home() {
 								<pre className="overflow-x-auto p-5 text-left text-[13px] leading-relaxed">
 									<code className="text-foreground/80">
 										{`git clone <your-repo>
-cd lab-starter
+cd dockroot
 pnpm install
 docker compose up -d
 pnpm run db:push

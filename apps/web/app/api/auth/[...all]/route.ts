@@ -1,4 +1,4 @@
-import { auth } from "@lab-starter/auth";
+import { auth } from "@dockroot/auth";
 import { toNextJsHandler } from "better-auth/next-js";
 
 export const { GET, POST } = toNextJsHandler(auth);

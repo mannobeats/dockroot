@@ -1,6 +1,6 @@
 import "server-only";
 
-import { auth } from "@lab-starter/auth";
+import { auth } from "@dockroot/auth";
 import { headers } from "next/headers";
 
 export async function getServerSession() {

@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
 	output: "standalone",
-	transpilePackages: ["@lab-starter/auth", "@lab-starter/db"],
+	transpilePackages: ["@dockroot/auth", "@dockroot/db"],
 	headers: async () => [
 		{
 			source: "/(.*)",

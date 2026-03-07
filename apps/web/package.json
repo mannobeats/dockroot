@@ -1,5 +1,5 @@
 {
-	"name": "@lab-starter/web",
+	"name": "@dockroot/web",
 	"version": "0.1.0",
 	"private": true,
 	"scripts": {
@@ -10,8 +10,8 @@
 	"dependencies": {
 		"@heroui/react": "3.0.0-beta.5",
 		"@heroui/styles": "3.0.0-beta.5",
-		"@lab-starter/auth": "workspace:*",
-		"@lab-starter/db": "workspace:*",
+		"@dockroot/auth": "workspace:*",
+		"@dockroot/db": "workspace:*",
 		"better-auth": "^1.5.4",
 		"lucide-react": "^0.577.0",
 		"next": "16.1.6",
