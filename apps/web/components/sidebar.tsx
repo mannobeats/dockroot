@@ -8,8 +8,10 @@ import {
 	CopyPlus,
 	Cpu,
 	FolderKanban,
+	Layers3,
 	LayoutDashboard,
 	LogOut,
+	Logs,
 	Network,
 	Server,
 	Settings,
@@ -26,6 +28,7 @@ const navGroups = [
 		items: [
 			{ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
 			{ href: "/dashboard/projects", label: "Projects", icon: FolderKanban },
+			{ href: "/dashboard/stacks", label: "Stacks", icon: Layers3 },
 			{ href: "/dashboard/environments", label: "Environments", icon: Server },
 		],
 	},
@@ -33,6 +36,7 @@ const navGroups = [
 		label: "Resources",
 		items: [
 			{ href: "/dashboard/containers", label: "Containers", icon: Cpu },
+			{ href: "/dashboard/logs", label: "Logs", icon: Logs },
 			{ href: "/dashboard/images", label: "Images", icon: Boxes },
 			{ href: "/dashboard/volumes", label: "Volumes", icon: CopyPlus },
 			{ href: "/dashboard/networks", label: "Networks", icon: Network },

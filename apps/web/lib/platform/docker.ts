@@ -12,17 +12,48 @@ import { emitRealtime, emitToRoom } from "@/lib/realtime";
 
 const execFileAsync = promisify(execFile);
 
+type DockerCommandResult = {
+	stdout: string;
+	stderr: string;
+	code: number;
+	ok: boolean;
+};
+
+type ContainerBrowserResult = {
+	kind: "directory" | "file" | "missing";
+	path: string;
+	entries?: Array<{ name: string; kind: "dir" | "file" | "other" }>;
+	content?: string;
+};
+
+type ComposeProjectSummary = {
+	name: string;
+	status: string;
+	configFiles: string[];
+	containers: Array<Record<string, string>>;
+	containerCount: number;
+	runningCount: number;
+};
+
 async function runDockerCommand(args: string[]) {
 	try {
-		return await execFileAsync("docker", args, {
+		const result = await execFileAsync("docker", args, {
 			maxBuffer: 1024 * 1024 * 8,
 		});
+		return {
+			stdout: result.stdout,
+			stderr: result.stderr,
+			code: 0,
+			ok: true,
+		} satisfies DockerCommandResult;
 	} catch (error) {
 		const message = error instanceof Error ? error.message : "Docker command failed";
 		return {
 			stdout: "",
 			stderr: message,
-		};
+			code: 1,
+			ok: false,
+		} satisfies DockerCommandResult;
 	}
 }
 
@@ -40,10 +71,26 @@ function parseJsonLines<T>(content: string) {
 		});
 }
 
+function parseJsonValue<T>(content: string) {
+	try {
+		return JSON.parse(content) as T;
+	} catch {
+		return null;
+	}
+}
+
+function stripAnsi(content: string) {
+	const esc = String.fromCharCode(27);
+	const bell = String.fromCharCode(7);
+	return content
+		.replaceAll(new RegExp(`${esc}\\[[0-9;]*[A-Za-z]`, "g"), "")
+		.replaceAll(new RegExp(`${esc}\\][^${bell}]*${bell}`, "g"), "");
+}
+
 export async function getLocalDockerSnapshot() {
 	const [ps, images, volumes, networks] = await Promise.all([
-		runDockerCommand(["ps", "-a", "--format", "{{json .}}"]),
-		runDockerCommand(["images", "--format", "{{json .}}"]),
+		runDockerCommand(["ps", "-a", "--size", "--format", "{{json .}}"]),
+		runDockerCommand(["images", "--digests", "--format", "{{json .}}"]),
 		runDockerCommand(["volume", "ls", "--format", "{{json .}}"]),
 		runDockerCommand(["network", "ls", "--format", "{{json .}}"]),
 	]);
@@ -62,10 +109,10 @@ export async function getLocalDockerSnapshot() {
 			totalMemoryGb: Number((os.totalmem() / 1024 / 1024 / 1024).toFixed(1)),
 			freeMemoryGb: Number((os.freemem() / 1024 / 1024 / 1024).toFixed(1)),
 		},
-		containers: containers.slice(0, 12),
-		images: imageRows.slice(0, 12),
-		volumes: volumeRows.slice(0, 12),
-		networks: networkRows.slice(0, 12),
+		containers,
+		images: imageRows,
+		volumes: volumeRows,
+		networks: networkRows,
 		counts: {
 			containers: containers.length,
 			runningContainers: containers.filter((row) => row.State === "running").length,
@@ -77,9 +124,10 @@ export async function getLocalDockerSnapshot() {
 }
 
 export async function getContainerDetails(containerId: string) {
-	const [inspectResult, logsResult] = await Promise.all([
+	const [inspectResult, logsResult, statsResult] = await Promise.all([
 		runDockerCommand(["inspect", containerId]),
 		runDockerCommand(["logs", "--tail", "200", containerId]),
+		runDockerCommand(["stats", "--no-stream", "--format", "{{json .}}", containerId]),
 	]);
 
 	let inspect = null;
@@ -92,7 +140,8 @@ export async function getContainerDetails(containerId: string) {
 
 	return {
 		inspect,
-		logs: [logsResult.stdout, logsResult.stderr].filter(Boolean).join("\n"),
+		logs: stripAnsi([logsResult.stdout, logsResult.stderr].filter(Boolean).join("\n")),
+		stats: parseJsonLines<Record<string, string>>(statsResult.stdout)[0] ?? null,
 	};
 }
 
@@ -109,8 +158,227 @@ export async function listStackContainers(stackSlug: string) {
 	return parseJsonLines<Record<string, string>>(result.stdout);
 }
 
-export async function controlContainer(containerId: string, action: "start" | "stop" | "restart") {
-	const result = await runDockerCommand([action, containerId]);
+export async function listContainers() {
+	const result = await runDockerCommand(["ps", "-a", "--size", "--format", "{{json .}}"]);
+	return parseJsonLines<Record<string, string>>(result.stdout);
+}
+
+export async function listImages() {
+	const result = await runDockerCommand(["images", "--digests", "--format", "{{json .}}"]);
+	return parseJsonLines<Record<string, string>>(result.stdout);
+}
+
+export async function listVolumes() {
+	const result = await runDockerCommand(["volume", "ls", "--format", "{{json .}}"]);
+	return parseJsonLines<Record<string, string>>(result.stdout);
+}
+
+export async function listNetworks() {
+	const result = await runDockerCommand(["network", "ls", "--format", "{{json .}}"]);
+	return parseJsonLines<Record<string, string>>(result.stdout);
+}
+
+export async function getImageDetails(imageRef: string) {
+	const result = await runDockerCommand(["image", "inspect", imageRef]);
+	return parseJsonValue<Record<string, unknown>[]>(result.stdout)?.[0] ?? null;
+}
+
+export async function getVolumeDetails(volumeName: string) {
+	const result = await runDockerCommand(["volume", "inspect", volumeName]);
+	return parseJsonValue<Record<string, unknown>[]>(result.stdout)?.[0] ?? null;
+}
+
+export async function getNetworkDetails(networkName: string) {
+	const result = await runDockerCommand(["network", "inspect", networkName]);
+	return parseJsonValue<Record<string, unknown>[]>(result.stdout)?.[0] ?? null;
+}
+
+export async function getContainerLogs(
+	containerId: string,
+	options?: { tail?: number; since?: string },
+) {
+	const args = ["logs", "--timestamps"];
+	if (options?.tail) {
+		args.push("--tail", String(options.tail));
+	}
+	if (options?.since) {
+		args.push("--since", options.since);
+	}
+	args.push(containerId);
+
+	const result = await runDockerCommand(args);
+	return stripAnsi([result.stdout, result.stderr].filter(Boolean).join("\n"));
+}
+
+export async function listComposeProjects(): Promise<ComposeProjectSummary[]> {
+	const [composeResult, containers] = await Promise.all([
+		runDockerCommand(["compose", "ls", "--all", "--format", "json"]),
+		listContainers(),
+	]);
+
+	const parsed =
+		parseJsonValue<Array<{ Name?: string; Status?: string; ConfigFiles?: string }>>(
+			composeResult.stdout,
+		) ?? [];
+
+	const byProject = new Map<string, Array<Record<string, string>>>();
+
+	for (const container of containers) {
+		const labels = container.Labels || "";
+		const composeProject = labels
+			.split(",")
+			.find((label) => label.startsWith("com.docker.compose.project="))
+			?.split("=")
+			.slice(1)
+			.join("=");
+
+		if (!composeProject) {
+			continue;
+		}
+
+		const current = byProject.get(composeProject) || [];
+		current.push(container);
+		byProject.set(composeProject, current);
+	}
+
+	return parsed
+		.filter((project) => project.Name)
+		.map((project) => {
+			const projectContainers = byProject.get(project.Name as string) || [];
+			return {
+				name: project.Name as string,
+				status: project.Status || "unknown",
+				configFiles: (project.ConfigFiles || "")
+					.split(",")
+					.map((value) => value.trim())
+					.filter(Boolean),
+				containers: projectContainers,
+				containerCount: projectContainers.length,
+				runningCount: projectContainers.filter((container) => container.State === "running").length,
+			};
+		})
+		.sort((left, right) => left.name.localeCompare(right.name));
+}
+
+export async function controlComposeProject(
+	projectName: string,
+	configFiles: string[],
+	action: "start" | "stop" | "restart" | "destroy",
+) {
+	const composeArgs = configFiles.flatMap((configFile) => ["-f", configFile]);
+	const operationArgs =
+		action === "destroy"
+			? ["down", "--remove-orphans"]
+			: action === "start"
+				? ["start"]
+				: action === "stop"
+					? ["stop"]
+					: ["restart"];
+
+	const result = await runDockerCommand([
+		"compose",
+		"-p",
+		projectName,
+		...composeArgs,
+		...operationArgs,
+	]);
+
+	emitRealtime("stack:state", {
+		projectName,
+		action,
+		ok: result.ok,
+		at: Date.now(),
+	});
+
+	return {
+		ok: result.ok,
+		output: stripAnsi([result.stdout, result.stderr].filter(Boolean).join("\n")),
+	};
+}
+
+export async function browseContainerPath(
+	containerId: string,
+	targetPath: string,
+): Promise<ContainerBrowserResult> {
+	const result = await runDockerCommand([
+		"exec",
+		"-e",
+		`TARGET_PATH=${targetPath}`,
+		containerId,
+		"sh",
+		"-lc",
+		`
+if [ -d "$TARGET_PATH" ]; then
+  echo "__DIR__"
+  for entry in "$TARGET_PATH"/* "$TARGET_PATH"/.[!.]* "$TARGET_PATH"/..?*; do
+    [ ! -e "$entry" ] && continue
+    name=$(basename "$entry")
+    if [ -d "$entry" ]; then
+      printf "dir\\t%s\\n" "$name"
+    elif [ -f "$entry" ]; then
+      printf "file\\t%s\\n" "$name"
+    else
+      printf "other\\t%s\\n" "$name"
+    fi
+  done
+elif [ -f "$TARGET_PATH" ]; then
+  echo "__FILE__"
+  sed -n '1,240p' "$TARGET_PATH"
+else
+  echo "__MISSING__"
+fi
+		`,
+	]);
+
+	const output = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
+
+	if (output.startsWith("__DIR__")) {
+		const entries = output
+			.split("\n")
+			.slice(1)
+			.map((line) => line.trim())
+			.filter(Boolean)
+			.map((line) => {
+				const [kind, ...rest] = line.split("\t");
+				return {
+					kind: (kind as "dir" | "file" | "other") || "other",
+					name: rest.join("\t"),
+				};
+			})
+			.sort((left, right) => {
+				if (left.kind === right.kind) {
+					return left.name.localeCompare(right.name);
+				}
+				return left.kind === "dir" ? -1 : 1;
+			});
+
+		return {
+			kind: "directory",
+			path: targetPath,
+			entries,
+		};
+	}
+
+	if (output.startsWith("__FILE__")) {
+		return {
+			kind: "file",
+			path: targetPath,
+			content: output.split("\n").slice(1).join("\n"),
+		};
+	}
+
+	return {
+		kind: "missing",
+		path: targetPath,
+	};
+}
+
+export async function controlContainer(
+	containerId: string,
+	action: "start" | "stop" | "restart" | "remove",
+) {
+	const args = action === "remove" ? ["rm", "-f", containerId] : [action, containerId];
+	const result = await runDockerCommand(args);
 	const ok = !result.stderr;
 
 	emitRealtime("container:state", {
@@ -124,6 +392,42 @@ export async function controlContainer(containerId: string, action: "start" | "s
 		ok,
 		output: [result.stdout, result.stderr].filter(Boolean).join("\n"),
 	};
+}
+
+export async function createVolume(name: string, driver = "local") {
+	return runDockerCommand(["volume", "create", "--driver", driver, name]);
+}
+
+export async function removeVolume(name: string) {
+	return runDockerCommand(["volume", "rm", "-f", name]);
+}
+
+export async function pruneVolumes() {
+	return runDockerCommand(["volume", "prune", "-f"]);
+}
+
+export async function createNetwork(name: string, driver = "bridge") {
+	return runDockerCommand(["network", "create", "--driver", driver, name]);
+}
+
+export async function removeNetwork(name: string) {
+	return runDockerCommand(["network", "rm", name]);
+}
+
+export async function pruneNetworks() {
+	return runDockerCommand(["network", "prune", "-f"]);
+}
+
+export async function pullImage(imageRef: string) {
+	return runDockerCommand(["pull", imageRef]);
+}
+
+export async function removeImage(imageRef: string) {
+	return runDockerCommand(["image", "rm", "-f", imageRef]);
+}
+
+export async function pruneImages(options?: { all?: boolean }) {
+	return runDockerCommand(["image", "prune", "-f", ...(options?.all ? ["-a"] : [])]);
 }
 
 export async function deployStackLocally({

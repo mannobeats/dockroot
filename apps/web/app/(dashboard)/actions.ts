@@ -9,7 +9,19 @@ import {
 	createStack,
 	queueOrRunDeployment,
 } from "@/lib/platform";
-import { controlContainer } from "@/lib/platform/docker";
+import {
+	controlComposeProject,
+	controlContainer,
+	createNetwork,
+	createVolume,
+	pruneImages,
+	pruneNetworks,
+	pruneVolumes,
+	pullImage,
+	removeImage,
+	removeNetwork,
+	removeVolume,
+} from "@/lib/platform/docker";
 import { getServerSession } from "@/lib/session";
 
 async function requireUserId() {
@@ -175,10 +187,124 @@ export async function controlContainerAction(formData: FormData) {
 	const containerId = getValue(formData, "containerId");
 	const action = getValue(formData, "action");
 
-	if (!containerId || !["start", "stop", "restart"].includes(action)) {
+	if (!containerId || !["start", "stop", "restart", "remove"].includes(action)) {
 		throw new Error("Container and action are required");
 	}
 
-	await controlContainer(containerId, action as "start" | "stop" | "restart");
+	await controlContainer(containerId, action as "start" | "stop" | "restart" | "remove");
 	revalidatePath("/dashboard/containers");
+}
+
+export async function controlComposeProjectAction(formData: FormData) {
+	await requireUserId();
+	const projectName = getValue(formData, "projectName");
+	const action = getValue(formData, "action");
+	const configFiles = formData
+		.getAll("configFiles")
+		.map((value) => String(value).trim())
+		.filter(Boolean);
+
+	if (!projectName || !["start", "stop", "restart", "destroy"].includes(action)) {
+		throw new Error("Compose project and action are required");
+	}
+
+	await controlComposeProject(
+		projectName,
+		configFiles,
+		action as "start" | "stop" | "restart" | "destroy",
+	);
+	revalidatePath("/dashboard/stacks");
+}
+
+export async function pullImageAction(formData: FormData) {
+	await requireUserId();
+	const imageRef = getValue(formData, "imageRef");
+
+	if (!imageRef) {
+		throw new Error("Image reference is required");
+	}
+
+	await pullImage(imageRef);
+	revalidatePath("/dashboard/images");
+}
+
+export async function removeImageAction(formData: FormData) {
+	await requireUserId();
+	const imageRef = getValue(formData, "imageRef");
+
+	if (!imageRef) {
+		throw new Error("Image reference is required");
+	}
+
+	await removeImage(imageRef);
+	revalidatePath("/dashboard/images");
+}
+
+export async function pruneImagesAction(formData: FormData) {
+	await requireUserId();
+	const mode = getValue(formData, "mode");
+	await pruneImages({ all: mode === "all" });
+	revalidatePath("/dashboard/images");
+}
+
+export async function createVolumeAction(formData: FormData) {
+	await requireUserId();
+	const name = getValue(formData, "name");
+	const driver = getValue(formData, "driver") || "local";
+
+	if (!name) {
+		throw new Error("Volume name is required");
+	}
+
+	await createVolume(name, driver);
+	revalidatePath("/dashboard/volumes");
+}
+
+export async function removeVolumeAction(formData: FormData) {
+	await requireUserId();
+	const name = getValue(formData, "name");
+
+	if (!name) {
+		throw new Error("Volume name is required");
+	}
+
+	await removeVolume(name);
+	revalidatePath("/dashboard/volumes");
+}
+
+export async function pruneVolumesAction() {
+	await requireUserId();
+	await pruneVolumes();
+	revalidatePath("/dashboard/volumes");
+}
+
+export async function createNetworkAction(formData: FormData) {
+	await requireUserId();
+	const name = getValue(formData, "name");
+	const driver = getValue(formData, "driver") || "bridge";
+
+	if (!name) {
+		throw new Error("Network name is required");
+	}
+
+	await createNetwork(name, driver);
+	revalidatePath("/dashboard/networks");
+}
+
+export async function removeNetworkAction(formData: FormData) {
+	await requireUserId();
+	const name = getValue(formData, "name");
+
+	if (!name) {
+		throw new Error("Network name is required");
+	}
+
+	await removeNetwork(name);
+	revalidatePath("/dashboard/networks");
+}
+
+export async function pruneNetworksAction() {
+	await requireUserId();
+	await pruneNetworks();
+	revalidatePath("/dashboard/networks");
 }

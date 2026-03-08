@@ -4,34 +4,82 @@ import { FormSubmitButton } from "@/components/form-submit-button";
 import { LiveRuntimePanel } from "@/components/live-runtime-panel";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
-import { listRuntimeResources } from "@/lib/platform";
+import { listContainers } from "@/lib/platform/docker";
 
-export default async function ContainersPage() {
-	const runtime = await listRuntimeResources();
+export default async function ContainersPage({
+	searchParams,
+}: {
+	searchParams: Promise<{ q?: string; status?: string }>;
+}) {
+	const params = await searchParams;
+	const query = (params.q || "").toLowerCase();
+	const status = (params.status || "all").toLowerCase();
+	const containers = await listContainers();
+	const filtered = containers.filter((container) => {
+		const matchesQuery =
+			!query ||
+			container.Names?.toLowerCase().includes(query) ||
+			container.Image?.toLowerCase().includes(query);
+		const matchesStatus = status === "all" || (container.State || "").toLowerCase() === status;
+		return matchesQuery && matchesStatus;
+	});
 
 	return (
 		<div className="space-y-6">
 			<PageHeader
 				kicker="Runtime"
 				title="Containers"
-				description="Live Docker runtime snapshot from the manager host. Use stop, start, and restart directly from the manager."
+				description="Inspect, control, remove, and jump into logs for every runtime container on the manager host."
 			/>
+
 			<LiveRuntimePanel />
-			<div className="rounded-2xl border border-default/15 bg-surface p-5">
+
+			<section className="rounded-2xl border border-default/15 bg-surface p-5">
+				<form className="grid gap-3 lg:grid-cols-[1fr_180px_auto]">
+					<input
+						type="search"
+						name="q"
+						defaultValue={params.q || ""}
+						placeholder="Search containers, images, or names"
+						className="h-11 rounded-xl border border-default/15 bg-background px-4 text-sm outline-none transition-colors focus:border-accent"
+					/>
+					<select
+						name="status"
+						defaultValue={status}
+						className="h-11 rounded-xl border border-default/15 bg-background px-4 text-sm outline-none transition-colors focus:border-accent"
+					>
+						<option value="all">All statuses</option>
+						<option value="running">Running</option>
+						<option value="exited">Exited</option>
+						<option value="created">Created</option>
+						<option value="paused">Paused</option>
+					</select>
+					<button
+						type="submit"
+						className="inline-flex h-11 items-center justify-center rounded-xl bg-accent px-4 text-sm font-medium text-white"
+					>
+						Filter
+					</button>
+				</form>
+			</section>
+
+			<section className="rounded-2xl border border-default/15 bg-surface p-5">
 				<div className="overflow-hidden rounded-xl border border-default/15">
 					<table className="min-w-full divide-y divide-default/15 text-left">
 						<thead className="bg-background/60 text-[11px] uppercase tracking-[0.18em] text-muted">
 							<tr>
-								<th className="px-4 py-3 font-medium">Container</th>
+								<th className="px-4 py-3 font-medium">Name</th>
 								<th className="px-4 py-3 font-medium">Image</th>
 								<th className="px-4 py-3 font-medium">State</th>
+								<th className="px-4 py-3 font-medium">Status</th>
 								<th className="px-4 py-3 font-medium">Ports</th>
+								<th className="px-4 py-3 font-medium">Size</th>
 								<th className="px-4 py-3 font-medium">Actions</th>
 							</tr>
 						</thead>
 						<tbody className="divide-y divide-default/10 bg-surface/40 text-sm">
-							{runtime.containers.length ? (
-								runtime.containers.map((container) => (
+							{filtered.length ? (
+								filtered.map((container) => (
 									<tr key={`${container.ID}-${container.Names}`}>
 										<td className="px-4 py-3 font-medium">
 											<Link
@@ -45,10 +93,12 @@ export default async function ContainersPage() {
 										<td className="px-4 py-3">
 											<StatusBadge status={(container.State || "offline").toLowerCase()} />
 										</td>
+										<td className="px-4 py-3 text-muted">{container.Status || "—"}</td>
 										<td className="px-4 py-3 text-muted">{container.Ports || "—"}</td>
+										<td className="px-4 py-3 text-muted">{container.Size || "—"}</td>
 										<td className="px-4 py-3">
 											<div className="flex flex-wrap gap-2">
-												{(["start", "stop", "restart"] as const).map((action) => (
+												{(["start", "stop", "restart", "remove"] as const).map((action) => (
 													<form key={action} action={controlContainerAction}>
 														<input type="hidden" name="containerId" value={container.ID} />
 														<input type="hidden" name="action" value={action} />
@@ -59,21 +109,27 @@ export default async function ContainersPage() {
 														/>
 													</form>
 												))}
+												<Link
+													href={`/dashboard/logs?mode=single&container=${container.ID}`}
+													className="inline-flex h-8 items-center justify-center rounded-lg border border-default/20 bg-background px-3 text-xs font-medium text-muted transition-colors hover:text-foreground"
+												>
+													logs
+												</Link>
 											</div>
 										</td>
 									</tr>
 								))
 							) : (
 								<tr>
-									<td colSpan={5} className="px-4 py-8 text-center text-sm text-muted">
-										No containers found or Docker is unavailable.
+									<td colSpan={7} className="px-4 py-8 text-center text-sm text-muted">
+										No containers matched the current filters.
 									</td>
 								</tr>
 							)}
 						</tbody>
 					</table>
 				</div>
-			</div>
+			</section>
 		</div>
 	);
 }

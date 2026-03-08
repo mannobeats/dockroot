@@ -19,7 +19,12 @@ import {
 	listInstallationRepositories,
 } from "@/lib/github-app";
 import { incrementDeploymentEvent } from "@/lib/monitoring";
-import { deployStackLocally, getLocalDockerSnapshot } from "@/lib/platform/docker";
+import {
+	deployStackLocally,
+	getLocalDockerSnapshot,
+	listComposeProjects,
+	listContainers,
+} from "@/lib/platform/docker";
 import { getPlatformDataDir } from "@/lib/platform/fs";
 import { publicEnv } from "@/lib/public-env";
 import { emitRealtime, emitToRoom } from "@/lib/realtime";
@@ -241,6 +246,90 @@ export async function listProjects(userId: string) {
 			},
 		},
 	});
+}
+
+export async function listStacks(userId: string) {
+	await ensureDefaultLocalEnvironment(userId);
+
+	const [trackedStacks, runtimeContainers, composeProjects] = await Promise.all([
+		db.query.stacks.findMany({
+			where: eq(stacks.createdByUserId, userId),
+			orderBy: [desc(stacks.updatedAt)],
+			with: {
+				project: true,
+				environment: true,
+				deployments: {
+					orderBy: [desc(deployments.createdAt)],
+					limit: 1,
+				},
+			},
+		}),
+		listContainers(),
+		listComposeProjects(),
+	]);
+
+	const runtimeByProject = new Map<string, Array<Record<string, string>>>();
+
+	for (const container of runtimeContainers) {
+		const labels = container.Labels || "";
+		const composeProject = labels
+			.split(",")
+			.find((label) => label.startsWith("com.docker.compose.project="))
+			?.split("=")
+			.slice(1)
+			.join("=");
+
+		if (!composeProject) {
+			continue;
+		}
+
+		const current = runtimeByProject.get(composeProject) || [];
+		current.push(container);
+		runtimeByProject.set(composeProject, current);
+	}
+
+	const tracked = trackedStacks.map((stack) => {
+		const containers = runtimeByProject.get(stack.slug) || [];
+		return {
+			type: "tracked" as const,
+			slug: stack.slug,
+			name: stack.name,
+			status: stack.status,
+			projectName: stack.project.name,
+			projectId: stack.project.id,
+			stackId: stack.id,
+			environmentName: stack.environment.name,
+			sourceType: stack.sourceType,
+			composeFileName: stack.composeFileName,
+			containerCount: containers.length,
+			runningCount: containers.filter((container) => container.State === "running").length,
+			containers,
+			lastDeployment: stack.deployments[0] || null,
+		};
+	});
+
+	const trackedSlugs = new Set(tracked.map((stack) => stack.slug));
+	const untracked = composeProjects
+		.filter((project) => !trackedSlugs.has(project.name))
+		.map((project) => ({
+			type: "untracked" as const,
+			slug: project.name,
+			name: project.name,
+			status: project.status,
+			projectName: null,
+			projectId: null,
+			stackId: null,
+			environmentName: "External compose project",
+			sourceType: "external" as const,
+			composeFileName: project.configFiles[0]?.split("/").at(-1) || "compose.yaml",
+			configFiles: project.configFiles,
+			containerCount: project.containerCount,
+			runningCount: project.runningCount,
+			containers: project.containers,
+			lastDeployment: null,
+		}));
+
+	return [...tracked, ...untracked].sort((left, right) => left.name.localeCompare(right.name));
 }
 
 export async function listGitHubInstallations(userId: string) {
