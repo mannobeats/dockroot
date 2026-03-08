@@ -9,6 +9,8 @@ import {
 	createGitHubStack,
 	createProject,
 	createStack,
+	deleteProject,
+	deleteStack,
 	queueOrRunDeployment,
 } from "@/lib/platform";
 import {
@@ -193,6 +195,39 @@ export async function destroyStackAction(formData: FormData) {
 		userId,
 		operation: "destroy",
 	});
+}
+
+export async function deleteStackAction(formData: FormData) {
+	const { userId } = await requireUserSession();
+	const stackId = getValue(formData, "stackId");
+	const projectId = getValue(formData, "projectId");
+
+	if (!stackId || !projectId) {
+		throw new Error("Stack and project are required");
+	}
+
+	await deleteStack({
+		stackId,
+		userId,
+	});
+
+	redirect(`/dashboard/projects/${projectId}`);
+}
+
+export async function deleteProjectAction(formData: FormData) {
+	const { userId } = await requireUserSession();
+	const projectId = getValue(formData, "projectId");
+
+	if (!projectId) {
+		throw new Error("Project is required");
+	}
+
+	await deleteProject({
+		projectId,
+		userId,
+	});
+
+	redirect("/dashboard/projects");
 }
 
 export async function controlContainerAction(formData: FormData) {

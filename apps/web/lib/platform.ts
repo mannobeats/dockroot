@@ -21,6 +21,7 @@ import {
 } from "@/lib/github-app";
 import { incrementDeploymentEvent } from "@/lib/monitoring";
 import {
+	deleteLocalStackResources,
 	deployStackLocally,
 	exportComposeProjectConfig,
 	getLocalDockerSnapshot,
@@ -998,6 +999,68 @@ export async function queueOrRunDeployment({
 	revalidatePath(`/dashboard/projects/${stack.projectId}/stacks/${stack.id}`);
 	revalidatePath("/dashboard/environments");
 	revalidatePath(`/dashboard/environments/${stack.environmentId}`);
+}
+
+async function deleteOwnedStackById(stackId: string, userId: string) {
+	const stack = await db.query.stacks.findFirst({
+		where: and(eq(stacks.id, stackId), eq(stacks.createdByUserId, userId)),
+		with: {
+			environment: true,
+			project: true,
+		},
+	});
+
+	if (!stack) {
+		throw new Error("Stack not found");
+	}
+
+	if (stack.environment.kind === "local") {
+		await deleteLocalStackResources(stack.slug);
+	}
+
+	await db.delete(stacks).where(eq(stacks.id, stack.id));
+
+	revalidatePath("/dashboard");
+	revalidatePath("/dashboard/projects");
+	revalidatePath(`/dashboard/projects/${stack.projectId}`);
+	revalidatePath(`/dashboard/projects/${stack.projectId}/stacks/${stack.id}`);
+	revalidatePath("/dashboard/stacks");
+	revalidatePath("/dashboard/containers");
+	revalidatePath("/dashboard/logs");
+}
+
+export async function deleteStack({ stackId, userId }: { stackId: string; userId: string }) {
+	await deleteOwnedStackById(stackId, userId);
+}
+
+export async function deleteProject({ projectId, userId }: { projectId: string; userId: string }) {
+	const project = await db.query.projects.findFirst({
+		where: and(eq(projects.id, projectId), eq(projects.createdByUserId, userId)),
+		with: {
+			stacks: {
+				with: {
+					environment: true,
+				},
+			},
+		},
+	});
+
+	if (!project) {
+		throw new Error("Project not found");
+	}
+
+	for (const stack of project.stacks) {
+		await deleteOwnedStackById(stack.id, userId);
+	}
+
+	await db.delete(projects).where(eq(projects.id, project.id));
+
+	revalidatePath("/dashboard");
+	revalidatePath("/dashboard/projects");
+	revalidatePath(`/dashboard/projects/${project.id}`);
+	revalidatePath("/dashboard/stacks");
+	revalidatePath("/dashboard/containers");
+	revalidatePath("/dashboard/logs");
 }
 
 export async function getAgentInstallContext(registrationToken: string) {

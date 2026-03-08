@@ -1,6 +1,6 @@
 import "server-only";
 
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 
 export function getPlatformDataDir() {
@@ -10,4 +10,8 @@ export function getPlatformDataDir() {
 export async function ensureDirectory(dirPath: string) {
 	await mkdir(dirPath, { recursive: true });
 	return dirPath;
+}
+
+export async function removeDirectory(dirPath: string) {
+	await rm(dirPath, { recursive: true, force: true });
 }

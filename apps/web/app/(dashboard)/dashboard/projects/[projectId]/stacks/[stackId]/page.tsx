@@ -2,6 +2,7 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import {
 	controlContainerAction,
+	deleteStackAction,
 	deployStackAction,
 	destroyStackAction,
 } from "@/app/(dashboard)/actions";
@@ -69,6 +70,15 @@ export default async function StackWorkspacePage({
 								label="Destroy"
 								pendingLabel="Destroying..."
 								className="inline-flex h-11 items-center justify-center rounded-xl border border-danger/30 bg-danger/10 px-4 text-sm font-medium text-danger transition-colors hover:bg-danger/15 disabled:cursor-not-allowed disabled:opacity-60"
+							/>
+						</form>
+						<form action={deleteStackAction}>
+							<input type="hidden" name="stackId" value={stack.id} />
+							<input type="hidden" name="projectId" value={projectId} />
+							<FormSubmitButton
+								label="Delete stack"
+								pendingLabel="Deleting..."
+								className="inline-flex h-11 items-center justify-center rounded-xl border border-danger/30 bg-transparent px-4 text-sm font-medium text-danger transition-colors hover:bg-danger/10 disabled:cursor-not-allowed disabled:opacity-60"
 							/>
 						</form>
 					</>

@@ -7,7 +7,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { db, deployments, stacks } from "@dockroot/db";
 import { eq } from "drizzle-orm";
-import { ensureDirectory, getPlatformDataDir } from "@/lib/platform/fs";
+import { ensureDirectory, getPlatformDataDir, removeDirectory } from "@/lib/platform/fs";
 import { emitRealtime, emitToRoom } from "@/lib/realtime";
 
 const execFileAsync = promisify(execFile);
@@ -641,4 +641,37 @@ export async function deployStackLocally({
 		status: succeeded ? "succeeded" : "failed",
 		at: Date.now(),
 	});
+}
+
+export async function deleteLocalStackResources(stackSlug: string) {
+	const stackDir = path.join(getPlatformDataDir(), "stacks", stackSlug);
+	const composePath = path.join(stackDir, "compose.yaml");
+	const envPath = path.join(stackDir, ".env");
+
+	const composeFileExists = await access(composePath)
+		.then(() => true)
+		.catch(() => false);
+
+	if (composeFileExists) {
+		const result = await runDockerCommand([
+			"compose",
+			"-p",
+			stackSlug,
+			"--env-file",
+			envPath,
+			"-f",
+			composePath,
+			"down",
+			"--volumes",
+			"--rmi",
+			"local",
+			"--remove-orphans",
+		]);
+
+		if (!result.ok) {
+			throw new Error(result.stderr || `Failed to remove Docker resources for stack ${stackSlug}`);
+		}
+	}
+
+	await removeDirectory(stackDir);
 }

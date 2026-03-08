@@ -3,6 +3,8 @@ import Link from "next/link";
 import {
 	createGitHubStackAction,
 	createStackAction,
+	deleteProjectAction,
+	deleteStackAction,
 	deployStackAction,
 	destroyStackAction,
 } from "@/app/(dashboard)/actions";
@@ -47,12 +49,22 @@ export default async function ProjectDetailPage({
 					"Stacks, env files, deploy history, and runtime inspection all live inside the project workspace."
 				}
 				actions={
-					<Link
-						href="/dashboard/projects"
-						className="inline-flex h-11 items-center justify-center rounded-xl border border-default/20 bg-surface px-4 text-sm font-medium transition-colors hover:border-accent/30 hover:text-accent"
-					>
-						Back to projects
-					</Link>
+					<div className="flex flex-wrap gap-2">
+						<Link
+							href="/dashboard/projects"
+							className="inline-flex h-11 items-center justify-center rounded-xl border border-default/20 bg-surface px-4 text-sm font-medium transition-colors hover:border-accent/30 hover:text-accent"
+						>
+							Back to projects
+						</Link>
+						<form action={deleteProjectAction}>
+							<input type="hidden" name="projectId" value={project.id} />
+							<FormSubmitButton
+								label="Delete project"
+								pendingLabel="Deleting..."
+								className="inline-flex h-11 items-center justify-center rounded-xl border border-danger/30 bg-danger/10 px-4 text-sm font-medium text-danger transition-colors hover:bg-danger/15 disabled:cursor-not-allowed disabled:opacity-60"
+							/>
+						</form>
+					</div>
 				}
 			/>
 
@@ -88,6 +100,11 @@ export default async function ProjectDetailPage({
 						</p>
 					</div>
 				</div>
+				<p className="mt-4 text-sm text-muted">
+					Deleting this project removes every tracked stack inside it and tears down the local
+					Compose resources Dockroot created for those stacks, including attached volumes and
+					project-scoped local images.
+				</p>
 			</section>
 
 			<section className="space-y-5">
@@ -189,6 +206,15 @@ export default async function ProjectDetailPage({
 												label="Destroy"
 												pendingLabel="Destroying..."
 												className="inline-flex h-10 items-center justify-center rounded-xl border border-danger/30 bg-danger/10 px-4 text-sm font-medium text-danger transition-colors hover:bg-danger/15 disabled:cursor-not-allowed disabled:opacity-60"
+											/>
+										</form>
+										<form action={deleteStackAction}>
+											<input type="hidden" name="stackId" value={stack.id} />
+											<input type="hidden" name="projectId" value={project.id} />
+											<FormSubmitButton
+												label="Delete"
+												pendingLabel="Deleting..."
+												className="inline-flex h-10 items-center justify-center rounded-xl border border-danger/30 bg-transparent px-4 text-sm font-medium text-danger transition-colors hover:bg-danger/10 disabled:cursor-not-allowed disabled:opacity-60"
 											/>
 										</form>
 									</div>
