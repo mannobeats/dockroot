@@ -2,6 +2,12 @@
 	"name": "dockroot",
 	"version": "0.1.0",
 	"private": true,
+	"license": "AGPL-3.0-only",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/mannobeats/dockroot.git"
+	},
+	"homepage": "https://github.com/mannobeats/dockroot",
 	"packageManager": "pnpm@10.30.3",
 	"scripts": {
 		"dev": "dotenv -e .env.local -- node server.mjs",
