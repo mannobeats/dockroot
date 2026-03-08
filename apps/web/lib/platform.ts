@@ -3,6 +3,7 @@ import "server-only";
 import { agents, db, deployments, environments, projects, stacks } from "@dockroot/db";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { incrementDeploymentEvent } from "@/lib/monitoring";
 import { deployStackLocally, getLocalDockerSnapshot } from "@/lib/platform/docker";
 import { getPlatformDataDir } from "@/lib/platform/fs";
 import { publicEnv } from "@/lib/public-env";
@@ -483,6 +484,7 @@ export async function queueOrRunDeployment({
 		environmentId: stack.environmentId,
 		at: Date.now(),
 	});
+	incrementDeploymentEvent(stack.environment.kind === "local" ? "deploying" : "queued");
 
 	if (stack.environment.kind === "local") {
 		await deployStackLocally({
@@ -704,6 +706,7 @@ export async function completeDeployment({
 		status,
 		at: Date.now(),
 	});
+	incrementDeploymentEvent(status);
 	emitRealtime("deployment:update", {
 		stackId: deployment.stackId,
 		deploymentId,

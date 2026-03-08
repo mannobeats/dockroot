@@ -12,9 +12,12 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/lab_starter
       DOCKROOT_DATA_DIR: /app/.dockroot
+      PROMETHEUS_URL: http://prometheus:9090
     depends_on:
       postgres:
         condition: service_healthy
+      prometheus:
+        condition: service_started
     volumes:
       - dockroot_data:/app/.dockroot
       - /var/run/docker.sock:/var/run/docker.sock
@@ -37,6 +40,50 @@ services:
       timeout: 5s
       retries: 5
 
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    container_name: dockroot-prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.52.1
+    container_name: dockroot-cadvisor
+    restart: unless-stopped
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+    ports:
+      - "8081:8080"
+
+  node-exporter:
+    image: prom/node-exporter:v1.9.1
+    container_name: dockroot-node-exporter
+    restart: unless-stopped
+    command:
+      - --path.rootfs=/host
+    volumes:
+      - /:/host:ro
+    ports:
+      - "9100:9100"
+
 volumes:
   postgres_data:
   dockroot_data:
+  prometheus_data:
