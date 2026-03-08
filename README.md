@@ -126,12 +126,12 @@ services:
       - .env
     environment:
       HOSTNAME: 0.0.0.0
-      PORT: 3000
+      PORT: 3080
       DATABASE_URL: postgresql://dockroot:${POSTGRES_PASSWORD}@postgres:5432/dockroot
       DOCKROOT_DATA_DIR: /var/lib/dockroot
       PROMETHEUS_URL: http://prometheus:9090
     ports:
-      - "3000:3000"
+      - "3080:3080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -184,7 +184,7 @@ services:
               type: Bearer
               credentials: $${METRICS_BEARER_TOKEN}
             static_configs:
-              - targets: ["app:3000"]
+              - targets: ["app:3080"]
                 labels:
                   service: dockroot-manager
 
@@ -194,7 +194,7 @@ services:
               type: Bearer
               credentials: $${METRICS_BEARER_TOKEN}
             static_configs:
-              - targets: ["host.docker.internal:3000"]
+              - targets: ["host.docker.internal:3080"]
                 labels:
                   service: dockroot-host-dev
 
@@ -261,7 +261,7 @@ volumes:
 docker compose up -d
 ```
 
-Open Dockroot at `http://localhost:3000` or your configured domain. The first account created becomes the instance `owner`.
+Open Dockroot at `http://localhost:3080` or your configured domain. The first account created becomes the instance `owner`.
 
 The deployment env stays intentionally small:
 

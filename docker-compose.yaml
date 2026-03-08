@@ -6,7 +6,7 @@ services:
     container_name: dockroot-app
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3080:3080"
     env_file:
       - .env.local
     environment:
@@ -68,7 +68,7 @@ services:
               type: Bearer
               credentials: $${METRICS_BEARER_TOKEN}
             static_configs:
-              - targets: ["app:3000"]
+              - targets: ["app:3080"]
                 labels:
                   service: dockroot-manager
 
@@ -78,7 +78,7 @@ services:
               type: Bearer
               credentials: $${METRICS_BEARER_TOKEN}
             static_configs:
-              - targets: ["host.docker.internal:3000"]
+              - targets: ["host.docker.internal:3080"]
                 labels:
                   service: dockroot-host-dev
 

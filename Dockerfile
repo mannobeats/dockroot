@@ -25,7 +25,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # still look like a real high-entropy secret to avoid false warnings.
 ENV DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder"
 ENV BETTER_AUTH_SECRET="9d3fd5cdb7c96796b845921a63b742a5d662078f9bc7c83a745f5225f2c98d9d"
-ENV BETTER_AUTH_URL="http://localhost:3000"
+ENV BETTER_AUTH_URL="http://localhost:3080"
 RUN pnpm run build
 RUN pnpm run db:bundle-migrate
 
@@ -49,8 +49,8 @@ COPY --from=builder /app/start.sh ./start.sh
 COPY --from=builder /app/server.mjs ./server.mjs
 RUN chmod +x ./start.sh
 
-EXPOSE 3000
-ENV PORT=3000
+EXPOSE 3080
+ENV PORT=3080
 ENV HOSTNAME="0.0.0.0"
 
 CMD ["./start.sh"]
