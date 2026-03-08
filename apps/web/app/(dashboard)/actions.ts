@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
 	createEnvironment,
@@ -7,6 +8,7 @@ import {
 	createStack,
 	queueOrRunDeployment,
 } from "@/lib/platform";
+import { controlContainer } from "@/lib/platform/docker";
 import { getServerSession } from "@/lib/session";
 
 async function requireUserId() {
@@ -68,6 +70,7 @@ export async function createStackAction(formData: FormData) {
 	const name = getValue(formData, "name");
 	const description = getValue(formData, "description");
 	const composeYaml = getValue(formData, "composeYaml");
+	const envFileContent = getValue(formData, "envFileContent");
 
 	if (!projectId || !environmentId || !name || !composeYaml) {
 		throw new Error("Project, environment, stack name, and compose YAML are required");
@@ -80,6 +83,7 @@ export async function createStackAction(formData: FormData) {
 		name,
 		description,
 		composeYaml,
+		envFileContent,
 	});
 
 	redirect(`/dashboard/projects/${projectId}`);
@@ -113,4 +117,17 @@ export async function destroyStackAction(formData: FormData) {
 		userId,
 		operation: "destroy",
 	});
+}
+
+export async function controlContainerAction(formData: FormData) {
+	await requireUserId();
+	const containerId = getValue(formData, "containerId");
+	const action = getValue(formData, "action");
+
+	if (!containerId || !["start", "stop", "restart"].includes(action)) {
+		throw new Error("Container and action are required");
+	}
+
+	await controlContainer(containerId, action as "start" | "stop" | "restart");
+	revalidatePath("/dashboard/containers");
 }

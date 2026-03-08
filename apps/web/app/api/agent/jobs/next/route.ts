@@ -30,7 +30,7 @@ export async function GET(request: Request) {
 		}
 
 		return new NextResponse(
-			`JOB_ID=${job.id}\nSTACK_SLUG=${job.stackSlug}\nSTACK_NAME=${Buffer.from(job.stackName).toString("base64")}\nOPERATION=${job.operation}\nCOMPOSE_B64=${Buffer.from(job.composeYaml).toString("base64")}\n`,
+			`JOB_ID=${job.id}\nSTACK_SLUG=${job.stackSlug}\nSTACK_NAME=${Buffer.from(job.stackName).toString("base64")}\nOPERATION=${job.operation}\nCOMPOSE_B64=${Buffer.from(job.composeYaml).toString("base64")}\nENV_B64=${Buffer.from(job.envFileContent || "").toString("base64")}\n`,
 			{
 				headers: {
 					"content-type": "text/plain; charset=utf-8",

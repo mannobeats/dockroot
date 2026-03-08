@@ -1,5 +1,6 @@
 import { Boxes, FolderKanban, PlayCircle, Server } from "lucide-react";
 import Link from "next/link";
+import { LiveRuntimePanel } from "@/components/live-runtime-panel";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { StatusBadge } from "@/components/status-badge";
@@ -134,6 +135,8 @@ export default async function DashboardPage() {
 					</div>
 				</section>
 			</div>
+
+			<LiveRuntimePanel />
 
 			<section className="rounded-[28px] border border-default/15 bg-surface/80 p-5">
 				<div className="flex items-center justify-between">

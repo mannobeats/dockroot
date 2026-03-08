@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { deployStackLocally, getLocalDockerSnapshot } from "@/lib/platform/docker";
 import { getPlatformDataDir } from "@/lib/platform/fs";
 import { publicEnv } from "@/lib/public-env";
+import { emitRealtime, emitToRoom } from "@/lib/realtime";
 
 function now() {
 	return new Date();
@@ -270,6 +271,32 @@ export async function getProjectById(projectId: string, userId: string) {
 	});
 }
 
+export async function getStackById({
+	stackId,
+	projectId,
+	userId,
+}: {
+	stackId: string;
+	projectId: string;
+	userId: string;
+}) {
+	return db.query.stacks.findFirst({
+		where: and(
+			eq(stacks.id, stackId),
+			eq(stacks.projectId, projectId),
+			eq(stacks.createdByUserId, userId),
+		),
+		with: {
+			project: true,
+			environment: true,
+			deployments: {
+				orderBy: [desc(deployments.createdAt)],
+				limit: 20,
+			},
+		},
+	});
+}
+
 export async function getEnvironmentById(environmentId: string, userId: string) {
 	return db.query.environments.findFirst({
 		where: and(eq(environments.id, environmentId), eq(environments.createdByUserId, userId)),
@@ -363,6 +390,7 @@ export async function createStack({
 	name,
 	description,
 	composeYaml,
+	envFileContent,
 }: {
 	userId: string;
 	projectId: string;
@@ -370,6 +398,7 @@ export async function createStack({
 	name: string;
 	description?: string;
 	composeYaml: string;
+	envFileContent?: string;
 }) {
 	const createdAt = now();
 	const slug = await ensureUniqueStackSlug(name);
@@ -384,6 +413,7 @@ export async function createStack({
 		sourceType: "manual",
 		status: "draft",
 		composeYaml,
+		envFileContent: envFileContent?.trim() || null,
 		createdByUserId: userId,
 		createdAt,
 		updatedAt: createdAt,
@@ -432,6 +462,7 @@ export async function queueOrRunDeployment({
 		version,
 		status: stack.environment.kind === "local" ? "running" : "queued",
 		composeSnapshot: stack.composeYaml,
+		envSnapshot: stack.envFileContent,
 		startedAt: stack.environment.kind === "local" ? createdAt : null,
 		createdAt,
 		updatedAt: createdAt,
@@ -445,12 +476,21 @@ export async function queueOrRunDeployment({
 		})
 		.where(eq(stacks.id, stack.id));
 
+	emitRealtime("deployment:update", {
+		stackId: stack.id,
+		deploymentId,
+		status: stack.environment.kind === "local" ? "deploying" : "queued",
+		environmentId: stack.environmentId,
+		at: Date.now(),
+	});
+
 	if (stack.environment.kind === "local") {
 		await deployStackLocally({
 			deploymentId,
 			stackId: stack.id,
 			stackSlug: stack.slug,
 			composeYaml: stack.composeYaml,
+			envFileContent: stack.envFileContent,
 			operation,
 		});
 	}
@@ -458,6 +498,7 @@ export async function queueOrRunDeployment({
 	revalidatePath("/dashboard");
 	revalidatePath("/dashboard/projects");
 	revalidatePath(`/dashboard/projects/${stack.projectId}`);
+	revalidatePath(`/dashboard/projects/${stack.projectId}/stacks/${stack.id}`);
 	revalidatePath("/dashboard/environments");
 	revalidatePath(`/dashboard/environments/${stack.environmentId}`);
 }
@@ -604,6 +645,7 @@ export async function claimNextDeployment(accessToken: string) {
 		stackName: queued.stack.name,
 		operation: queued.operation,
 		composeYaml: queued.composeSnapshot,
+		envFileContent: queued.envSnapshot,
 	};
 }
 
@@ -656,9 +698,24 @@ export async function completeDeployment({
 		})
 		.where(eq(stacks.id, deployment.stackId));
 
+	emitToRoom(`stack:${deployment.stackId}`, "deployment:complete", {
+		stackId: deployment.stackId,
+		deploymentId,
+		status,
+		at: Date.now(),
+	});
+	emitRealtime("deployment:update", {
+		stackId: deployment.stackId,
+		deploymentId,
+		status,
+		environmentId: deployment.environmentId,
+		at: Date.now(),
+	});
+
 	revalidatePath("/dashboard");
 	revalidatePath("/dashboard/projects");
 	revalidatePath(`/dashboard/projects/${deployment.stack.projectId}`);
+	revalidatePath(`/dashboard/projects/${deployment.stack.projectId}/stacks/${deployment.stackId}`);
 	revalidatePath("/dashboard/environments");
 	revalidatePath(`/dashboard/environments/${deployment.environmentId}`);
 }

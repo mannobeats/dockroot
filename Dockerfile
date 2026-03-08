@@ -33,12 +33,15 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN apk add --no-cache docker-cli
 
-COPY --from=builder --chown=1001:0 /app/apps/web/.next/standalone ./
-COPY --from=builder /app/apps/web/public ./apps/web/public
-COPY --from=builder --chown=1001:0 /app/apps/web/.next/static ./apps/web/.next/static
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/apps ./apps
+COPY --from=builder /app/packages ./packages
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
 COPY --from=builder /app/packages/db/drizzle ./packages/db/drizzle
 COPY --from=builder /app/migrate.mjs ./migrate.mjs
 COPY --from=builder /app/start.sh ./start.sh
+COPY --from=builder /app/server.mjs ./server.mjs
 RUN chmod +x ./start.sh
 
 EXPOSE 3000

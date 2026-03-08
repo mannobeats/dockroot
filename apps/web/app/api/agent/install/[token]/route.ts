@@ -96,14 +96,15 @@ run_job() {
   local stack_dir="\${INSTALL_ROOT}/stacks/\${STACK_SLUG}"
   mkdir -p "\${stack_dir}"
   printf '%s' "\${COMPOSE_B64}" | base64 --decode > "\${stack_dir}/compose.yaml"
+  printf '%s' "\${ENV_B64:-}" | base64 --decode > "\${stack_dir}/.env"
 
   local status="succeeded"
   if [ "\${OPERATION}" = "destroy" ]; then
-    if ! docker compose -p "\${STACK_SLUG}" -f "\${stack_dir}/compose.yaml" down --remove-orphans >"\${log_file}" 2>&1; then
+    if ! docker compose -p "\${STACK_SLUG}" --env-file "\${stack_dir}/.env" -f "\${stack_dir}/compose.yaml" down --remove-orphans >"\${log_file}" 2>&1; then
       status="failed"
     fi
   else
-    if ! docker compose -p "\${STACK_SLUG}" -f "\${stack_dir}/compose.yaml" up -d --remove-orphans >"\${log_file}" 2>&1; then
+    if ! docker compose -p "\${STACK_SLUG}" --env-file "\${stack_dir}/.env" -f "\${stack_dir}/compose.yaml" up -d --remove-orphans >"\${log_file}" 2>&1; then
       status="failed"
     fi
   fi

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -8,6 +8,7 @@ import { promisify } from "node:util";
 import { db, deployments, stacks } from "@dockroot/db";
 import { eq } from "drizzle-orm";
 import { ensureDirectory, getPlatformDataDir } from "@/lib/platform/fs";
+import { emitRealtime, emitToRoom } from "@/lib/realtime";
 
 const execFileAsync = promisify(execFile);
 
@@ -75,38 +76,139 @@ export async function getLocalDockerSnapshot() {
 	};
 }
 
+export async function getContainerDetails(containerId: string) {
+	const [inspectResult, logsResult] = await Promise.all([
+		runDockerCommand(["inspect", containerId]),
+		runDockerCommand(["logs", "--tail", "200", containerId]),
+	]);
+
+	let inspect = null;
+
+	try {
+		inspect = JSON.parse(inspectResult.stdout)[0] ?? null;
+	} catch {
+		inspect = null;
+	}
+
+	return {
+		inspect,
+		logs: [logsResult.stdout, logsResult.stderr].filter(Boolean).join("\n"),
+	};
+}
+
+export async function listStackContainers(stackSlug: string) {
+	const result = await runDockerCommand([
+		"ps",
+		"-a",
+		"--filter",
+		`label=com.docker.compose.project=${stackSlug}`,
+		"--format",
+		"{{json .}}",
+	]);
+
+	return parseJsonLines<Record<string, string>>(result.stdout);
+}
+
+export async function controlContainer(containerId: string, action: "start" | "stop" | "restart") {
+	const result = await runDockerCommand([action, containerId]);
+	const ok = !result.stderr;
+
+	emitRealtime("container:state", {
+		containerId,
+		action,
+		ok,
+		at: Date.now(),
+	});
+
+	return {
+		ok,
+		output: [result.stdout, result.stderr].filter(Boolean).join("\n"),
+	};
+}
+
 export async function deployStackLocally({
 	deploymentId,
 	stackId,
 	stackSlug,
 	composeYaml,
+	envFileContent,
 	operation,
 }: {
 	deploymentId: string;
 	stackId: string;
 	stackSlug: string;
 	composeYaml: string;
+	envFileContent?: string | null;
 	operation: "deploy" | "destroy";
 }) {
-	const updatedAt = new Date();
 	const stackDir = path.join(getPlatformDataDir(), "stacks", stackSlug);
 	await ensureDirectory(stackDir);
 
 	const composePath = path.join(stackDir, "compose.yaml");
 	await writeFile(composePath, composeYaml, "utf8");
+	const envPath = path.join(stackDir, ".env");
+	await writeFile(envPath, envFileContent || "", "utf8");
 
 	const args =
 		operation === "destroy"
-			? ["compose", "-p", stackSlug, "-f", composePath, "down", "--remove-orphans"]
-			: ["compose", "-p", stackSlug, "-f", composePath, "up", "-d", "--remove-orphans"];
-	const result = await runDockerCommand(args);
-	const succeeded = !result.stderr;
+			? [
+					"compose",
+					"-p",
+					stackSlug,
+					"--env-file",
+					envPath,
+					"-f",
+					composePath,
+					"down",
+					"--remove-orphans",
+				]
+			: [
+					"compose",
+					"-p",
+					stackSlug,
+					"--env-file",
+					envPath,
+					"-f",
+					composePath,
+					"up",
+					"-d",
+					"--remove-orphans",
+				];
+
+	const child = spawn("docker", args, {
+		stdio: ["ignore", "pipe", "pipe"],
+	});
+
+	let output = "";
+
+	const publishChunk = (chunk: Buffer | string, stream: "stdout" | "stderr") => {
+		const message = chunk.toString();
+		output += message;
+		emitToRoom(`stack:${stackId}`, "stack:log", {
+			stackId,
+			deploymentId,
+			stream,
+			message,
+			at: Date.now(),
+		});
+	};
+
+	child.stdout.on("data", (chunk) => publishChunk(chunk, "stdout"));
+	child.stderr.on("data", (chunk) => publishChunk(chunk, "stderr"));
+
+	const exitCode = await new Promise<number>((resolve, reject) => {
+		child.on("error", reject);
+		child.on("close", (code) => resolve(code ?? 1));
+	});
+
+	const updatedAt = new Date();
+	const succeeded = exitCode === 0;
 
 	await db
 		.update(deployments)
 		.set({
 			status: succeeded ? "succeeded" : "failed",
-			log: [result.stdout, result.stderr].filter(Boolean).join("\n"),
+			log: output,
 			summary: succeeded
 				? "Deployment completed on the manager host."
 				: "Docker Compose reported an error.",
@@ -123,4 +225,11 @@ export async function deployStackLocally({
 			updatedAt,
 		})
 		.where(eq(stacks.id, stackId));
+
+	emitToRoom(`stack:${stackId}`, "deployment:complete", {
+		stackId,
+		deploymentId,
+		status: succeeded ? "succeeded" : "failed",
+		at: Date.now(),
+	});
 }
