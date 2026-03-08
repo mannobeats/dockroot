@@ -1,9 +1,10 @@
-import { execFile, spawn } from "node:child_process";
+import { execFile } from "node:child_process";
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import * as pty from "node-pty";
 
 const execFileAsync = promisify(execFile);
 
@@ -19,6 +20,8 @@ const pollIntervalMs = Math.max(2000, Number(process.env.DOCKROOT_AGENT_POLL_INT
 const statePath = path.join(dataDir, "state.json");
 const stacksDir = path.join(dataDir, "stacks");
 const terminalSessions = new Map();
+const supportedShells = new Set(["sh", "bash", "ash", "zsh"]);
+const defaultShellOrder = ["sh", "bash", "ash", "zsh"];
 
 const metrics = {
 	registered: 0,
@@ -29,6 +32,51 @@ const metrics = {
 	jobsSucceeded: 0,
 	jobsFailed: 0,
 };
+
+function clampTerminalColumns(value) {
+	const parsed = Number(value || 120);
+	return Number.isFinite(parsed) ? Math.max(40, Math.min(300, Math.floor(parsed))) : 120;
+}
+
+function clampTerminalRows(value) {
+	const parsed = Number(value || 36);
+	return Number.isFinite(parsed) ? Math.max(12, Math.min(120, Math.floor(parsed))) : 36;
+}
+
+function escapeSingleQuotes(value) {
+	return value.replaceAll("'", "'\"'\"'");
+}
+
+function isSafeCustomShell(value) {
+	return typeof value === "string" && /^[A-Za-z0-9_./-]{1,120}$/.test(value);
+}
+
+function resolveShellCandidates(payload) {
+	const requestedShell =
+		typeof payload?.shell === "string" ? payload.shell.trim().toLowerCase() : defaultShellOrder[0];
+	const customShell = typeof payload?.customShell === "string" ? payload.customShell.trim() : "";
+	if (requestedShell === "custom" && !isSafeCustomShell(customShell)) {
+		throw new Error("Invalid custom shell.");
+	}
+
+	const candidates = [];
+	if (requestedShell === "custom" && customShell) {
+		candidates.push(customShell);
+	}
+	if (supportedShells.has(requestedShell)) {
+		candidates.push(requestedShell);
+	}
+	for (const candidate of defaultShellOrder) {
+		candidates.push(candidate);
+	}
+
+	return Array.from(new Set(candidates));
+}
+
+function buildShellBootstrapScript(candidates) {
+	const tokens = candidates.map((candidate) => `'${escapeSingleQuotes(candidate)}'`).join(" ");
+	return `for shell_bin in ${tokens}; do if command -v "$shell_bin" >/dev/null 2>&1; then exec "$shell_bin" -i; fi; done; echo "No supported shell found." >&2; exit 127`;
+}
 
 function parseJsonLines(content) {
 	return content
@@ -635,7 +683,7 @@ function closeTerminalSession(sessionId) {
 		return;
 	}
 
-	session.process.kill("SIGTERM");
+	session.process.kill();
 	session.closed = true;
 	setTimeout(() => {
 		terminalSessions.delete(sessionId);
@@ -644,32 +692,34 @@ function closeTerminalSession(sessionId) {
 
 async function createTerminalSession(payload) {
 	const sessionId = globalThis.crypto.randomUUID();
-	const isContainer = payload?.target === "container" && payload?.containerId;
-	const child = isContainer
-		? spawn(
-				"docker",
-				[
-					"exec",
-					"-i",
-					payload.containerId,
-					"sh",
-					"-lc",
-					"if command -v bash >/dev/null 2>&1; then exec bash; else exec sh; fi",
-				],
-				{ cwd: "/", env: process.env, stdio: "pipe" },
-			)
-		: spawn(
-				"sh",
-				["-lc", "if command -v bash >/dev/null 2>&1; then exec bash -i; else exec sh -i; fi"],
-				{
-					cwd: "/",
-					env: process.env,
-					stdio: "pipe",
-				},
-			);
+	if (payload?.target !== "container" || !payload?.containerId) {
+		throw new Error("containerId is required.");
+	}
+	const shellCandidates = resolveShellCandidates(payload);
+	const bootstrapScript = buildShellBootstrapScript(shellCandidates);
+	const cols = clampTerminalColumns(payload?.cols);
+	const rows = clampTerminalRows(payload?.rows);
+	const command = {
+		file: "docker",
+		args: ["exec", "-it", payload.containerId, "sh", "-lc", bootstrapScript],
+		cwd: "/",
+	};
+	const child = pty.spawn(command.file, command.args, {
+		name: "xterm-color",
+		cols,
+		rows,
+		cwd: command.cwd,
+		env: {
+			...process.env,
+			TERM: process.env.TERM || "xterm-256color",
+			COLORTERM: process.env.COLORTERM || "truecolor",
+		},
+	});
 
 	const session = {
 		process: child,
+		resize: (nextCols, nextRows) =>
+			child.resize(clampTerminalColumns(nextCols), clampTerminalRows(nextRows)),
 		events: [],
 		nextCursor: 1,
 		closed: false,
@@ -679,18 +729,17 @@ async function createTerminalSession(payload) {
 	const onData = (chunk) => {
 		session.events.push({
 			cursor: session.nextCursor,
-			data: chunk.toString(),
+			data: String(chunk || ""),
 		});
 		session.nextCursor += 1;
 		if (session.events.length > 512) {
 			session.events.shift();
 		}
 	};
-	child.stdout.on("data", onData);
-	child.stderr.on("data", onData);
-	child.on("close", (code) => {
+	child.onData(onData);
+	child.onExit(({ exitCode }) => {
 		session.closed = true;
-		session.exitCode = code ?? 0;
+		session.exitCode = exitCode ?? 0;
 	});
 
 	terminalSessions.set(sessionId, session);
@@ -816,9 +865,15 @@ function startHttpServer() {
 		}
 
 		if (request.method === "POST" && pathName === "/terminal/sessions") {
-			const payload = await readRequestJson(request);
-			const sessionId = await createTerminalSession(payload);
-			sendJson(response, 200, { sessionId });
+			try {
+				const payload = await readRequestJson(request);
+				const sessionId = await createTerminalSession(payload);
+				sendJson(response, 200, { sessionId });
+			} catch (error) {
+				sendJson(response, 400, {
+					error: error instanceof Error ? error.message : "Unable to start terminal session.",
+				});
+			}
 			return;
 		}
 
@@ -852,12 +907,13 @@ function startHttpServer() {
 			if (request.method === "POST") {
 				const payload = await readRequestJson(request);
 				if (payload.type === "input") {
-					session.process.stdin.write(String(payload.data || ""));
+					session.process.write(String(payload.data || "").slice(0, 8192));
 					sendJson(response, 200, { ok: true });
 					return;
 				}
 
 				if (payload.type === "resize") {
+					session.resize(payload.cols, payload.rows);
 					sendJson(response, 200, { ok: true });
 					return;
 				}

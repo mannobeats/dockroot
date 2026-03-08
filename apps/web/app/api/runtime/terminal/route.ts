@@ -12,6 +12,8 @@ export async function POST(request: Request) {
 			target?: "container";
 			containerId?: string;
 			environmentId?: string;
+			shell?: "sh" | "bash" | "ash" | "zsh" | "custom";
+			customShell?: string;
 			cols?: number;
 			rows?: number;
 		};
@@ -32,6 +34,8 @@ export async function POST(request: Request) {
 			environmentId: body.environmentId,
 			target: "container",
 			containerId: body.containerId,
+			shell: body.shell,
+			customShell: body.customShell,
 			cols: body.cols,
 			rows: body.rows,
 		});
@@ -42,7 +46,8 @@ export async function POST(request: Request) {
 			{ error: "Unable to start terminal session." },
 			{
 				status:
-					error instanceof Error && (error.message === "Unauthorized" || error.message === "Forbidden")
+					error instanceof Error &&
+					(error.message === "Unauthorized" || error.message === "Forbidden")
 						? 403
 						: 500,
 			},

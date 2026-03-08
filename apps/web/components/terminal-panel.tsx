@@ -2,10 +2,18 @@
 
 import "xterm/css/xterm.css";
 
+import { Activity } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Panel } from "@/components/ui/panel";
 import { getSocket } from "@/lib/socket-client";
+
+function sanitizeTerminalChunk(chunk: string) {
+	return chunk.replaceAll(
+		/(bash: cannot set terminal process group \(-1\): Not a tty\r?\n|bash: no job control in this shell\r?\n|sh: can't access tty; job control turned off\r?\n)/g,
+		"",
+	);
+}
 
 export function TerminalPanel({
 	target,
@@ -13,15 +21,23 @@ export function TerminalPanel({
 	label,
 	transport = "local",
 	environmentId,
+	shell = "sh",
+	customShell,
 }: {
-	target: "host" | "container";
+	target: "container";
 	containerId?: string;
 	label: string;
 	transport?: "local" | "remote";
 	environmentId?: string;
+	shell?: "sh" | "bash" | "ash" | "zsh" | "custom";
+	customShell?: string;
 }) {
 	const terminalRef = useRef<HTMLDivElement | null>(null);
-	const terminalInstanceRef = useRef<{ dispose: () => void; focus: () => void; write: (data: string) => void } | null>(null);
+	const terminalInstanceRef = useRef<{
+		dispose: () => void;
+		focus: () => void;
+		write: (data: string) => void;
+	} | null>(null);
 	const fitRef = useRef<{ fit: () => void } | null>(null);
 	const sessionIdRef = useRef<string | null>(null);
 	const cursorRef = useRef(0);
@@ -78,7 +94,7 @@ export function TerminalPanel({
 			const flushPendingSocketEvents = (sessionId: string) => {
 				for (const payload of pendingChunksRef.current) {
 					if (payload.sessionId === sessionId) {
-						terminal.write(payload.data);
+						terminal.write(sanitizeTerminalChunk(payload.data));
 					}
 				}
 				pendingChunksRef.current = pendingChunksRef.current.filter(
@@ -135,6 +151,8 @@ export function TerminalPanel({
 						target,
 						containerId,
 						environmentId,
+						shell,
+						customShell,
 						cols: terminal.cols,
 						rows: terminal.rows,
 					}),
@@ -200,7 +218,7 @@ export function TerminalPanel({
 						}
 
 						for (const chunk of payload.chunks || []) {
-							terminal.write(chunk);
+							terminal.write(sanitizeTerminalChunk(chunk));
 						}
 						cursorRef.current = Number(payload.cursor || cursorRef.current);
 
@@ -251,7 +269,7 @@ export function TerminalPanel({
 				}
 
 				if (payload.sessionId === sessionIdRef.current) {
-					terminal.write(payload.data);
+					terminal.write(sanitizeTerminalChunk(payload.data));
 				}
 			};
 			const onExit = (payload: { sessionId: string; exitCode?: number }) => {
@@ -274,6 +292,8 @@ export function TerminalPanel({
 				{
 					target,
 					containerId,
+					shell,
+					customShell,
 					cols: terminal.cols,
 					rows: terminal.rows,
 				},
@@ -287,7 +307,7 @@ export function TerminalPanel({
 					sessionIdRef.current = response.sessionId;
 					setStatus(`Connected to ${label}`);
 					if (response.initialData) {
-						terminal.write(response.initialData);
+						terminal.write(sanitizeTerminalChunk(response.initialData));
 					}
 					flushPendingSocketEvents(response.sessionId);
 					window.requestAnimationFrame(() => {
@@ -330,33 +350,42 @@ export function TerminalPanel({
 			disposed = true;
 			cleanup();
 		};
-	}, [containerId, environmentId, label, target, transport]);
+	}, [containerId, customShell, environmentId, label, shell, target, transport]);
 
 	return (
-		<Panel padding="sm">
-			<div className="flex items-center justify-between">
-				<div>
-					<p className="text-sm font-semibold">Terminal</p>
+		<Panel padding="sm" className="overflow-hidden">
+			<div className="flex flex-col gap-3 border-b border-default/10 pb-4 sm:flex-row sm:items-start sm:justify-between">
+				<div className="space-y-1">
+					<div className="flex items-center gap-2">
+						<p className="text-sm font-semibold">Shell</p>
+						<Badge
+							variant={status.startsWith("Connected") ? "success" : "default"}
+							className="px-2 py-1 text-[11px]"
+						>
+							<Activity className="size-3" />
+							{status.startsWith("Connected") ? "Live" : "Pending"}
+						</Badge>
+					</div>
 					<p className="text-xs text-muted">{status}</p>
 				</div>
-				<Badge className="px-2.5 py-1 text-xs">
-					{label}
-				</Badge>
+				<div className="flex items-center gap-2 self-start">
+					<Badge variant="accent" className="px-2.5 py-1 text-[11px]">
+						Container
+					</Badge>
+					<Badge className="px-2.5 py-1 text-[11px]">{label}</Badge>
+				</div>
 			</div>
-			<div
-				className="mt-3 overflow-hidden rounded-lg border border-default/10 bg-console"
-				role="button"
-				tabIndex={0}
-				aria-label="Focus terminal"
-				onClick={() => terminalInstanceRef.current?.focus()}
-				onKeyDown={(event) => {
-					if (event.key === "Enter" || event.key === " ") {
-						event.preventDefault();
-						terminalInstanceRef.current?.focus();
-					}
-				}}
-			>
-				<div ref={terminalRef} className="h-[600px] w-full p-3" />
+			<div className="mt-4 overflow-hidden rounded-[20px] border border-default/10 bg-console shadow-[0_0_0_1px_rgba(255,255,255,0.02),0_24px_80px_rgba(0,0,0,0.35)]">
+				<div className="border-b border-default/10 bg-[radial-gradient(circle_at_top_left,rgba(34,197,94,0.12),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.02),transparent)] px-4 py-2">
+					<div className="flex items-center gap-2 text-[11px] text-muted">
+						<span className="size-2 rounded-full bg-success" />
+						<span>Interactive container session</span>
+					</div>
+				</div>
+				<div
+					ref={terminalRef}
+					className="h-[58vh] min-h-[340px] w-full p-4 sm:min-h-[420px] lg:min-h-[560px]"
+				/>
 			</div>
 			<p className="mt-2 text-xs text-muted">
 				Click inside the terminal to focus it, then type commands normally.

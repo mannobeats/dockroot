@@ -114,9 +114,7 @@ async function fetchLocalTerminal(path: string, init?: RequestInit) {
 
 	if (!response.ok) {
 		throw new Error(
-			response.status === 404
-				? "Terminal session not found."
-				: "Local terminal request failed.",
+			response.status === 404 ? "Terminal session not found." : "Local terminal request failed.",
 		);
 	}
 
@@ -315,6 +313,8 @@ export async function createTerminalSessionForEnvironment(input: {
 	environmentId?: string;
 	target: "container";
 	containerId?: string;
+	shell?: "sh" | "bash" | "ash" | "zsh" | "custom";
+	customShell?: string;
 	cols?: number;
 	rows?: number;
 }) {
@@ -328,6 +328,8 @@ export async function createTerminalSessionForEnvironment(input: {
 			body: JSON.stringify({
 				target: input.target,
 				containerId: input.containerId,
+				shell: input.shell,
+				customShell: input.customShell,
 				cols: input.cols,
 				rows: input.rows,
 			}),
@@ -342,6 +344,8 @@ export async function createTerminalSessionForEnvironment(input: {
 		body: JSON.stringify({
 			target: input.target,
 			containerId: input.containerId,
+			shell: input.shell,
+			customShell: input.customShell,
 			cols: input.cols,
 			rows: input.rows,
 		}),
@@ -375,13 +379,16 @@ export async function writeTerminalInputForEnvironment(input: {
 }) {
 	const environment = await getEnvironmentRecord(input.environmentId, input.userId);
 	if (environment.kind === "local") {
-		return fetchLocalTerminal(`/internal/local-terminal/sessions/${encodeURIComponent(input.sessionId)}`, {
-			method: "POST",
-			headers: {
-				"content-type": "application/json",
+		return fetchLocalTerminal(
+			`/internal/local-terminal/sessions/${encodeURIComponent(input.sessionId)}`,
+			{
+				method: "POST",
+				headers: {
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({ type: "input", data: input.data }),
 			},
-			body: JSON.stringify({ type: "input", data: input.data }),
-		});
+		);
 	}
 
 	return fetchAgentJson(environment, `/terminal/sessions/${encodeURIComponent(input.sessionId)}`, {
@@ -402,13 +409,16 @@ export async function resizeTerminalSessionForEnvironment(input: {
 }) {
 	const environment = await getEnvironmentRecord(input.environmentId, input.userId);
 	if (environment.kind === "local") {
-		return fetchLocalTerminal(`/internal/local-terminal/sessions/${encodeURIComponent(input.sessionId)}`, {
-			method: "POST",
-			headers: {
-				"content-type": "application/json",
+		return fetchLocalTerminal(
+			`/internal/local-terminal/sessions/${encodeURIComponent(input.sessionId)}`,
+			{
+				method: "POST",
+				headers: {
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({ type: "resize", cols: input.cols, rows: input.rows }),
 			},
-			body: JSON.stringify({ type: "resize", cols: input.cols, rows: input.rows }),
-		});
+		);
 	}
 
 	return fetchAgentJson(environment, `/terminal/sessions/${encodeURIComponent(input.sessionId)}`, {
@@ -427,9 +437,12 @@ export async function closeTerminalSessionForEnvironment(
 ) {
 	const environment = await getEnvironmentRecord(environmentId, userId);
 	if (environment.kind === "local") {
-		return fetchLocalTerminal(`/internal/local-terminal/sessions/${encodeURIComponent(sessionId)}`, {
-			method: "DELETE",
-		});
+		return fetchLocalTerminal(
+			`/internal/local-terminal/sessions/${encodeURIComponent(sessionId)}`,
+			{
+				method: "DELETE",
+			},
+		);
 	}
 
 	return fetchAgentJson(environment, `/terminal/sessions/${encodeURIComponent(sessionId)}`, {

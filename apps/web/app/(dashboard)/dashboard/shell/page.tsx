@@ -6,22 +6,36 @@ import { requireUserSession } from "@/lib/authorization";
 import { resolveRuntimeEnvironment } from "@/lib/environment-runtime";
 import { listAccessibleContainersForUser } from "@/lib/runtime-access";
 
+function resolveShell(value: string | undefined): "sh" | "bash" | "ash" | "zsh" | "custom" {
+	return value === "bash" || value === "ash" || value === "zsh" || value === "custom"
+		? value
+		: "sh";
+}
+
 export default async function ShellPage({
 	searchParams,
 }: {
-	searchParams: Promise<{ target?: string; containerId?: string; environment?: string }>;
+	searchParams: Promise<{
+		containerId?: string;
+		environment?: string;
+		shell?: "sh" | "bash" | "ash" | "zsh" | "custom";
+		customShell?: string;
+	}>;
 }) {
 	const { userId, role } = await requireUserSession();
 	const params = await searchParams;
+	const shell = resolveShell(params.shell);
+	const customShell = typeof params.customShell === "string" ? params.customShell : undefined;
 	const environment = await resolveRuntimeEnvironment(userId, params.environment);
-	const containers = await listAccessibleContainersForUser(userId, role, environment.id);
-	const requestedTarget = params.target === "container" ? "container" : null;
-	const selectedTarget = "container";
-	const selectedContainer =
-		requestedTarget === "container" && params.containerId
-			? containers.find((container: Record<string, string>) => container.ID === params.containerId) || null
-			: null;
+	const containers = (await listAccessibleContainersForUser(userId, role, environment.id)).filter(
+		(container: Record<string, string>) => container.State === "running",
+	);
+	const selectedContainer = params.containerId
+		? containers.find((container: Record<string, string>) => container.ID === params.containerId) ||
+			null
+		: null;
 	const shouldRenderTerminal = Boolean(selectedContainer);
+	const transport = environment.kind === "local" ? "local" : "remote";
 
 	return (
 		<div className="animate-in space-y-6">
@@ -37,36 +51,41 @@ export default async function ShellPage({
 					id: container.ID,
 					name: container.Names,
 					state: container.State,
+					status: container.Status,
+					image: container.Image,
 				}))}
-				initialTarget="container"
 				initialContainerId={selectedContainer?.ID}
+				initialShell={shell}
+				initialCustomShell={customShell}
 			/>
 
 			{containers.length === 0 ? (
 				<EmptyState
 					title="No accessible containers available"
-					description="Start a container or deploy a stack before opening a shell."
+					description="Start a running container or deploy a stack before opening a shell."
 					className="p-8"
 				/>
-			) : !requestedTarget ? (
+			) : !params.containerId ? (
 				<EmptyState
 					title="Choose a container"
-					description="Select a container above, then attach when you are ready."
+					description="Search your runtime, choose the exact container you want, then attach."
 					className="p-8"
 				/>
 			) : !shouldRenderTerminal ? (
 				<EmptyState
 					title="Select a container to continue"
-					description="The shell opens only after you explicitly choose which running container to attach to."
+					description="The selected container is no longer available. Pick another running container to continue."
 					className="p-8"
 				/>
 			) : (
 				<TerminalPanel
 					target="container"
 					containerId={selectedContainer?.ID}
-					transport="remote"
+					transport={transport}
 					environmentId={environment.id}
 					label={selectedContainer?.Names || "Container"}
+					shell={shell}
+					customShell={customShell}
 				/>
 			)}
 		</div>

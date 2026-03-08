@@ -1,7 +1,9 @@
-import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import * as pty from "node-pty";
 
 const terminalSessions = new Map();
+const supportedShells = new Set(["sh", "bash", "ash", "zsh"]);
+const defaultShellOrder = ["sh", "bash", "ash", "zsh"];
 
 function resolveExecutable(primaryCandidate, fallbackCandidates) {
 	for (const candidate of [primaryCandidate, ...fallbackCandidates]) {
@@ -22,22 +24,58 @@ const dockerBinary = resolveExecutable(process.env.DOCKER_BIN, [
 	"/opt/homebrew/bin/docker",
 	"docker",
 ]);
-const hostShellBinary = resolveExecutable("/bin/sh", ["/bin/sh", "/bin/bash", "/bin/zsh"]);
+
+function escapeSingleQuotes(value) {
+	return value.replaceAll("'", "'\"'\"'");
+}
+
+function isSafeCustomShell(value) {
+	return typeof value === "string" && /^[A-Za-z0-9_./-]{1,120}$/.test(value);
+}
+
+function resolveShellCandidates(payload) {
+	const requestedShell =
+		typeof payload?.shell === "string" ? payload.shell.trim().toLowerCase() : defaultShellOrder[0];
+	const customShell = typeof payload?.customShell === "string" ? payload.customShell.trim() : "";
+	if (requestedShell === "custom" && !isSafeCustomShell(customShell)) {
+		throw new Error("Invalid custom shell. Use only letters, numbers, ., /, _, and -.");
+	}
+
+	const candidates = [];
+	if (requestedShell === "custom" && customShell) {
+		candidates.push(customShell);
+	}
+	if (supportedShells.has(requestedShell)) {
+		candidates.push(requestedShell);
+	}
+	for (const candidate of defaultShellOrder) {
+		candidates.push(candidate);
+	}
+
+	return Array.from(new Set(candidates));
+}
+
+function buildShellBootstrapScript(candidates) {
+	const tokens = candidates.map((candidate) => `'${escapeSingleQuotes(candidate)}'`).join(" ");
+	return `for shell_bin in ${tokens}; do if command -v "$shell_bin" >/dev/null 2>&1; then exec "$shell_bin" -i; fi; done; echo "No supported shell found." >&2; exit 127`;
+}
 
 function buildCommand(payload) {
 	if (!payload?.containerId) {
 		throw new Error("containerId is required.");
 	}
+	const shellCandidates = resolveShellCandidates(payload);
+	const script = buildShellBootstrapScript(shellCandidates);
 
 	return {
 		file: dockerBinary,
 		args: [
 			"exec",
-			"-i",
+			"-it",
 			payload.containerId,
 			"sh",
 			"-lc",
-			"if command -v bash >/dev/null 2>&1; then exec bash -i; else exec sh -i; fi",
+			script,
 		],
 		cwd: "/",
 	};
@@ -45,14 +83,18 @@ function buildCommand(payload) {
 
 export function createLocalTerminalSession(payload) {
 	const command = buildCommand(payload);
-	const processHandle = spawn(command.file, command.args, {
+	const cols = Math.max(40, Math.min(300, Number(payload?.cols || 120)));
+	const rows = Math.max(12, Math.min(120, Number(payload?.rows || 36)));
+	const processHandle = pty.spawn(command.file, command.args, {
+		name: "xterm-color",
+		cols,
+		rows,
 		cwd: command.cwd,
 		env: {
 			...process.env,
 			TERM: process.env.TERM || "xterm-256color",
 			COLORTERM: process.env.COLORTERM || "truecolor",
 		},
-		stdio: "pipe",
 	});
 
 	const sessionId = globalThis.crypto.randomUUID();
@@ -65,21 +107,9 @@ export function createLocalTerminalSession(payload) {
 	};
 
 	const onData = (chunk) => {
-		const normalized = chunk
-			.toString()
-			.replace(/^sh: no job control in this shell\r?\n/, "")
-			.replace(/^sh: can't access tty; job control turned off\r?\n/, "");
-		const cleaned = normalized
-			.replace(/^bash: cannot set terminal process group \(-1\): Not a tty\r?\n/, "")
-			.replace(/^bash: no job control in this shell\r?\n/, "");
-
-		if (!cleaned) {
-			return;
-		}
-
 		session.events.push({
 			cursor: session.nextCursor,
-			data: cleaned,
+			data: String(chunk || ""),
 		});
 		session.nextCursor += 1;
 		if (session.events.length > 512) {
@@ -87,11 +117,10 @@ export function createLocalTerminalSession(payload) {
 		}
 	};
 
-	processHandle.stdout.on("data", onData);
-	processHandle.stderr.on("data", onData);
-	processHandle.on("close", (code) => {
+	processHandle.onData(onData);
+	processHandle.onExit(({ exitCode }) => {
 		session.closed = true;
-		session.exitCode = code ?? 0;
+		session.exitCode = exitCode ?? 0;
 	});
 
 	terminalSessions.set(sessionId, session);
@@ -123,15 +152,19 @@ export function writeLocalTerminalInput(sessionId, data) {
 		throw new Error("Terminal session not found.");
 	}
 
-	session.process.stdin.write(String(data || ""));
+	session.process.write(String(data || "").slice(0, 8192));
 	return { ok: true };
 }
 
-export function resizeLocalTerminalSession(sessionId, _cols, _rows) {
+export function resizeLocalTerminalSession(sessionId, cols, rows) {
 	const session = terminalSessions.get(sessionId);
 	if (!session) {
 		throw new Error("Terminal session not found.");
 	}
+	session.process.resize(
+		Math.max(40, Math.min(300, Number(cols || 120))),
+		Math.max(12, Math.min(120, Number(rows || 36))),
+	);
 
 	return { ok: true };
 }
@@ -142,7 +175,7 @@ export function closeLocalTerminalSession(sessionId) {
 		return { ok: true };
 	}
 
-	session.process.kill("SIGTERM");
+	session.process.kill();
 	session.closed = true;
 	setTimeout(() => {
 		terminalSessions.delete(sessionId);

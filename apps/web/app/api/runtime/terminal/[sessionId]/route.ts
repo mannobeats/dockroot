@@ -60,12 +60,15 @@ export async function POST(
 			});
 			return NextResponse.json(result);
 		}
+		if (body.type !== "input") {
+			return NextResponse.json({ error: "Unsupported terminal operation." }, { status: 400 });
+		}
 
 		const result = await writeTerminalInputForEnvironment({
 			userId: auth.userId,
 			environmentId,
 			sessionId,
-			data: String(body.data || ""),
+			data: String(body.data || "").slice(0, 8192),
 		});
 		return NextResponse.json(result);
 	} catch (error) {

@@ -42,6 +42,8 @@ const dockerBinary = resolveExecutable(process.env.DOCKER_BIN, [
 	"/opt/homebrew/bin/docker",
 	"docker",
 ]);
+const supportedShells = new Set(["sh", "bash", "ash", "zsh"]);
+const defaultShellOrder = ["sh", "bash", "ash", "zsh"];
 function resolveExecutable(primaryCandidate, fallbackCandidates) {
 	for (const candidate of [primaryCandidate, ...fallbackCandidates]) {
 		if (!candidate) {
@@ -73,6 +75,51 @@ function isPrivilegedRole(role) {
 
 function getAppBaseUrl() {
 	return `http://127.0.0.1:${port}`;
+}
+
+function clampTerminalColumns(value) {
+	const parsed = Number(value || 120);
+	return Number.isFinite(parsed) ? Math.max(40, Math.min(300, Math.floor(parsed))) : 120;
+}
+
+function clampTerminalRows(value) {
+	const parsed = Number(value || 36);
+	return Number.isFinite(parsed) ? Math.max(12, Math.min(120, Math.floor(parsed))) : 36;
+}
+
+function escapeSingleQuotes(value) {
+	return value.replaceAll("'", "'\"'\"'");
+}
+
+function isSafeCustomShell(value) {
+	return typeof value === "string" && /^[A-Za-z0-9_./-]{1,120}$/.test(value);
+}
+
+function resolveShellCandidates(payload) {
+	const requestedShell =
+		typeof payload?.shell === "string" ? payload.shell.trim().toLowerCase() : defaultShellOrder[0];
+	const customShell = typeof payload?.customShell === "string" ? payload.customShell.trim() : "";
+	if (requestedShell === "custom" && !isSafeCustomShell(customShell)) {
+		throw new Error("Invalid custom shell.");
+	}
+
+	const candidates = [];
+	if (requestedShell === "custom" && customShell) {
+		candidates.push(customShell);
+	}
+	if (supportedShells.has(requestedShell)) {
+		candidates.push(requestedShell);
+	}
+	for (const candidate of defaultShellOrder) {
+		candidates.push(candidate);
+	}
+
+	return Array.from(new Set(candidates));
+}
+
+function buildShellBootstrapScript(candidates) {
+	const tokens = candidates.map((candidate) => `'${escapeSingleQuotes(candidate)}'`).join(" ");
+	return `for shell_bin in ${tokens}; do if command -v "$shell_bin" >/dev/null 2>&1; then exec "$shell_bin" -i; fi; done; echo "No supported shell found." >&2; exit 127`;
 }
 
 async function readJsonBody(req) {
@@ -368,8 +415,8 @@ io.on("connection", (socket) => {
 	socket.on("terminal:create", async (payload, callback) => {
 		try {
 			const sessionId = randomUUID();
-			const cols = Number(payload?.cols || 120);
-			const rows = Number(payload?.rows || 36);
+			const cols = clampTerminalColumns(payload?.cols);
+			const rows = clampTerminalRows(payload?.rows);
 
 			if (
 				!payload?.containerId ||
@@ -380,62 +427,43 @@ io.on("connection", (socket) => {
 				});
 				return;
 			}
+			const shellCandidates = resolveShellCandidates(payload);
+			const bootstrapScript = buildShellBootstrapScript(shellCandidates);
 
 			const command = {
 				file: dockerBinary,
 				args: [
 					"exec",
-					"-i",
+					"-it",
 					payload.containerId,
 					"sh",
 					"-lc",
-					"if command -v bash >/dev/null 2>&1; then exec bash; else exec sh; fi",
+					bootstrapScript,
 				],
 				cwd: "/",
 			};
 
-			const terminalSession = (() => {
-				try {
-					const ptyProcess = pty.spawn(command.file, command.args, {
-						name: "xterm-color",
-						cols,
-						rows,
-						cwd: command.cwd,
-						env: process.env,
-					});
+			const ptyProcess = pty.spawn(command.file, command.args, {
+				name: "xterm-color",
+				cols,
+				rows,
+				cwd: command.cwd,
+				env: {
+					...process.env,
+					TERM: process.env.TERM || "xterm-256color",
+					COLORTERM: process.env.COLORTERM || "truecolor",
+				},
+			});
 
-					return {
-						kind: "pty",
-						write: (data) => ptyProcess.write(data),
-						resize: (nextCols, nextRows) => ptyProcess.resize(nextCols, nextRows),
-						kill: () => ptyProcess.kill(),
-						onData: (listener) => ptyProcess.onData(listener),
-						onExit: (listener) => ptyProcess.onExit(listener),
-					};
-				} catch {
-					const child = spawn(command.file, command.args, {
-						cwd: command.cwd,
-						env: process.env,
-						stdio: "pipe",
-					});
-
-					return {
-						kind: "pipe",
-						write: (data) => {
-							child.stdin.write(data || "");
-						},
-						resize: null,
-						kill: () => child.kill("SIGTERM"),
-						onData: (listener) => {
-							child.stdout.on("data", (chunk) => listener(chunk.toString()));
-							child.stderr.on("data", (chunk) => listener(chunk.toString()));
-						},
-						onExit: (listener) => {
-							child.on("close", (exitCode) => listener({ exitCode }));
-						},
-					};
-				}
-			})();
+			const terminalSession = {
+				kind: "pty",
+				write: (data) => ptyProcess.write(data),
+				resize: (nextCols, nextRows) =>
+					ptyProcess.resize(clampTerminalColumns(nextCols), clampTerminalRows(nextRows)),
+				kill: () => ptyProcess.kill(),
+				onData: (listener) => ptyProcess.onData(listener),
+				onExit: (listener) => ptyProcess.onExit(listener),
+			};
 
 			terminalSessions.set(sessionId, {
 				...terminalSession,
@@ -482,15 +510,15 @@ io.on("connection", (socket) => {
 
 	socket.on("terminal:input", (payload) => {
 		const session = terminalSessions.get(payload?.sessionId);
-		if (session?.socketId === socket.id) {
-			session.write(payload.data || "");
+		if (session?.socketId === socket.id && typeof payload?.data === "string") {
+			session.write(payload.data.slice(0, 8192));
 		}
 	});
 
 	socket.on("terminal:resize", (payload) => {
 		const session = terminalSessions.get(payload?.sessionId);
 		if (session?.socketId === socket.id && session.resize) {
-			session.resize(Number(payload.cols || 120), Number(payload.rows || 36));
+			session.resize(clampTerminalColumns(payload.cols), clampTerminalRows(payload.rows));
 		}
 	});
 
