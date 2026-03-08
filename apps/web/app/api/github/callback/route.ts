@@ -1,4 +1,6 @@
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { sanitizeInternalRedirectPath } from "@/lib/authorization";
 import { verifyGitHubAppState } from "@/lib/github-app";
 import { syncGitHubInstallation } from "@/lib/platform";
 import { getServerSession } from "@/lib/session";
@@ -12,26 +14,23 @@ export async function GET(request: Request) {
 	const url = new URL(request.url);
 	const installationId = url.searchParams.get("installation_id");
 	const state = url.searchParams.get("state");
-	const redirectToCookie = request.headers
-		.get("cookie")
-		?.match(/(?:^|; )dockroot_github_redirect_to=([^;]+)/)?.[1];
-	const userIdCookie = request.headers
-		.get("cookie")
-		?.match(/(?:^|; )dockroot_github_user_id=([^;]+)/)?.[1];
+	const cookieStore = await cookies();
+	const redirectToCookie = cookieStore.get("dockroot_github_redirect_to")?.value;
+	const userIdCookie = cookieStore.get("dockroot_github_user_id")?.value;
 
 	if (!installationId) {
 		return NextResponse.redirect(new URL("/dashboard/projects?github=missing", request.url));
 	}
 
-	let redirectTo = decodeURIComponent(redirectToCookie || "/dashboard/projects");
+	let redirectTo = sanitizeInternalRedirectPath(redirectToCookie || "/dashboard/projects");
 
 	if (state) {
 		const parsedState = verifyGitHubAppState(state);
 		if (parsedState.userId !== session.user.id) {
 			return NextResponse.redirect(new URL("/dashboard/projects?github=denied", request.url));
 		}
-		redirectTo = parsedState.redirectTo;
-	} else if (userIdCookie && decodeURIComponent(userIdCookie) !== session.user.id) {
+		redirectTo = sanitizeInternalRedirectPath(parsedState.redirectTo);
+	} else if (userIdCookie && userIdCookie !== session.user.id) {
 		return NextResponse.redirect(new URL("/dashboard/projects?github=denied", request.url));
 	}
 

@@ -6,6 +6,7 @@ import {
 } from "@/app/(dashboard)/actions";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { PageHeader } from "@/components/page-header";
+import { requirePrivilegedSession } from "@/lib/authorization";
 import { listNetworks } from "@/lib/platform/docker";
 
 export default async function NetworksPage({
@@ -13,6 +14,7 @@ export default async function NetworksPage({
 }: {
 	searchParams: Promise<{ q?: string; network?: string }>;
 }) {
+	await requirePrivilegedSession();
 	const params = await searchParams;
 	const query = (params.q || "").toLowerCase();
 	const networks = await listNetworks();

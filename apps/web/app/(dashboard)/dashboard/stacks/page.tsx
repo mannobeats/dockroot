@@ -8,23 +8,20 @@ import {
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
+import { isPrivilegedRole, requireUserSession } from "@/lib/authorization";
 import { listStacks } from "@/lib/platform";
-import { getServerSession } from "@/lib/session";
 
 export default async function StacksPage({
 	searchParams,
 }: {
 	searchParams: Promise<{ q?: string }>;
 }) {
-	const session = await getServerSession();
-
-	if (!session?.user.id) {
-		return null;
-	}
+	const { userId, role } = await requireUserSession();
+	const includeUntracked = isPrivilegedRole(role);
 
 	const query = await searchParams;
 	const search = (query.q || "").trim().toLowerCase();
-	const stacks = await listStacks(session.user.id);
+	const stacks = await listStacks(userId, { includeUntracked });
 	const filtered = search
 		? stacks.filter((stack) =>
 				[stack.name, stack.slug, stack.projectName || "", stack.environmentName || ""]
@@ -39,7 +36,11 @@ export default async function StacksPage({
 			<PageHeader
 				kicker="Operations"
 				title="Compose stacks"
-				description="Operate tracked Dockroot stacks and external compose projects from one fleet view."
+				description={
+					includeUntracked
+						? "Operate tracked Dockroot stacks and external compose projects from one fleet view."
+						: "Operate tracked Dockroot stacks that belong to your workspace."
+				}
 			/>
 
 			<section className="rounded-2xl border border-default/15 bg-surface p-5">
@@ -47,8 +48,9 @@ export default async function StacksPage({
 					<div>
 						<h2 className="text-lg font-semibold tracking-tight">Fleet</h2>
 						<p className="mt-1 text-sm text-muted">
-							Tracked stacks stay linked to projects. Untracked compose projects are still operable
-							here.
+							{includeUntracked
+								? "Tracked stacks stay linked to projects. Untracked compose projects are still operable here."
+								: "Tracked stacks stay linked to your projects and environments."}
 						</p>
 					</div>
 					<form className="flex w-full gap-3 lg:w-auto">
@@ -151,7 +153,7 @@ export default async function StacksPage({
 															Open
 														</Link>
 													</>
-												) : (
+												) : includeUntracked ? (
 													(["start", "stop", "restart", "destroy"] as const).map((action) => (
 														<form key={action} action={controlComposeProjectAction}>
 															<input type="hidden" name="projectName" value={stack.slug} />
@@ -171,8 +173,8 @@ export default async function StacksPage({
 															/>
 														</form>
 													))
-												)}
-												{stack.type === "untracked" ? (
+												) : null}
+												{stack.type === "untracked" && includeUntracked ? (
 													<form action={adoptComposeProjectAction}>
 														<input type="hidden" name="projectName" value={stack.slug} />
 														{stack.configFiles.map((configFile) => (

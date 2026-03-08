@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { requirePrivilegedSession, requireUserSession } from "@/lib/authorization";
 import {
 	adoptComposeProject,
 	createEnvironment,
@@ -23,24 +24,14 @@ import {
 	removeNetwork,
 	removeVolume,
 } from "@/lib/platform/docker";
-import { getServerSession } from "@/lib/session";
-
-async function requireUserId() {
-	const session = await getServerSession();
-
-	if (!session?.user.id) {
-		throw new Error("Unauthorized");
-	}
-
-	return session.user.id;
-}
+import { requireAccessibleContainerForUser } from "@/lib/runtime-access";
 
 function getValue(formData: FormData, key: string) {
 	return String(formData.get(key) || "").trim();
 }
 
 export async function createProjectAction(formData: FormData) {
-	const userId = await requireUserId();
+	const { userId } = await requireUserSession();
 	const name = getValue(formData, "name");
 	const description = getValue(formData, "description");
 
@@ -58,7 +49,7 @@ export async function createProjectAction(formData: FormData) {
 }
 
 export async function adoptComposeProjectAction(formData: FormData) {
-	const userId = await requireUserId();
+	const { userId } = await requirePrivilegedSession();
 	const projectName = getValue(formData, "projectName");
 	const configFiles = formData
 		.getAll("configFiles")
@@ -77,7 +68,7 @@ export async function adoptComposeProjectAction(formData: FormData) {
 }
 
 export async function createEnvironmentAction(formData: FormData) {
-	const userId = await requireUserId();
+	const { userId } = await requireUserSession();
 	const name = getValue(formData, "name");
 	const description = getValue(formData, "description");
 	const managerUrl = getValue(formData, "managerUrl");
@@ -97,7 +88,7 @@ export async function createEnvironmentAction(formData: FormData) {
 }
 
 export async function createStackAction(formData: FormData) {
-	const userId = await requireUserId();
+	const { userId } = await requireUserSession();
 	const projectId = getValue(formData, "projectId");
 	const environmentId = getValue(formData, "environmentId");
 	const name = getValue(formData, "name");
@@ -123,7 +114,7 @@ export async function createStackAction(formData: FormData) {
 }
 
 export async function createGitHubStackAction(formData: FormData) {
-	const userId = await requireUserId();
+	const { userId } = await requireUserSession();
 	const projectId = getValue(formData, "projectId");
 	const environmentId = getValue(formData, "environmentId");
 	const installationId = getValue(formData, "installationId");
@@ -173,7 +164,7 @@ export async function createGitHubStackAction(formData: FormData) {
 }
 
 export async function deployStackAction(formData: FormData) {
-	const userId = await requireUserId();
+	const { userId } = await requireUserSession();
 	const stackId = getValue(formData, "stackId");
 
 	if (!stackId) {
@@ -188,7 +179,7 @@ export async function deployStackAction(formData: FormData) {
 }
 
 export async function destroyStackAction(formData: FormData) {
-	const userId = await requireUserId();
+	const { userId } = await requireUserSession();
 	const stackId = getValue(formData, "stackId");
 
 	if (!stackId) {
@@ -203,7 +194,7 @@ export async function destroyStackAction(formData: FormData) {
 }
 
 export async function controlContainerAction(formData: FormData) {
-	await requireUserId();
+	const auth = await requireUserSession();
 	const containerId = getValue(formData, "containerId");
 	const action = getValue(formData, "action");
 
@@ -211,12 +202,17 @@ export async function controlContainerAction(formData: FormData) {
 		throw new Error("Container and action are required");
 	}
 
+	await requireAccessibleContainerForUser({
+		containerId,
+		userId: auth.userId,
+		role: auth.role,
+	});
 	await controlContainer(containerId, action as "start" | "stop" | "restart" | "remove");
 	revalidatePath("/dashboard/containers");
 }
 
 export async function controlComposeProjectAction(formData: FormData) {
-	await requireUserId();
+	await requirePrivilegedSession();
 	const projectName = getValue(formData, "projectName");
 	const action = getValue(formData, "action");
 	const configFiles = formData
@@ -237,7 +233,7 @@ export async function controlComposeProjectAction(formData: FormData) {
 }
 
 export async function pullImageAction(formData: FormData) {
-	await requireUserId();
+	await requirePrivilegedSession();
 	const imageRef = getValue(formData, "imageRef");
 
 	if (!imageRef) {
@@ -249,7 +245,7 @@ export async function pullImageAction(formData: FormData) {
 }
 
 export async function removeImageAction(formData: FormData) {
-	await requireUserId();
+	await requirePrivilegedSession();
 	const imageRef = getValue(formData, "imageRef");
 
 	if (!imageRef) {
@@ -261,14 +257,14 @@ export async function removeImageAction(formData: FormData) {
 }
 
 export async function pruneImagesAction(formData: FormData) {
-	await requireUserId();
+	await requirePrivilegedSession();
 	const mode = getValue(formData, "mode");
 	await pruneImages({ all: mode === "all" });
 	revalidatePath("/dashboard/images");
 }
 
 export async function createVolumeAction(formData: FormData) {
-	await requireUserId();
+	await requirePrivilegedSession();
 	const name = getValue(formData, "name");
 	const driver = getValue(formData, "driver") || "local";
 
@@ -281,7 +277,7 @@ export async function createVolumeAction(formData: FormData) {
 }
 
 export async function removeVolumeAction(formData: FormData) {
-	await requireUserId();
+	await requirePrivilegedSession();
 	const name = getValue(formData, "name");
 
 	if (!name) {
@@ -293,13 +289,13 @@ export async function removeVolumeAction(formData: FormData) {
 }
 
 export async function pruneVolumesAction() {
-	await requireUserId();
+	await requirePrivilegedSession();
 	await pruneVolumes();
 	revalidatePath("/dashboard/volumes");
 }
 
 export async function createNetworkAction(formData: FormData) {
-	await requireUserId();
+	await requirePrivilegedSession();
 	const name = getValue(formData, "name");
 	const driver = getValue(formData, "driver") || "bridge";
 
@@ -312,7 +308,7 @@ export async function createNetworkAction(formData: FormData) {
 }
 
 export async function removeNetworkAction(formData: FormData) {
-	await requireUserId();
+	await requirePrivilegedSession();
 	const name = getValue(formData, "name");
 
 	if (!name) {
@@ -324,7 +320,7 @@ export async function removeNetworkAction(formData: FormData) {
 }
 
 export async function pruneNetworksAction() {
-	await requireUserId();
+	await requirePrivilegedSession();
 	await pruneNetworks();
 	revalidatePath("/dashboard/networks");
 }

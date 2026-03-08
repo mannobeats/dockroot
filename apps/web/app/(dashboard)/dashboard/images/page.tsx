@@ -2,6 +2,7 @@ import Link from "next/link";
 import { pruneImagesAction, pullImageAction, removeImageAction } from "@/app/(dashboard)/actions";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { PageHeader } from "@/components/page-header";
+import { requirePrivilegedSession } from "@/lib/authorization";
 import { listContainers, listImages } from "@/lib/platform/docker";
 
 export default async function ImagesPage({
@@ -9,6 +10,7 @@ export default async function ImagesPage({
 }: {
 	searchParams: Promise<{ q?: string; image?: string }>;
 }) {
+	await requirePrivilegedSession();
 	const params = await searchParams;
 	const query = (params.q || "").toLowerCase();
 	const images = await listImages();

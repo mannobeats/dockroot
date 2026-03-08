@@ -5,17 +5,20 @@ import { LiveRuntimePanel } from "@/components/live-runtime-panel";
 import { PageHeader } from "@/components/page-header";
 import { RuntimePortLinks } from "@/components/runtime-port-links";
 import { StatusBadge } from "@/components/status-badge";
-import { listContainers } from "@/lib/platform/docker";
+import { isPrivilegedRole, requireUserSession } from "@/lib/authorization";
+import { listAccessibleContainersForUser } from "@/lib/runtime-access";
 
 export default async function ContainersPage({
 	searchParams,
 }: {
 	searchParams: Promise<{ q?: string; status?: string }>;
 }) {
+	const { userId, role } = await requireUserSession();
 	const params = await searchParams;
 	const query = (params.q || "").toLowerCase();
 	const status = (params.status || "all").toLowerCase();
-	const containers = await listContainers();
+	const containers = await listAccessibleContainersForUser(userId, role);
+	const includeRuntime = isPrivilegedRole(role);
 	const filtered = containers.filter((container) => {
 		const matchesQuery =
 			!query ||
@@ -32,10 +35,14 @@ export default async function ContainersPage({
 			<PageHeader
 				kicker="Runtime"
 				title="Containers"
-				description="Inspect, control, remove, and jump into logs for every runtime container on the manager host."
+				description={
+					includeRuntime
+						? "Inspect, control, remove, and jump into logs for every runtime container on the manager host."
+						: "Inspect and operate runtime containers that belong to your workspace."
+				}
 			/>
 
-			<LiveRuntimePanel />
+			{includeRuntime ? <LiveRuntimePanel /> : null}
 
 			<section className="grid gap-4 lg:grid-cols-3">
 				<div className="rounded-2xl border border-default/15 bg-surface p-5">

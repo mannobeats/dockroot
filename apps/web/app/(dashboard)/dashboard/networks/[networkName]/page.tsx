@@ -1,6 +1,7 @@
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
+import { requirePrivilegedSession } from "@/lib/authorization";
 import { getNetworkDetails } from "@/lib/platform/docker";
 
 export default async function NetworkDetailPage({
@@ -8,6 +9,7 @@ export default async function NetworkDetailPage({
 }: {
 	params: Promise<{ networkName: string }>;
 }) {
+	await requirePrivilegedSession();
 	const { networkName } = await params;
 	const decodedName = decodeURIComponent(networkName);
 	const network = await getNetworkDetails(decodedName);

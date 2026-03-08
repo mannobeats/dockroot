@@ -6,23 +6,23 @@ import { PageHeader } from "@/components/page-header";
 import { PrometheusOverview } from "@/components/prometheus-overview";
 import { StatCard } from "@/components/stat-card";
 import { StatusBadge } from "@/components/status-badge";
+import { isPrivilegedRole, requireUserSession } from "@/lib/authorization";
 import { getDashboardData } from "@/lib/platform";
 import { getPrometheusDashboardMetrics, getPrometheusTargetHealth } from "@/lib/prometheus";
-import { getServerSession } from "@/lib/session";
 
 export default async function DashboardPage() {
-	const session = await getServerSession();
-
-	if (!session?.user.id) {
-		return null;
-	}
+	const { session, userId, role } = await requireUserSession();
+	const includeRuntime = isPrivilegedRole(role);
 
 	const [data, metrics, targets] = await Promise.all([
-		getDashboardData(session.user.id),
-		getPrometheusDashboardMetrics(),
-		getPrometheusTargetHealth(),
+		getDashboardData(userId, { includeRuntime }),
+		includeRuntime ? getPrometheusDashboardMetrics() : null,
+		includeRuntime ? getPrometheusTargetHealth() : null,
 	]);
-	const memoryUsed = (data.runtime.host.totalMemoryGb - data.runtime.host.freeMemoryGb).toFixed(1);
+	const memoryUsed =
+		includeRuntime && data.runtime
+			? (data.runtime.host.totalMemoryGb - data.runtime.host.freeMemoryGb).toFixed(1)
+			: null;
 
 	return (
 		<div className="space-y-6">
@@ -69,45 +69,63 @@ export default async function DashboardPage() {
 				/>
 				<StatCard
 					label="Runtime Assets"
-					value={String(data.runtime.counts.containers)}
-					detail={`${data.runtime.counts.images} images on ${data.runtime.host.hostname}`}
+					value={includeRuntime && data.runtime ? String(data.runtime.counts.containers) : "Scoped"}
+					detail={
+						includeRuntime && data.runtime
+							? `${data.runtime.counts.images} images on ${data.runtime.host.hostname}`
+							: "Tenant runtime visibility is limited to owned workloads"
+					}
 					icon={Boxes}
 				/>
 			</div>
 
 			<div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
-				<section className="rounded-[28px] border border-default/15 bg-surface/80 p-5">
-					<div className="flex items-center justify-between">
-						<div>
-							<p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted">
-								Host overview
-							</p>
-							<h2 className="mt-2 text-xl font-semibold tracking-tight">
-								{data.runtime.host.hostname}
-							</h2>
+				{includeRuntime && data.runtime ? (
+					<section className="rounded-[28px] border border-default/15 bg-surface/80 p-5">
+						<div className="flex items-center justify-between">
+							<div>
+								<p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted">
+									Host overview
+								</p>
+								<h2 className="mt-2 text-xl font-semibold tracking-tight">
+									{data.runtime.host.hostname}
+								</h2>
+							</div>
+							<StatusBadge status="healthy" />
 						</div>
-						<StatusBadge status="healthy" />
-					</div>
-					<div className="mt-6 grid gap-4 md:grid-cols-3">
-						<div className="rounded-2xl border border-default/15 bg-background/70 p-4">
-							<p className="text-xs font-medium text-muted">Platform</p>
-							<p className="mt-2 text-lg font-semibold">{data.runtime.host.platform}</p>
-							<p className="mt-1 text-sm text-muted">{data.runtime.host.architecture}</p>
+						<div className="mt-6 grid gap-4 md:grid-cols-3">
+							<div className="rounded-2xl border border-default/15 bg-background/70 p-4">
+								<p className="text-xs font-medium text-muted">Platform</p>
+								<p className="mt-2 text-lg font-semibold">{data.runtime.host.platform}</p>
+								<p className="mt-1 text-sm text-muted">{data.runtime.host.architecture}</p>
+							</div>
+							<div className="rounded-2xl border border-default/15 bg-background/70 p-4">
+								<p className="text-xs font-medium text-muted">Resources</p>
+								<p className="mt-2 text-lg font-semibold">{data.runtime.host.cpus} CPU threads</p>
+								<p className="mt-1 text-sm text-muted">
+									{memoryUsed} GB used of {data.runtime.host.totalMemoryGb} GB RAM
+								</p>
+							</div>
+							<div className="rounded-2xl border border-default/15 bg-background/70 p-4">
+								<p className="text-xs font-medium text-muted">Data directory</p>
+								<p className="mt-2 break-all text-sm font-medium">{data.dataDir}</p>
+								<p className="mt-1 text-sm text-muted">Compose payloads and runtime artifacts</p>
+							</div>
 						</div>
-						<div className="rounded-2xl border border-default/15 bg-background/70 p-4">
-							<p className="text-xs font-medium text-muted">Resources</p>
-							<p className="mt-2 text-lg font-semibold">{data.runtime.host.cpus} CPU threads</p>
-							<p className="mt-1 text-sm text-muted">
-								{memoryUsed} GB used of {data.runtime.host.totalMemoryGb} GB RAM
-							</p>
-						</div>
-						<div className="rounded-2xl border border-default/15 bg-background/70 p-4">
-							<p className="text-xs font-medium text-muted">Data directory</p>
-							<p className="mt-2 break-all text-sm font-medium">{data.dataDir}</p>
-							<p className="mt-1 text-sm text-muted">Compose payloads and runtime artifacts</p>
-						</div>
-					</div>
-				</section>
+					</section>
+				) : (
+					<section className="rounded-[28px] border border-default/15 bg-surface/80 p-5">
+						<p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted">
+							Tenant scope
+						</p>
+						<h2 className="mt-2 text-xl font-semibold tracking-tight">Workspace overview</h2>
+						<p className="mt-4 max-w-2xl text-sm text-muted">
+							This account is scoped to owned projects, environments, stacks, deployments, and
+							runtime containers. Host-level telemetry and engine administration remain restricted
+							to privileged operators.
+						</p>
+					</section>
+				)}
 
 				<section className="rounded-[28px] border border-default/15 bg-surface/80 p-5">
 					<p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted">
@@ -143,11 +161,11 @@ export default async function DashboardPage() {
 				</section>
 			</div>
 
-			<PrometheusOverview metrics={metrics} />
+			{includeRuntime && metrics ? <PrometheusOverview metrics={metrics} /> : null}
 
-			<MonitoringHealthGrid targets={targets} />
+			{includeRuntime && targets ? <MonitoringHealthGrid targets={targets} /> : null}
 
-			<LiveRuntimePanel />
+			{includeRuntime ? <LiveRuntimePanel /> : null}
 
 			<section className="rounded-[28px] border border-default/15 bg-surface/80 p-5">
 				<div className="flex items-center justify-between">

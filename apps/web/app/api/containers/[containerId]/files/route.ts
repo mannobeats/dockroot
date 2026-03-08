@@ -1,28 +1,24 @@
 import { NextResponse } from "next/server";
+import { requireUserSession } from "@/lib/authorization";
 import {
 	deleteContainerPath,
 	uploadContainerFile,
 	writeContainerFile,
 } from "@/lib/platform/docker";
-import { getServerSession } from "@/lib/session";
-
-async function requireSession() {
-	const session = await getServerSession();
-
-	if (!session?.user.id) {
-		throw new Error("Unauthorized");
-	}
-
-	return session;
-}
+import { requireAccessibleContainerForUser } from "@/lib/runtime-access";
 
 export async function PUT(
 	request: Request,
 	{ params }: { params: Promise<{ containerId: string }> },
 ) {
 	try {
-		await requireSession();
+		const auth = await requireUserSession(request.headers);
 		const { containerId } = await params;
+		await requireAccessibleContainerForUser({
+			containerId,
+			userId: auth.userId,
+			role: auth.role,
+		});
 		const body = (await request.json()) as { path?: string; content?: string };
 
 		if (!body.path) {
@@ -44,8 +40,13 @@ export async function POST(
 	{ params }: { params: Promise<{ containerId: string }> },
 ) {
 	try {
-		await requireSession();
+		const auth = await requireUserSession(request.headers);
 		const { containerId } = await params;
+		await requireAccessibleContainerForUser({
+			containerId,
+			userId: auth.userId,
+			role: auth.role,
+		});
 		const formData = await request.formData();
 		const targetDirectory = String(formData.get("path") || "").trim();
 		const file = formData.get("file");
@@ -70,8 +71,13 @@ export async function DELETE(
 	{ params }: { params: Promise<{ containerId: string }> },
 ) {
 	try {
-		await requireSession();
+		const auth = await requireUserSession(request.headers);
 		const { containerId } = await params;
+		await requireAccessibleContainerForUser({
+			containerId,
+			userId: auth.userId,
+			role: auth.role,
+		});
 		const body = (await request.json()) as { path?: string };
 
 		if (!body.path) {

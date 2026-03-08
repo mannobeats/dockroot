@@ -1,22 +1,33 @@
 import { LiveLogsWorkspace } from "@/components/live-logs-workspace";
 import { PageHeader } from "@/components/page-header";
-import { getContainerLogs, listContainers } from "@/lib/platform/docker";
+import { requireUserSession } from "@/lib/authorization";
+import { getContainerLogs } from "@/lib/platform/docker";
+import { listAccessibleContainersForUser } from "@/lib/runtime-access";
 
 export default async function LogsPage({
 	searchParams,
 }: {
 	searchParams: Promise<{ mode?: string; container?: string; containers?: string }>;
 }) {
+	const { userId, role } = await requireUserSession();
 	const params = await searchParams;
-	const containers = await listContainers();
+	const containers = await listAccessibleContainersForUser(userId, role);
 	const initialMode = params.mode === "grouped" ? "grouped" : "single";
-	const initialSelectedIds =
+	const requestedIds =
 		initialMode === "grouped"
 			? (params.containers || "")
 					.split(",")
 					.map((value) => value.trim())
 					.filter(Boolean)
-			: ([params.container || containers[0]?.ID].filter(Boolean) as string[]);
+			: ([params.container].filter(Boolean) as string[]);
+	const accessibleIds = new Set(containers.map((container) => container.ID));
+	const initialSelectedIds = (
+		initialMode === "grouped"
+			? requestedIds
+			: requestedIds.length
+				? requestedIds
+				: [containers[0]?.ID].filter(Boolean)
+	).filter((containerId) => accessibleIds.has(containerId));
 	const selectedContainers = containers.filter((container) =>
 		initialSelectedIds.includes(container.ID),
 	);

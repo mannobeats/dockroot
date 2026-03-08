@@ -122,6 +122,9 @@ export default function SignUpPage() {
 						Sign In
 					</Link>
 				</p>
+				<p className="mt-2 text-[12px] text-muted">
+					If registration is disabled, ask the instance owner to provision your account.
+				</p>
 			</div>
 		</div>
 	);

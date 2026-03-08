@@ -1,6 +1,7 @@
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
+import { requirePrivilegedSession } from "@/lib/authorization";
 import { getVolumeDetails } from "@/lib/platform/docker";
 
 export default async function VolumeDetailPage({
@@ -8,6 +9,7 @@ export default async function VolumeDetailPage({
 }: {
 	params: Promise<{ volumeName: string }>;
 }) {
+	await requirePrivilegedSession();
 	const { volumeName } = await params;
 	const decodedName = decodeURIComponent(volumeName);
 	const volume = await getVolumeDetails(decodedName);

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { sanitizeInternalRedirectPath } from "@/lib/authorization";
 import {
 	getGitHubAppInstallUrl,
 	isGitHubAppConfigured,
@@ -17,7 +18,7 @@ export async function GET(request: Request) {
 	}
 
 	const url = new URL(request.url);
-	const redirectTo = url.searchParams.get("redirectTo") || "/dashboard/projects";
+	const redirectTo = sanitizeInternalRedirectPath(url.searchParams.get("redirectTo"));
 	const state = signGitHubAppState({
 		userId: session.user.id,
 		redirectTo,

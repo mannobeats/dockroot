@@ -2,6 +2,7 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
+import { requirePrivilegedSession } from "@/lib/authorization";
 import { getImageDetails, listContainers } from "@/lib/platform/docker";
 
 export default async function ImageDetailPage({
@@ -9,6 +10,7 @@ export default async function ImageDetailPage({
 }: {
 	params: Promise<{ imageRef: string }>;
 }) {
+	await requirePrivilegedSession();
 	const { imageRef } = await params;
 	const decodedRef = decodeURIComponent(imageRef);
 	const [image, containers] = await Promise.all([getImageDetails(decodedRef), listContainers()]);

@@ -1,6 +1,7 @@
 import { db, schema } from "@dockroot/db";
-import { betterAuth } from "better-auth";
+import { APIError, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { count } from "drizzle-orm";
 
 function getRequiredEnv(name: string) {
 	const value = process.env[name];
@@ -21,6 +22,10 @@ function getTrustedOrigins() {
 		.filter((origin, index, all) => all.indexOf(origin) === index);
 }
 
+function publicSignupsAllowed() {
+	return process.env.DOCKROOT_ALLOW_PUBLIC_SIGNUP === "true";
+}
+
 export const auth = betterAuth({
 	secret: getRequiredEnv("BETTER_AUTH_SECRET"),
 	baseURL: getRequiredEnv("BETTER_AUTH_URL"),
@@ -31,6 +36,15 @@ export const auth = betterAuth({
 	}),
 	emailAndPassword: {
 		enabled: true,
+	},
+	user: {
+		additionalFields: {
+			role: {
+				type: "string",
+				required: false,
+				defaultValue: "member",
+			},
+		},
 	},
 	rateLimit: {
 		enabled: true,
@@ -47,6 +61,37 @@ export const auth = betterAuth({
 		cookieCache: {
 			enabled: true,
 			maxAge: 5 * 60,
+		},
+	},
+	databaseHooks: {
+		user: {
+			create: {
+				before: async (user) => {
+					const [{ value: existingUsers }] = await db.select({ value: count() }).from(schema.user);
+
+					if (!existingUsers) {
+						return {
+							data: {
+								...user,
+								role: "owner",
+							},
+						};
+					}
+
+					if (!publicSignupsAllowed()) {
+						throw new APIError("FORBIDDEN", {
+							message: "Public sign-up is disabled for this instance.",
+						});
+					}
+
+					return {
+						data: {
+							...user,
+							role: "member",
+						},
+					};
+				},
+			},
 		},
 	},
 });

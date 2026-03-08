@@ -1,5 +1,6 @@
 import "server-only";
 
+import { createHash } from "node:crypto";
 import {
 	agents,
 	db,
@@ -9,7 +10,7 @@ import {
 	projects,
 	stacks,
 } from "@dockroot/db";
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import {
 	fetchRepositoryTextFile,
@@ -45,6 +46,66 @@ export function slugify(value: string) {
 
 function randomToken(length = 32) {
 	return crypto.randomUUID().replaceAll("-", "").slice(0, length);
+}
+
+function hashToken(token: string) {
+	return createHash("sha256").update(`${getRequiredTokenPepper()}:${token}`).digest("hex");
+}
+
+function getRequiredTokenPepper() {
+	return process.env.DOCKROOT_TOKEN_PEPPER || process.env.BETTER_AUTH_SECRET || "";
+}
+
+function matchesStoredToken(storedToken: string | null | undefined, candidate: string) {
+	if (!storedToken) {
+		return false;
+	}
+
+	return storedToken === candidate || storedToken === hashToken(candidate);
+}
+
+async function issueRegistrationToken(agentId: string) {
+	const token = randomToken(48);
+
+	await db
+		.update(agents)
+		.set({
+			registrationToken: hashToken(token),
+			updatedAt: now(),
+		})
+		.where(eq(agents.id, agentId));
+
+	return token;
+}
+
+async function requireOwnedProject(projectId: string, userId: string) {
+	const project = await db.query.projects.findFirst({
+		where: and(eq(projects.id, projectId), eq(projects.createdByUserId, userId)),
+		columns: {
+			id: true,
+		},
+	});
+
+	if (!project) {
+		throw new Error("Project not found");
+	}
+
+	return project;
+}
+
+async function requireOwnedEnvironment(environmentId: string, userId: string) {
+	const environment = await db.query.environments.findFirst({
+		where: and(eq(environments.id, environmentId), eq(environments.createdByUserId, userId)),
+		columns: {
+			id: true,
+		},
+	});
+
+	if (!environment) {
+		throw new Error("Environment not found");
+	}
+
+	return environment;
 }
 
 async function ensureUniqueProjectSlug(baseValue: string) {
@@ -145,8 +206,8 @@ export async function ensureDefaultLocalEnvironment(userId: string) {
 		architecture: process.arch,
 		dockerVersion: "manager-local",
 		status: "healthy",
-		registrationToken: randomToken(40),
-		accessToken: randomToken(48),
+		registrationToken: hashToken(randomToken(40)),
+		accessToken: hashToken(randomToken(48)),
 		lastSeenAt: createdAt,
 		installedAt: createdAt,
 		createdAt,
@@ -161,7 +222,7 @@ export async function ensureDefaultLocalEnvironment(userId: string) {
 	});
 }
 
-export async function getDashboardData(userId: string) {
+export async function getDashboardData(userId: string, options?: { includeRuntime?: boolean }) {
 	await ensureDefaultLocalEnvironment(userId);
 
 	const [projectCount] = await db
@@ -182,26 +243,36 @@ export async function getDashboardData(userId: string) {
 		.leftJoin(stacks, eq(deployments.stackId, stacks.id))
 		.where(eq(stacks.createdByUserId, userId));
 
-	const recentDeployments = await db.query.deployments.findMany({
-		orderBy: [desc(deployments.createdAt)],
-		limit: 8,
-		with: {
-			stack: {
-				columns: {
-					id: true,
-					name: true,
-					slug: true,
-				},
-			},
-			environment: {
-				columns: {
-					id: true,
-					name: true,
-					slug: true,
-				},
-			},
+	const visibleStacks = await db.query.stacks.findMany({
+		where: eq(stacks.createdByUserId, userId),
+		columns: {
+			id: true,
 		},
 	});
+	const visibleStackIds = visibleStacks.map((stack) => stack.id);
+	const recentDeployments = visibleStackIds.length
+		? await db.query.deployments.findMany({
+				where: inArray(deployments.stackId, visibleStackIds),
+				orderBy: [desc(deployments.createdAt)],
+				limit: 8,
+				with: {
+					stack: {
+						columns: {
+							id: true,
+							name: true,
+							slug: true,
+						},
+					},
+					environment: {
+						columns: {
+							id: true,
+							name: true,
+							slug: true,
+						},
+					},
+				},
+			})
+		: [];
 
 	const recentProjects = await db.query.projects.findMany({
 		where: eq(projects.createdByUserId, userId),
@@ -218,8 +289,6 @@ export async function getDashboardData(userId: string) {
 		},
 	});
 
-	const runtime = await getLocalDockerSnapshot();
-
 	return {
 		projectCount: Number(projectCount?.count ?? 0),
 		environmentCount: Number(environmentCount?.count ?? 0),
@@ -227,8 +296,8 @@ export async function getDashboardData(userId: string) {
 		deploymentCount: Number(deploymentCount?.count ?? 0),
 		recentDeployments,
 		recentProjects,
-		runtime,
-		dataDir: getPlatformDataDir(),
+		runtime: options?.includeRuntime ? await getLocalDockerSnapshot() : null,
+		dataDir: options?.includeRuntime ? getPlatformDataDir() : null,
 	};
 }
 
@@ -249,7 +318,7 @@ export async function listProjects(userId: string) {
 	});
 }
 
-export async function listStacks(userId: string) {
+export async function listStacks(userId: string, options?: { includeUntracked?: boolean }) {
 	await ensureDefaultLocalEnvironment(userId);
 
 	const [trackedStacks, runtimeContainers, composeProjects] = await Promise.all([
@@ -266,7 +335,7 @@ export async function listStacks(userId: string) {
 			},
 		}),
 		listContainers(),
-		listComposeProjects(),
+		options?.includeUntracked ? listComposeProjects() : Promise.resolve([]),
 	]);
 
 	const runtimeByProject = new Map<string, Array<Record<string, string>>>();
@@ -401,7 +470,20 @@ export async function listEnvironments(userId: string) {
 export async function listDeployments(userId: string) {
 	await ensureDefaultLocalEnvironment(userId);
 
+	const ownedStacks = await db.query.stacks.findMany({
+		where: eq(stacks.createdByUserId, userId),
+		columns: {
+			id: true,
+		},
+	});
+	const stackIds = ownedStacks.map((stack) => stack.id);
+
+	if (!stackIds.length) {
+		return [];
+	}
+
 	return db.query.deployments.findMany({
+		where: inArray(deployments.stackId, stackIds),
 		orderBy: [desc(deployments.createdAt)],
 		limit: 25,
 		with: {
@@ -532,7 +614,7 @@ export async function createEnvironment({
 		id: crypto.randomUUID(),
 		environmentId,
 		status: "provisioning",
-		registrationToken: randomToken(48),
+		registrationToken: hashToken(randomToken(48)),
 		createdAt,
 		updatedAt: createdAt,
 	});
@@ -558,6 +640,11 @@ export async function createStack({
 	composeYaml: string;
 	envFileContent?: string;
 }) {
+	await Promise.all([
+		requireOwnedProject(projectId, userId),
+		requireOwnedEnvironment(environmentId, userId),
+	]);
+
 	const createdAt = now();
 	const slug = await ensureUniqueStackSlug(name);
 
@@ -761,6 +848,11 @@ export async function createGitHubStack({
 	composeYaml?: string;
 	envFileContent?: string;
 }) {
+	await Promise.all([
+		requireOwnedProject(projectId, userId),
+		requireOwnedEnvironment(environmentId, userId),
+	]);
+
 	const installation = await db.query.githubInstallations.findFirst({
 		where: and(
 			eq(githubInstallations.id, installationId),
@@ -909,12 +1001,16 @@ export async function queueOrRunDeployment({
 }
 
 export async function getAgentInstallContext(registrationToken: string) {
-	return db.query.agents.findFirst({
-		where: eq(agents.registrationToken, registrationToken),
+	const allAgents = await db.query.agents.findMany({
 		with: {
 			environment: true,
 		},
 	});
+
+	return (
+		allAgents.find((agent) => matchesStoredToken(agent.registrationToken, registrationToken)) ||
+		null
+	);
 }
 
 export async function registerAgent({
@@ -930,12 +1026,15 @@ export async function registerAgent({
 	architecture?: string;
 	dockerVersion?: string;
 }) {
-	const agent = await db.query.agents.findFirst({
-		where: eq(agents.registrationToken, registrationToken),
+	const allAgents = await db.query.agents.findMany({
 		with: {
 			environment: true,
 		},
 	});
+	const agent =
+		allAgents.find((candidate) =>
+			matchesStoredToken(candidate.registrationToken, registrationToken),
+		) || null;
 
 	if (!agent) {
 		throw new Error("Invalid registration token");
@@ -952,7 +1051,7 @@ export async function registerAgent({
 			architecture: architecture || agent.architecture,
 			dockerVersion: dockerVersion || agent.dockerVersion,
 			status: "healthy",
-			accessToken,
+			accessToken: hashToken(accessToken),
 			lastSeenAt: updatedAt,
 			installedAt: agent.installedAt ?? updatedAt,
 			updatedAt,
@@ -976,9 +1075,10 @@ export async function registerAgent({
 }
 
 export async function heartbeatAgent(accessToken: string) {
-	const agent = await db.query.agents.findFirst({
-		where: eq(agents.accessToken, accessToken),
-	});
+	const allAgents = await db.query.agents.findMany();
+	const agent = allAgents.find((candidate) =>
+		matchesStoredToken(candidate.accessToken, accessToken),
+	);
 
 	if (!agent) {
 		throw new Error("Invalid agent token");
@@ -1136,7 +1236,8 @@ export async function getInstallCommand(environmentId: string, userId: string) {
 		throw new Error("Environment not found");
 	}
 
-	const scriptUrl = `${publicEnv.appUrl.replace(/\/$/, "")}/api/agent/install/${environment.agent[0].registrationToken}`;
+	const registrationToken = await issueRegistrationToken(environment.agent[0].id);
+	const scriptUrl = `${publicEnv.appUrl.replace(/\/$/, "")}/api/agent/install/${registrationToken}`;
 
 	return {
 		quickInstall: `curl -fsSL ${scriptUrl} | sudo bash`,

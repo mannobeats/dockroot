@@ -1,7 +1,6 @@
 "use client";
 
 import { Lock, LogIn, Mail, Server } from "lucide-react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { signIn } from "@/lib/auth-client";
@@ -98,10 +97,7 @@ export default function SignInPage() {
 			</form>
 			<div className="border-t border-default/30 px-6 py-4 text-center">
 				<p className="text-[13px] text-muted">
-					Don&apos;t have an account?{" "}
-					<Link href="/sign-up" className="font-medium text-accent hover:underline">
-						Sign Up
-					</Link>
+					Account creation is controlled by the instance owner.
 				</p>
 			</div>
 		</div>

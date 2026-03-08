@@ -8,8 +8,10 @@ import { FormSubmitButton } from "@/components/form-submit-button";
 import { PageHeader } from "@/components/page-header";
 import { RuntimePortLinks } from "@/components/runtime-port-links";
 import { StatusBadge } from "@/components/status-badge";
+import { isPrivilegedRole, requireUserSession } from "@/lib/authorization";
 import { browseContainerPath, getContainerDetails } from "@/lib/platform/docker";
 import { getPrometheusContainerMetrics } from "@/lib/prometheus";
+import { requireAccessibleContainerForUser } from "@/lib/runtime-access";
 
 const sensitiveEnvPattern =
 	/(SECRET|TOKEN|PASSWORD|KEY|PRIVATE|COOKIE|SESSION|AUTH|DATABASE_URL|CONNECTION_STRING)/i;
@@ -45,8 +47,14 @@ export default async function ContainerDetailPage({
 	params: Promise<{ containerId: string }>;
 	searchParams: Promise<{ path?: string }>;
 }) {
+	const auth = await requireUserSession();
 	const { containerId } = await params;
 	const query = await searchParams;
+	await requireAccessibleContainerForUser({
+		containerId,
+		userId: auth.userId,
+		role: auth.role,
+	});
 	const targetPath = query.path || "/";
 	const [details, metrics] = await Promise.all([
 		getContainerDetails(containerId),
@@ -59,6 +67,7 @@ export default async function ContainerDetailPage({
 	}
 
 	const browser = await browseContainerPath(containerId, targetPath);
+	const canOpenRuntimeTopology = isPrivilegedRole(auth.role);
 	const mounts = Array.isArray(inspect.Mounts) ? inspect.Mounts : [];
 	const envVars = redactEnvVars(inspect.Config?.Env || []);
 	const labels = inspect.Config?.Labels || {};
@@ -195,18 +204,26 @@ export default async function ContainerDetailPage({
 							<div className="mt-3 space-y-2 text-sm text-muted">
 								{networkEntries.length ? (
 									networkEntries.map(
-										([name, network]: [string, { IPAddress?: string; Gateway?: string }]) => (
-											<Link
-												key={name}
-												href={`/dashboard/networks/${encodeURIComponent(name)}`}
-												className="block rounded-lg bg-surface px-3 py-2 transition-colors hover:text-foreground"
-											>
-												<p>{name}</p>
-												<p className="mt-1 text-xs">
-													IP {network.IPAddress || "—"} · GW {network.Gateway || "—"}
-												</p>
-											</Link>
-										),
+										([name, network]: [string, { IPAddress?: string; Gateway?: string }]) =>
+											canOpenRuntimeTopology ? (
+												<Link
+													key={name}
+													href={`/dashboard/networks/${encodeURIComponent(name)}`}
+													className="block rounded-lg bg-surface px-3 py-2 transition-colors hover:text-foreground"
+												>
+													<p>{name}</p>
+													<p className="mt-1 text-xs">
+														IP {network.IPAddress || "—"} · GW {network.Gateway || "—"}
+													</p>
+												</Link>
+											) : (
+												<div key={name} className="rounded-lg bg-surface px-3 py-2">
+													<p>{name}</p>
+													<p className="mt-1 text-xs">
+														IP {network.IPAddress || "—"} · GW {network.Gateway || "—"}
+													</p>
+												</div>
+											),
 									)
 								) : (
 									<p>No network attachments reported.</p>
