@@ -147,6 +147,21 @@ export async function getGitHubInstallation(installationId: string) {
 	}>(`/app/installations/${installationId}`, { asApp: true });
 }
 
+export async function listGitHubAppInstallations() {
+	const response = await githubRequest<
+		Array<{
+			id: number;
+			app_slug: string;
+			account: {
+				login: string;
+				type: string;
+			};
+		}>
+	>("/app/installations", { asApp: true });
+
+	return response;
+}
+
 export async function createInstallationAccessToken(installationId: string) {
 	const response = await githubRequest<{
 		token: string;

@@ -15,6 +15,7 @@ import {
 	fetchRepositoryTextFile,
 	getGitHubInstallation,
 	getRepositoryBranchHeadSha,
+	listGitHubAppInstallations,
 	listInstallationRepositories,
 } from "@/lib/github-app";
 import { incrementDeploymentEvent } from "@/lib/monitoring";
@@ -251,10 +252,26 @@ export async function listGitHubInstallations(userId: string) {
 		return [];
 	}
 
-	const installations = await db.query.githubInstallations.findMany({
+	let installations = await db.query.githubInstallations.findMany({
 		where: eq(githubInstallations.createdByUserId, userId),
 		orderBy: [desc(githubInstallations.updatedAt)],
 	});
+
+	if (!installations.length) {
+		const remoteInstallations = await listGitHubAppInstallations();
+
+		for (const installation of remoteInstallations) {
+			await syncGitHubInstallation({
+				userId,
+				githubInstallationId: String(installation.id),
+			});
+		}
+
+		installations = await db.query.githubInstallations.findMany({
+			where: eq(githubInstallations.createdByUserId, userId),
+			orderBy: [desc(githubInstallations.updatedAt)],
+		});
+	}
 
 	const hydrated = await Promise.all(
 		installations.map(async (installation) => {

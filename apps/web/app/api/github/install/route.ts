@@ -22,6 +22,19 @@ export async function GET(request: Request) {
 		userId: session.user.id,
 		redirectTo,
 	});
+	const response = NextResponse.redirect(getGitHubAppInstallUrl(state));
+	response.cookies.set("dockroot_github_redirect_to", redirectTo, {
+		httpOnly: true,
+		sameSite: "lax",
+		path: "/",
+		maxAge: 60 * 10,
+	});
+	response.cookies.set("dockroot_github_user_id", session.user.id, {
+		httpOnly: true,
+		sameSite: "lax",
+		path: "/",
+		maxAge: 60 * 10,
+	});
 
-	return NextResponse.redirect(getGitHubAppInstallUrl(state));
+	return response;
 }
