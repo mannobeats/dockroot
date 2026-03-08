@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { getSocket } from "@/lib/socket-client";
 
 interface LogContainer {
@@ -48,8 +48,39 @@ export function LiveLogsWorkspace({
 		}
 	}, [containers, selectedIds.length]);
 
+	const onData = useEffectEvent(
+		(payload: { sessionId: string; containerId: string; chunk: string }) => {
+			if (paused || payload.sessionId !== sessionIdRef.current) {
+				return;
+			}
+
+			setLogsByContainer((current) => ({
+				...current,
+				[payload.containerId]: `${current[payload.containerId] || ""}${payload.chunk}`.slice(
+					-20000,
+				),
+			}));
+		},
+	);
+
 	useEffect(() => {
+		if (!selectedIds.length) {
+			return;
+		}
+
 		const socket = getSocket();
+		const previousSessionId = sessionIdRef.current;
+
+		if (previousSessionId) {
+			socket.emit("logs:unsubscribe", {
+				sessionId: previousSessionId,
+			});
+		}
+
+		setLogsByContainer((current) => ({
+			...current,
+			...Object.fromEntries(selectedIds.map((containerId) => [containerId, ""])),
+		}));
 
 		socket.emit(
 			"logs:subscribe",
@@ -64,30 +95,19 @@ export function LiveLogsWorkspace({
 			},
 		);
 
-		const onData = (payload: { sessionId: string; containerId: string; chunk: string }) => {
-			if (paused) {
-				return;
-			}
-
-			setLogsByContainer((current) => ({
-				...current,
-				[payload.containerId]: `${current[payload.containerId] || ""}${payload.chunk}`.slice(
-					-20000,
-				),
-			}));
-		};
-
 		socket.on("logs:data", onData);
 
 		return () => {
-			if (sessionIdRef.current) {
+			const activeSessionId = sessionIdRef.current;
+			if (activeSessionId) {
 				socket.emit("logs:unsubscribe", {
-					sessionId: sessionIdRef.current,
+					sessionId: activeSessionId,
 				});
+				sessionIdRef.current = null;
 			}
 			socket.off("logs:data", onData);
 		};
-	}, [paused, selectedIds]);
+	}, [selectedIds]);
 
 	const combinedLogs = selectedIds
 		.map((containerId) => {
@@ -155,12 +175,15 @@ export function LiveLogsWorkspace({
 								onClick={() =>
 									setSelectedIds((current) => {
 										if (mode === "single") {
-											return [container.id];
+											return current[0] === container.id && current.length === 1
+												? current
+												: [container.id];
 										}
 
-										return active
+										const next = active
 											? current.filter((value) => value !== container.id)
 											: [...current, container.id];
+										return next;
 									})
 								}
 								className={`block w-full rounded-xl border px-3 py-3 text-left text-sm transition-colors ${
@@ -246,7 +269,7 @@ export function LiveLogsWorkspace({
 				</div>
 				<pre
 					ref={logViewportRef}
-					className="mt-4 min-h-[720px] overflow-auto rounded-xl bg-[#050914] p-4 text-xs leading-6 text-white/85"
+					className="mt-4 h-[720px] overflow-auto rounded-xl bg-[#050914] p-4 text-xs leading-6 text-white/85"
 				>
 					{combinedLogs || "No logs available for the selected container set."}
 				</pre>
