@@ -82,24 +82,35 @@ export default async function EnvironmentsPage() {
 									</div>
 
 									{environment.kind === "agent" && commands ? (
-										<div className="mt-4 grid gap-4 xl:grid-cols-2">
+										<div className="mt-4 space-y-4">
 											<div className="rounded-2xl border border-default/15 bg-[#050914] p-4">
 												<div className="flex items-center justify-between gap-3">
-													<p className="text-sm font-semibold text-white">Quick install</p>
-													<CopyButton value={commands.quickInstall} />
+													<p className="text-sm font-semibold text-white">Agent env</p>
+													<CopyButton value={commands.envContent} />
 												</div>
 												<pre className="mt-3 overflow-auto text-xs leading-6 text-white/80">
-													{commands.quickInstall}
+													{commands.envContent}
 												</pre>
 											</div>
-											<div className="rounded-2xl border border-default/15 bg-[#050914] p-4">
-												<div className="flex items-center justify-between gap-3">
-													<p className="text-sm font-semibold text-white">Download then run</p>
-													<CopyButton value={commands.downloadInstall} />
+											<div className="grid gap-4 xl:grid-cols-2">
+												<div className="rounded-2xl border border-default/15 bg-[#050914] p-4">
+													<div className="flex items-center justify-between gap-3">
+														<p className="text-sm font-semibold text-white">Docker Compose</p>
+														<CopyButton value={commands.dockerCompose} />
+													</div>
+													<pre className="mt-3 overflow-auto text-xs leading-6 text-white/80">
+														{commands.dockerCompose}
+													</pre>
 												</div>
-												<pre className="mt-3 overflow-auto text-xs leading-6 text-white/80">
-													{commands.downloadInstall}
-												</pre>
+												<div className="rounded-2xl border border-default/15 bg-[#050914] p-4">
+													<div className="flex items-center justify-between gap-3">
+														<p className="text-sm font-semibold text-white">Docker Run</p>
+														<CopyButton value={commands.dockerRun} />
+													</div>
+													<pre className="mt-3 overflow-auto text-xs leading-6 text-white/80">
+														{commands.dockerRun}
+													</pre>
+												</div>
 											</div>
 										</div>
 									) : null}
@@ -112,8 +123,9 @@ export default async function EnvironmentsPage() {
 				<section className="rounded-[28px] border border-default/15 bg-surface/80 p-5">
 					<h2 className="text-lg font-semibold tracking-tight">Add remote environment</h2>
 					<p className="mt-1 text-sm text-muted">
-						Generate a tokenized install script, then paste it on the target server. The agent will
-						register itself and start polling for deployments.
+						Create an environment, then deploy the Dockroot agent on the target server with Docker
+						Compose or docker run. The agent will keep its state on disk, survive restarts, and poll
+						for deployments automatically.
 					</p>
 					<form action={createEnvironmentAction} className="mt-5 space-y-4">
 						<div className="space-y-1.5">

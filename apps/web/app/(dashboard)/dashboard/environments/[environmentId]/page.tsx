@@ -65,21 +65,32 @@ export default async function EnvironmentDetailPage({
 						<div className="mt-5 space-y-4">
 							<div className="rounded-2xl border border-default/15 bg-[#050914] p-4">
 								<div className="flex items-center justify-between gap-3">
-									<p className="text-sm font-semibold text-white">Quick install</p>
-									<CopyButton value={installCommands.quickInstall} />
+									<p className="text-sm font-semibold text-white">Agent env</p>
+									<CopyButton value={installCommands.envContent} />
 								</div>
 								<pre className="mt-3 overflow-auto text-xs leading-6 text-white/80">
-									{installCommands.quickInstall}
+									{installCommands.envContent}
 								</pre>
 							</div>
-							<div className="rounded-2xl border border-default/15 bg-[#050914] p-4">
-								<div className="flex items-center justify-between gap-3">
-									<p className="text-sm font-semibold text-white">Download then run</p>
-									<CopyButton value={installCommands.downloadInstall} />
+							<div className="grid gap-4 xl:grid-cols-2">
+								<div className="rounded-2xl border border-default/15 bg-[#050914] p-4">
+									<div className="flex items-center justify-between gap-3">
+										<p className="text-sm font-semibold text-white">Docker Compose</p>
+										<CopyButton value={installCommands.dockerCompose} />
+									</div>
+									<pre className="mt-3 overflow-auto text-xs leading-6 text-white/80">
+										{installCommands.dockerCompose}
+									</pre>
 								</div>
-								<pre className="mt-3 overflow-auto text-xs leading-6 text-white/80">
-									{installCommands.downloadInstall}
-								</pre>
+								<div className="rounded-2xl border border-default/15 bg-[#050914] p-4">
+									<div className="flex items-center justify-between gap-3">
+										<p className="text-sm font-semibold text-white">Docker Run</p>
+										<CopyButton value={installCommands.dockerRun} />
+									</div>
+									<pre className="mt-3 overflow-auto text-xs leading-6 text-white/80">
+										{installCommands.dockerRun}
+									</pre>
+								</div>
 							</div>
 						</div>
 					) : null}

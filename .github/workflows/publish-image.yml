@@ -10,10 +10,9 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: mannobeats/dockroot
 
 jobs:
-  publish:
+  publish-manager:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -37,7 +36,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/mannobeats/dockroot
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=branch
@@ -60,5 +59,55 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  publish-agent:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta-agent
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/mannobeats/dockroot-agent
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch
+            type=ref,event=tag
+            type=sha
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+          labels: |
+            org.opencontainers.image.title=Dockroot Agent
+            org.opencontainers.image.description=Remote environment agent for Dockroot.
+            org.opencontainers.image.url=https://github.com/mannobeats/dockroot
+            org.opencontainers.image.source=https://github.com/mannobeats/dockroot
+            org.opencontainers.image.licenses=AGPL-3.0-only
+
+      - name: Build and push agent image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.agent
+          push: true
+          tags: ${{ steps.meta-agent.outputs.tags }}
+          labels: ${{ steps.meta-agent.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

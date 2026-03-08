@@ -36,6 +36,9 @@ function now() {
 	return new Date();
 }
 
+const AGENT_IMAGE = "ghcr.io/mannobeats/dockroot-agent:latest";
+const AGENT_PORT = 9095;
+
 export function slugify(value: string) {
 	return value
 		.toLowerCase()
@@ -1300,11 +1303,53 @@ export async function getInstallCommand(environmentId: string, userId: string) {
 	}
 
 	const registrationToken = await issueRegistrationToken(environment.agent[0].id);
-	const scriptUrl = `${publicEnv.appUrl.replace(/\/$/, "")}/api/agent/install/${registrationToken}`;
+	const managerUrl = (environment.managerUrl || publicEnv.appUrl).replace(/\/$/, "");
+	const envContent = [
+		`DOCKROOT_MANAGER_URL=${managerUrl}`,
+		`DOCKROOT_AGENT_REGISTRATION_TOKEN=${registrationToken}`,
+		`DOCKROOT_AGENT_DATA_DIR=/var/lib/dockroot-agent`,
+		`DOCKROOT_AGENT_PORT=${AGENT_PORT}`,
+	].join("\n");
+	const dockerRun = [
+		"docker run -d \\",
+		`  --name dockroot-agent-${environment.slug} \\`,
+		"  --restart unless-stopped \\",
+		"  -v /var/run/docker.sock:/var/run/docker.sock \\",
+		"  -v dockroot_agent_data:/var/lib/dockroot-agent \\",
+		`  -p ${AGENT_PORT}:${AGENT_PORT} \\`,
+		`  -e DOCKROOT_MANAGER_URL=${managerUrl} \\`,
+		`  -e DOCKROOT_AGENT_REGISTRATION_TOKEN=${registrationToken} \\`,
+		`  -e DOCKROOT_AGENT_PORT=${AGENT_PORT} \\`,
+		`  ${AGENT_IMAGE}`,
+	].join("\n");
+	const dockerCompose = [
+		"services:",
+		"  dockroot-agent:",
+		`    image: ${AGENT_IMAGE}`,
+		`    container_name: dockroot-agent-${environment.slug}`,
+		"    restart: unless-stopped",
+		"    environment:",
+		`      DOCKROOT_MANAGER_URL: ${managerUrl}`,
+		`      DOCKROOT_AGENT_REGISTRATION_TOKEN: ${registrationToken}`,
+		`      DOCKROOT_AGENT_PORT: ${AGENT_PORT}`,
+		"      DOCKROOT_AGENT_DATA_DIR: /var/lib/dockroot-agent",
+		"    volumes:",
+		"      - /var/run/docker.sock:/var/run/docker.sock",
+		"      - dockroot_agent_data:/var/lib/dockroot-agent",
+		"    ports:",
+		`      - "${AGENT_PORT}:${AGENT_PORT}"`,
+		"",
+		"volumes:",
+		"  dockroot_agent_data:",
+	].join("\n");
 
 	return {
-		quickInstall: `curl -fsSL ${scriptUrl} | sudo bash`,
-		downloadInstall: `curl -fsSL ${scriptUrl} -o dockroot-agent-install.sh && sudo bash dockroot-agent-install.sh`,
+		managerUrl,
+		registrationToken,
+		envContent,
+		dockerRun,
+		dockerCompose,
+		legacyInstallScript: `${publicEnv.appUrl.replace(/\/$/, "")}/api/agent/install/${registrationToken}`,
 	};
 }
 
