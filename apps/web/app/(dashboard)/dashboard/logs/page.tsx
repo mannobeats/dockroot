@@ -56,11 +56,11 @@ export default async function LogsPage({
 	);
 
 	return (
-		<div className="space-y-6">
+		<div className="animate-in space-y-6">
 			<PageHeader
 				kicker="Runtime"
 				title="Logs"
-				description={`Single-container and grouped logs for ${environment.name}.`}
+				description={`${environment.name} — stream and inspect container output`}
 			/>
 
 			<LiveLogsWorkspace

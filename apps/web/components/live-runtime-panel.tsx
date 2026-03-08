@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Area, AreaChart, CartesianGrid, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Tooltip, XAxis, YAxis } from "recharts";
 import { io, type Socket } from "socket.io-client";
 import { ChartFrame } from "@/components/chart-frame";
 
@@ -29,6 +29,20 @@ interface RuntimePayload {
 		MemPerc?: string;
 	}>;
 }
+
+const CustomTooltip = ({ active, payload, label }: any) => {
+	if (!active || !payload?.length) return null;
+	return (
+		<div className="rounded-lg border border-default/10 bg-surface px-3 py-2 shadow-lg">
+			<p className="text-xs font-medium text-muted">{label}</p>
+			{payload.map((entry: any, index: number) => (
+				<p key={`${entry.name}-${index}`} className="text-sm font-semibold" style={{ color: entry.color }}>
+					{entry.name}: {entry.value}%
+				</p>
+			))}
+		</div>
+	);
+};
 
 export function LiveRuntimePanel() {
 	const [mounted, setMounted] = useState(false);
@@ -69,62 +83,48 @@ export function LiveRuntimePanel() {
 	const latest = useMemo(() => history.at(-1), [history]);
 
 	return (
-		<div className="rounded-2xl border border-default/15 bg-surface p-5">
+		<div className="rounded-xl border border-default/10 bg-surface p-5">
 			<div className="flex items-center justify-between">
 				<div>
-					<p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted">
-						Live telemetry
-					</p>
-					<h3 className="mt-2 text-lg font-semibold tracking-tight">Runtime activity</h3>
+					<div className="flex items-center gap-2">
+						<h3 className="text-sm font-semibold">Live telemetry</h3>
+						<span className="h-1.5 w-1.5 rounded-full bg-emerald-500 pulse-dot" />
+					</div>
+					<p className="mt-0.5 text-xs text-muted">Real-time container resource usage</p>
 				</div>
-				<div className="text-right">
-					<p className="text-xs text-muted">Latest</p>
-					<p className="text-sm font-semibold">
-						CPU {latest?.cpu ?? 0}% • MEM {latest?.memory ?? 0}%
-					</p>
+				<div className="flex items-center gap-4 text-xs">
+					<span className="flex items-center gap-1.5">
+						<span className="h-2 w-2 rounded-full bg-foreground" />
+						CPU {latest?.cpu ?? 0}%
+					</span>
+					<span className="flex items-center gap-1.5">
+						<span className="h-2 w-2 rounded-full bg-emerald-500" />
+						MEM {latest?.memory ?? 0}%
+					</span>
 				</div>
 			</div>
-			<ChartFrame className="mt-5 h-56">
+			<ChartFrame className="mt-4 h-56">
 				{mounted
 					? ({ width, height }) => (
-							<AreaChart width={width} height={height} data={history}>
-								<defs>
-									<linearGradient id="cpuFill" x1="0" y1="0" x2="0" y2="1">
-										<stop offset="0%" stopColor="var(--accent)" stopOpacity={0.22} />
-										<stop offset="100%" stopColor="var(--accent)" stopOpacity={0} />
-									</linearGradient>
-									<linearGradient id="memoryFill" x1="0" y1="0" x2="0" y2="1">
-										<stop offset="0%" stopColor="#10b981" stopOpacity={0.18} />
-										<stop offset="100%" stopColor="#10b981" stopOpacity={0} />
-									</linearGradient>
-								</defs>
-								<CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+							<BarChart width={width} height={height} data={history} barGap={2}>
+								<CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
 								<XAxis
 									dataKey="time"
 									tick={{ fontSize: 11, fill: "var(--muted)" }}
 									axisLine={false}
+									tickLine={false}
 								/>
 								<YAxis
 									tick={{ fontSize: 11, fill: "var(--muted)" }}
 									axisLine={false}
 									tickLine={false}
+									domain={[0, 'auto']}
+									tickFormatter={(v) => `${v}%`}
 								/>
-								<Tooltip />
-								<Area
-									type="monotone"
-									dataKey="cpu"
-									stroke="var(--accent)"
-									fill="url(#cpuFill)"
-									strokeWidth={2}
-								/>
-								<Area
-									type="monotone"
-									dataKey="memory"
-									stroke="#10b981"
-									fill="url(#memoryFill)"
-									strokeWidth={2}
-								/>
-							</AreaChart>
+								<Tooltip content={<CustomTooltip />} />
+								<Bar dataKey="cpu" name="CPU" fill="var(--foreground)" radius={[3, 3, 0, 0]} maxBarSize={24} />
+								<Bar dataKey="memory" name="Memory" fill="#22c55e" radius={[3, 3, 0, 0]} maxBarSize={24} />
+							</BarChart>
 						)
 					: () => null}
 			</ChartFrame>

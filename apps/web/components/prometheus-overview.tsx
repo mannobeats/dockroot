@@ -1,19 +1,34 @@
 "use client";
 
 import {
-	Area,
-	AreaChart,
+	Bar,
+	BarChart,
 	CartesianGrid,
 	Cell,
 	Pie,
 	PieChart,
+	ResponsiveContainer,
 	Tooltip,
 	XAxis,
 	YAxis,
 } from "recharts";
 import { ChartFrame } from "@/components/chart-frame";
 
-const PIE_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#a855f7"];
+const PIE_COLORS = ["#22c55e", "#3b82f6", "#eab308", "#ef4444", "#a855f7"];
+
+const CustomTooltip = ({ active, payload, label }: any) => {
+	if (!active || !payload?.length) return null;
+	return (
+		<div className="rounded-lg border border-default/10 bg-surface px-3 py-2 shadow-lg">
+			<p className="text-xs font-medium text-muted">{label}</p>
+			{payload.map((entry: any, index: number) => (
+				<p key={`${entry.name}-${index}`} className="text-sm font-semibold" style={{ color: entry.color }}>
+					{entry.name}: {entry.value?.toFixed(1)}%
+				</p>
+			))}
+		</div>
+	);
+};
 
 export function PrometheusOverview({
 	metrics,
@@ -31,103 +46,85 @@ export function PrometheusOverview({
 }) {
 	if (!metrics.available) {
 		return (
-			<div className="rounded-2xl border border-dashed border-default/20 bg-surface p-6 text-sm text-muted">
+			<div className="rounded-xl border border-dashed border-default/10 p-8 text-center text-sm text-muted">
 				Prometheus data is not available yet. Start the monitoring stack and the dashboard will
 				switch to scraped metrics automatically.
 			</div>
 		);
 	}
 
+	const barData = metrics.cpuSeries.map((point, index) => ({
+		time: point.time,
+		cpu: point.value,
+		memory: metrics.memorySeries[index]?.value ?? 0,
+	}));
+
 	return (
-		<div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
-			<div className="rounded-2xl border border-default/15 bg-surface p-5">
+		<div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+			{/* Host Utilization — Bar Chart */}
+			<div className="rounded-xl border border-default/10 bg-surface p-5">
 				<div className="flex items-center justify-between">
 					<div>
-						<p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted">
-							Prometheus
-						</p>
-						<h3 className="mt-2 text-lg font-semibold tracking-tight">Host utilization</h3>
+						<h3 className="text-sm font-semibold">Host utilization</h3>
+						<p className="mt-0.5 text-xs text-muted">CPU & memory over time</p>
 					</div>
-					<p className="text-sm text-muted">
-						CPU {metrics.cpuPercent?.toFixed(1) ?? "—"}% • MEM{" "}
-						{metrics.memoryPercent?.toFixed(1) ?? "—"}%
-					</p>
+					<div className="flex items-center gap-4 text-xs">
+						<span className="flex items-center gap-1.5">
+							<span className="h-2 w-2 rounded-full bg-foreground" />
+							CPU {metrics.cpuPercent?.toFixed(1) ?? "—"}%
+						</span>
+						<span className="flex items-center gap-1.5">
+							<span className="h-2 w-2 rounded-full bg-emerald-500" />
+							MEM {metrics.memoryPercent?.toFixed(1) ?? "—"}%
+						</span>
+					</div>
 				</div>
-				<ChartFrame className="mt-5 h-64">
+				<ChartFrame className="mt-4 h-64">
 					{({ width, height }) => (
-						<AreaChart
-							width={width}
-							height={height}
-							data={metrics.cpuSeries.map((point, index) => ({
-								time: point.time,
-								cpu: point.value,
-								memory: metrics.memorySeries[index]?.value ?? 0,
-							}))}
-						>
-							<defs>
-								<linearGradient id="promCpu" x1="0" y1="0" x2="0" y2="1">
-									<stop offset="0%" stopColor="var(--accent)" stopOpacity={0.22} />
-									<stop offset="100%" stopColor="var(--accent)" stopOpacity={0} />
-								</linearGradient>
-								<linearGradient id="promMem" x1="0" y1="0" x2="0" y2="1">
-									<stop offset="0%" stopColor="#10b981" stopOpacity={0.18} />
-									<stop offset="100%" stopColor="#10b981" stopOpacity={0} />
-								</linearGradient>
-							</defs>
-							<CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+						<BarChart width={width} height={height} data={barData} barGap={2}>
+							<CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
 							<XAxis
 								dataKey="time"
 								tick={{ fontSize: 11, fill: "var(--muted)" }}
 								axisLine={false}
+								tickLine={false}
 							/>
 							<YAxis
 								tick={{ fontSize: 11, fill: "var(--muted)" }}
 								axisLine={false}
 								tickLine={false}
+								domain={[0, 100]}
+								tickFormatter={(v) => `${v}%`}
 							/>
-							<Tooltip />
-							<Area
-								type="monotone"
-								dataKey="cpu"
-								stroke="var(--accent)"
-								fill="url(#promCpu)"
-								strokeWidth={2}
-							/>
-							<Area
-								type="monotone"
-								dataKey="memory"
-								stroke="#10b981"
-								fill="url(#promMem)"
-								strokeWidth={2}
-							/>
-						</AreaChart>
+							<Tooltip content={<CustomTooltip />} />
+							<Bar dataKey="cpu" name="CPU" fill="var(--foreground)" radius={[3, 3, 0, 0]} maxBarSize={24} />
+							<Bar dataKey="memory" name="Memory" fill="#22c55e" radius={[3, 3, 0, 0]} maxBarSize={24} />
+						</BarChart>
 					)}
 				</ChartFrame>
 			</div>
 
-			<div className="grid gap-5">
-				<div className="rounded-2xl border border-default/15 bg-surface p-5">
+			{/* Right column: Pie + Environment Health */}
+			<div className="grid gap-4">
+				{/* Deployment Mix — Donut */}
+				<div className="rounded-xl border border-default/10 bg-surface p-5">
 					<div className="flex items-center justify-between">
-						<div>
-							<p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted">
-								Deployment mix
-							</p>
-							<h3 className="mt-2 text-lg font-semibold tracking-tight">Status breakdown</h3>
-						</div>
-						<p className="text-sm text-muted">
-							{metrics.runningContainers ?? 0} running containers
+						<h3 className="text-sm font-semibold">Deployment status</h3>
+						<p className="text-xs text-muted">
+							{metrics.runningContainers ?? 0} running
 						</p>
 					</div>
-					<ChartFrame className="mt-4 h-52">
+					<ChartFrame className="mt-3 h-44">
 						{({ width, height }) => (
 							<PieChart width={width} height={height}>
 								<Pie
 									data={metrics.deploymentStatus}
 									dataKey="value"
 									nameKey="label"
-									innerRadius={52}
-									outerRadius={78}
-									paddingAngle={4}
+									innerRadius={48}
+									outerRadius={70}
+									paddingAngle={3}
+									strokeWidth={0}
 								>
 									{metrics.deploymentStatus.map((entry, index) => (
 										<Cell
@@ -141,24 +138,24 @@ export function PrometheusOverview({
 						)}
 					</ChartFrame>
 				</div>
-				<div className="rounded-2xl border border-default/15 bg-surface p-5">
-					<p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted">
-						Environment health
-					</p>
-					<div className="mt-4 grid gap-3">
+
+				{/* Environment Health */}
+				<div className="rounded-xl border border-default/10 bg-surface p-5">
+					<h3 className="text-sm font-semibold">Environment health</h3>
+					<div className="mt-3 space-y-2">
 						{metrics.environmentStatus.map((entry, index) => (
 							<div
 								key={entry.label}
-								className="flex items-center justify-between rounded-xl bg-background/60 px-4 py-3"
+								className="flex items-center justify-between rounded-lg bg-foreground/[0.02] px-3 py-2.5"
 							>
-								<div className="flex items-center gap-3">
-									<div
-										className="h-3 w-3 rounded-full"
+								<div className="flex items-center gap-2.5">
+									<span
+										className="h-2 w-2 rounded-full"
 										style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }}
 									/>
 									<p className="text-sm font-medium capitalize">{entry.label}</p>
 								</div>
-								<p className="text-sm text-muted">{entry.value}</p>
+								<p className="text-sm tabular-nums text-muted">{entry.value}</p>
 							</div>
 						))}
 					</div>

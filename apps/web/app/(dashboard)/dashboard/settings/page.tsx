@@ -12,52 +12,52 @@ export default async function SettingsPage() {
 		{
 			title: "Manager URL",
 			value: settings.managerUrl,
-			detail: "Used by remote agents to poll for deployments and heartbeat updates.",
+			detail: "Used by remote agents to poll for deployments.",
 			icon: ShieldCheck,
 		},
 		{
 			title: "Data Directory",
 			value: settings.dataDir,
-			detail: "Compose payloads and runtime artifacts are stored here.",
+			detail: "Compose payloads and runtime artifacts.",
 			icon: HardDrive,
 		},
 		{
 			title: "Projects",
 			value: String(settings.projects),
-			detail: "Projects currently configured in the manager.",
+			detail: "Configured in the manager.",
 			icon: FolderKanban,
 		},
 		{
 			title: "Environments",
 			value: String(settings.environments),
-			detail: "Local and remote environments registered with the control plane.",
+			detail: "Local and remote.",
 			icon: Server,
 		},
 	];
 
 	return (
-		<div className="space-y-6">
+		<div className="animate-in space-y-6">
 			<PageHeader
-				kicker="Administration"
+				kicker="Admin"
 				title="Settings"
-				description="Global manager values and operational defaults for this instance."
+				description="Global manager configuration"
 			/>
-			<div className="grid gap-4 md:grid-cols-2">
+			<div className="grid gap-4 sm:grid-cols-2">
 				{cards.map((card) => (
 					<div
 						key={card.title}
-						className="rounded-[28px] border border-default/15 bg-surface/80 p-5"
+						className="rounded-xl border border-default/10 bg-surface p-5 transition-all hover:border-default/20"
 					>
 						<div className="flex items-center gap-3">
-							<div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-accent/10 text-accent">
-								<card.icon className="h-5 w-5" />
+							<div className="flex h-9 w-9 items-center justify-center rounded-lg bg-foreground/[0.04]">
+								<card.icon className="h-4 w-4 text-muted" />
 							</div>
 							<div>
 								<p className="text-sm font-semibold">{card.title}</p>
 								<p className="text-xs text-muted">{card.detail}</p>
 							</div>
 						</div>
-						<p className="mt-5 break-all text-sm font-medium">{card.value}</p>
+						<p className="mt-4 break-all text-sm font-medium">{card.value}</p>
 					</div>
 				))}
 			</div>

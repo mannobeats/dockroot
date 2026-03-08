@@ -35,199 +35,192 @@ export default async function DashboardPage({
 			? (runtime.snapshot.host.totalMemoryGb - runtime.snapshot.host.freeMemoryGb).toFixed(1)
 			: null;
 
+	const greeting = (() => {
+		const hour = new Date().getHours();
+		if (hour < 12) return "Good morning";
+		if (hour < 17) return "Good afternoon";
+		return "Good evening";
+	})();
+
 	return (
-		<div className="space-y-6">
+		<div className="animate-in space-y-6">
 			<PageHeader
-				kicker="Overview"
-				title={`Good evening, ${session.user.name}`}
-				description={`Operate local and remote Docker Compose stacks from one control plane. Current runtime scope: ${environment.name}.`}
+				title={`${greeting}, ${session.user.name}`}
+				description={`${environment.name} environment`}
 				actions={
 					<>
 						<Link
 							href="/dashboard/projects"
-							className="inline-flex h-11 items-center justify-center rounded-2xl border border-default/15 bg-surface px-4 text-sm font-medium transition-colors hover:border-accent/30 hover:text-accent"
+							className="inline-flex h-9 items-center justify-center rounded-lg border border-default/10 bg-surface px-4 text-sm font-medium transition-colors hover:border-default/20"
 						>
-							View Projects
+							Projects
 						</Link>
 						<Link
-							href="/dashboard/environments"
-							className="inline-flex h-11 items-center justify-center rounded-2xl bg-accent px-4 text-sm font-medium text-white transition-opacity hover:opacity-90"
+							href="/dashboard/stacks"
+							className="inline-flex h-9 items-center justify-center rounded-lg bg-foreground px-4 text-sm font-medium text-background transition-opacity hover:opacity-90"
 						>
-							Add Environment
+							Deploy Stack
 						</Link>
 					</>
 				}
 			/>
 
-			<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+			{/* Stats Grid */}
+			<div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
 				<StatCard
 					label="Projects"
 					value={String(data.projectCount)}
-					detail={`${data.stackCount} total stacks`}
+					detail={`${data.stackCount} stacks`}
 					icon={FolderKanban}
 				/>
 				<StatCard
 					label="Environments"
 					value={String(data.environmentCount)}
-					detail="Local Docker + remote agents"
+					detail="Local & remote"
 					icon={Server}
 				/>
 				<StatCard
 					label="Deployments"
 					value={String(data.deploymentCount)}
-					detail="Executed through compose-native workflows"
+					detail="Total operations"
 					icon={PlayCircle}
 				/>
 				<StatCard
-					label="Runtime Assets"
-					value={includeRuntime && runtime ? String(runtime.snapshot.counts.containers) : "Scoped"}
+					label="Containers"
+					value={includeRuntime && runtime ? String(runtime.snapshot.counts.containers) : "—"}
 					detail={
 						includeRuntime && runtime
-							? `${runtime.snapshot.counts.images} images on ${runtime.snapshot.host.hostname}`
-							: "Tenant runtime visibility is limited to owned workloads"
+							? `${runtime.snapshot.counts.images} images`
+							: "Scoped to workspace"
 					}
 					icon={Boxes}
 				/>
 			</div>
 
-			<div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
+			{/* Host Overview + Recent Projects */}
+			<div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
 				{includeRuntime && runtime ? (
-					<section className="rounded-[28px] border border-default/15 bg-surface/80 p-5">
+					<div className="rounded-xl border border-default/10 bg-surface p-5">
 						<div className="flex items-center justify-between">
 							<div>
-								<p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted">
-									Host overview
-								</p>
-								<h2 className="mt-2 text-xl font-semibold tracking-tight">
-									{runtime.snapshot.host.hostname}
-								</h2>
-								<p className="mt-1 text-sm text-muted">{environment.name}</p>
+								<h2 className="text-sm font-semibold">{runtime.snapshot.host.hostname}</h2>
+								<p className="mt-0.5 text-xs text-muted">{environment.name}</p>
 							</div>
 							<StatusBadge status="healthy" />
 						</div>
-						<div className="mt-6 grid gap-4 md:grid-cols-3">
-							<div className="rounded-2xl border border-default/15 bg-background/70 p-4">
-								<p className="text-xs font-medium text-muted">Platform</p>
-								<p className="mt-2 text-lg font-semibold">{runtime.snapshot.host.platform}</p>
-								<p className="mt-1 text-sm text-muted">{runtime.snapshot.host.architecture}</p>
+						<div className="mt-4 grid gap-3 sm:grid-cols-3">
+							<div className="rounded-lg bg-foreground/[0.02] p-3">
+								<p className="text-xs text-muted">Platform</p>
+								<p className="mt-1.5 text-sm font-medium">{runtime.snapshot.host.platform}</p>
+								<p className="text-xs text-muted">{runtime.snapshot.host.architecture}</p>
 							</div>
-							<div className="rounded-2xl border border-default/15 bg-background/70 p-4">
-								<p className="text-xs font-medium text-muted">Resources</p>
-								<p className="mt-2 text-lg font-semibold">
-									{runtime.snapshot.host.cpus} CPU threads
+							<div className="rounded-lg bg-foreground/[0.02] p-3">
+								<p className="text-xs text-muted">Resources</p>
+								<p className="mt-1.5 text-sm font-medium">
+									{runtime.snapshot.host.cpus} CPU
 								</p>
-								<p className="mt-1 text-sm text-muted">
-									{memoryUsed} GB used of {runtime.snapshot.host.totalMemoryGb} GB RAM
+								<p className="text-xs text-muted">
+									{memoryUsed} / {runtime.snapshot.host.totalMemoryGb} GB
 								</p>
 							</div>
-							<div className="rounded-2xl border border-default/15 bg-background/70 p-4">
-								<p className="text-xs font-medium text-muted">Data directory</p>
-								<p className="mt-2 break-all text-sm font-medium">{data.dataDir}</p>
-								<p className="mt-1 text-sm text-muted">Compose payloads and runtime artifacts</p>
+							<div className="rounded-lg bg-foreground/[0.02] p-3">
+								<p className="text-xs text-muted">Data directory</p>
+								<p className="mt-1.5 break-all text-xs font-medium">{data.dataDir}</p>
 							</div>
 						</div>
-					</section>
+					</div>
 				) : (
-					<section className="rounded-[28px] border border-default/15 bg-surface/80 p-5">
-						<p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted">
-							Tenant scope
+					<div className="rounded-xl border border-default/10 bg-surface p-5">
+						<h2 className="text-sm font-semibold">Workspace overview</h2>
+						<p className="mt-2 max-w-lg text-sm text-muted">
+							Scoped to owned projects, environments, stacks, and containers. Host telemetry restricted to privileged operators.
 						</p>
-						<h2 className="mt-2 text-xl font-semibold tracking-tight">Workspace overview</h2>
-						<p className="mt-4 max-w-2xl text-sm text-muted">
-							This account is scoped to owned projects, environments, stacks, deployments, and
-							runtime containers. Host-level telemetry and engine administration remain restricted
-							to privileged operators.
-						</p>
-					</section>
+					</div>
 				)}
 
-				<section className="rounded-[28px] border border-default/15 bg-surface/80 p-5">
-					<p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted">
-						Recent projects
-					</p>
-					<div className="mt-4 space-y-3">
+				<div className="rounded-xl border border-default/10 bg-surface p-5">
+					<div className="flex items-center justify-between">
+						<h2 className="text-sm font-semibold">Recent projects</h2>
+						<Link href="/dashboard/projects" className="text-xs font-medium text-muted transition-colors hover:text-foreground">
+							View all
+						</Link>
+					</div>
+					<div className="mt-4 space-y-2">
 						{data.recentProjects.length ? (
 							data.recentProjects.map((project) => (
 								<Link
 									key={project.id}
 									href={`/dashboard/projects/${project.id}`}
-									className="block rounded-2xl border border-default/15 bg-background/70 p-4 transition-colors hover:border-accent/30"
+									className="block rounded-lg border border-default/10 p-3 transition-all hover:border-default/20 hover:shadow-sm"
 								>
 									<div className="flex items-start justify-between gap-3">
-										<div>
-											<p className="text-sm font-semibold">{project.name}</p>
-											<p className="mt-1 text-sm text-muted">
-												{project.description || "No project description yet."}
+										<div className="min-w-0">
+											<p className="text-sm font-medium">{project.name}</p>
+											<p className="mt-0.5 truncate text-xs text-muted">
+												{project.description || "No description"}
 											</p>
 										</div>
-										<span className="rounded-full bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent">
+										<span className="shrink-0 rounded-md bg-foreground/[0.04] px-2 py-0.5 text-xs font-medium text-muted">
 											{project.stacks.length} stacks
 										</span>
 									</div>
 								</Link>
 							))
 						) : (
-							<div className="rounded-2xl border border-dashed border-default/20 bg-background/60 p-6 text-sm text-muted">
-								Create your first project to start organizing stacks.
+							<div className="rounded-lg border border-dashed border-default/10 p-6 text-center text-sm text-muted">
+								No projects yet
 							</div>
 						)}
 					</div>
-				</section>
+				</div>
 			</div>
 
+			{/* Charts */}
 			{includeRuntime && metrics ? <PrometheusOverview metrics={metrics} /> : null}
-
 			{includeRuntime && targets ? <MonitoringHealthGrid targets={targets} /> : null}
-
 			{includeRuntime && environment.kind === "local" ? <LiveRuntimePanel /> : null}
 
-			<section className="rounded-[28px] border border-default/15 bg-surface/80 p-5">
+			{/* Latest Activity */}
+			<div className="rounded-xl border border-default/10 bg-surface p-5">
 				<div className="flex items-center justify-between">
-					<div>
-						<p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted">
-							Deployments
-						</p>
-						<h2 className="mt-2 text-xl font-semibold tracking-tight">Latest activity</h2>
-					</div>
-					<Link href="/dashboard/activity" className="text-sm font-medium text-accent">
+					<h2 className="text-sm font-semibold">Latest deployments</h2>
+					<Link href="/dashboard/activity" className="text-xs font-medium text-muted transition-colors hover:text-foreground">
 						View all
 					</Link>
 				</div>
-				<div className="mt-5 overflow-hidden rounded-[22px] border border-default/15">
-					<table className="min-w-full divide-y divide-default/15 text-left">
-						<thead className="bg-background/60 text-[11px] uppercase tracking-[0.18em] text-muted">
-							<tr>
-								<th className="px-4 py-3 font-medium">Stack</th>
-								<th className="px-4 py-3 font-medium">Environment</th>
-								<th className="px-4 py-3 font-medium">Version</th>
-								<th className="px-4 py-3 font-medium">Status</th>
+				<div className="table-scroll mt-4">
+					<table className="min-w-full text-left text-sm">
+						<thead>
+							<tr className="border-b border-default/10 text-xs text-muted">
+								<th className="pb-3 pr-4 font-medium">Stack</th>
+								<th className="pb-3 pr-4 font-medium">Environment</th>
+								<th className="pb-3 pr-4 font-medium">Version</th>
+								<th className="pb-3 font-medium">Status</th>
 							</tr>
 						</thead>
-						<tbody className="divide-y divide-default/10 bg-surface/40 text-sm">
+						<tbody className="divide-y divide-default/5">
 							{data.recentDeployments.length ? (
 								data.recentDeployments.map((deployment) => (
-									<tr key={deployment.id}>
-										<td className="px-4 py-3">
-											<div className="font-medium">{deployment.stack.name}</div>
-										</td>
-										<td className="px-4 py-3 text-muted">{deployment.environment.name}</td>
-										<td className="px-4 py-3 font-mono text-xs text-muted">{deployment.version}</td>
-										<td className="px-4 py-3">
+									<tr key={deployment.id} className="group">
+										<td className="py-3 pr-4 font-medium">{deployment.stack.name}</td>
+										<td className="py-3 pr-4 text-muted">{deployment.environment.name}</td>
+										<td className="py-3 pr-4 font-mono text-xs text-muted">{deployment.version}</td>
+										<td className="py-3">
 											<StatusBadge status={deployment.status} />
 										</td>
 									</tr>
 								))
 							) : (
 								<tr>
-									<td colSpan={4} className="px-4 py-8 text-center text-sm text-muted">
-										No deployments yet. Create a stack from a project and deploy it.
+									<td colSpan={4} className="py-8 text-center text-sm text-muted">
+										No deployments yet
 									</td>
 								</tr>
 							)}
 						</tbody>
 					</table>
 				</div>
-			</section>
+			</div>
 		</div>
 	);
 }

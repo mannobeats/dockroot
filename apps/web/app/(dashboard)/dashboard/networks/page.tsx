@@ -29,112 +29,103 @@ export default async function NetworksPage({
 	).length;
 
 	return (
-		<div className="space-y-6">
+		<div className="animate-in space-y-6">
 			<PageHeader
 				kicker="Runtime"
 				title="Networks"
-				description={`Create, inspect, and remove Docker networks on ${environment.name}.`}
+				description={`${environment.name} — ${filtered.length} networks`}
 			/>
 
-			<section className="rounded-2xl border border-default/15 bg-surface p-5">
-				<div className="grid gap-3 xl:grid-cols-[1fr_auto_auto]">
-					<form className="grid gap-3 md:grid-cols-[1fr_auto]">
+			{/* Actions */}
+			<div className="rounded-xl border border-default/10 bg-surface p-4">
+				<div className="flex flex-col gap-3 lg:flex-row">
+					<form className="flex flex-1 gap-3">
 						<input
 							type="search"
 							name="q"
 							defaultValue={params.q || ""}
-							placeholder="Search networks"
-							className="h-11 rounded-xl border border-default/15 bg-background px-4 text-sm outline-none transition-colors focus:border-accent"
+							placeholder="Search networks..."
+							className="h-9 flex-1 rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
 						/>
-						<button
-							type="submit"
-							className="inline-flex h-11 items-center justify-center rounded-xl border border-default/15 bg-background px-4 text-sm font-medium"
-						>
+						<button type="submit" className="inline-flex h-9 items-center rounded-lg border border-default/10 px-3 text-sm font-medium">
 							Filter
 						</button>
 					</form>
-					<form action={createNetworkAction} className="grid gap-3 md:grid-cols-[1fr_160px_auto]">
+					<form action={createNetworkAction} className="flex gap-3">
 						<input type="hidden" name="environmentId" value={environment.id} />
 						<input
 							type="text"
 							name="name"
 							required
 							placeholder="app-network"
-							className="h-11 rounded-xl border border-default/15 bg-background px-4 text-sm outline-none transition-colors focus:border-accent"
+							className="h-9 rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
 						/>
 						<select
 							name="driver"
 							defaultValue="bridge"
-							className="h-11 rounded-xl border border-default/15 bg-background px-4 text-sm outline-none transition-colors focus:border-accent"
+							className="h-9 rounded-lg border border-default/10 bg-background px-3 text-sm outline-none"
 						>
 							<option value="bridge">bridge</option>
 							<option value="overlay">overlay</option>
 							<option value="macvlan">macvlan</option>
 							<option value="host">host</option>
 						</select>
-						<FormSubmitButton label="Create" pendingLabel="Creating..." />
+						<FormSubmitButton label="Create" pendingLabel="Creating..." className="inline-flex h-9 items-center rounded-lg bg-foreground px-3 text-sm font-medium text-background" />
 					</form>
 					<form action={pruneNetworksAction}>
 						<input type="hidden" name="environmentId" value={environment.id} />
-						<FormSubmitButton label="Prune unused" pendingLabel="Pruning..." />
+						<FormSubmitButton label="Prune" pendingLabel="Pruning..." className="inline-flex h-9 items-center rounded-lg border border-default/10 px-3 text-sm font-medium text-muted transition-colors hover:text-foreground" />
 					</form>
 				</div>
-			</section>
+			</div>
 
-			<section className="grid gap-4 lg:grid-cols-3">
-				<div className="rounded-2xl border border-default/15 bg-surface p-5">
-					<p className="text-xs uppercase tracking-[0.18em] text-muted">Visible networks</p>
-					<p className="mt-3 text-3xl font-semibold tracking-tight">{filtered.length}</p>
-					<p className="mt-2 text-sm text-muted">
-						Isolated Docker segments available for workloads.
-					</p>
+			{/* Stats */}
+			<div className="grid gap-4 sm:grid-cols-3">
+				<div className="rounded-xl border border-default/10 bg-surface p-4">
+					<p className="text-xs text-muted">Total</p>
+					<p className="mt-1 text-2xl font-semibold">{filtered.length}</p>
 				</div>
-				<div className="rounded-2xl border border-default/15 bg-surface p-5">
-					<p className="text-xs uppercase tracking-[0.18em] text-muted">Bridge networks</p>
-					<p className="mt-3 text-3xl font-semibold tracking-tight">{bridgeCount}</p>
-					<p className="mt-2 text-sm text-muted">Default bridge style routing on this host.</p>
+				<div className="rounded-xl border border-default/10 bg-surface p-4">
+					<p className="text-xs text-muted">Bridge</p>
+					<p className="mt-1 text-2xl font-semibold">{bridgeCount}</p>
 				</div>
-				<div className="rounded-2xl border border-default/15 bg-surface p-5">
-					<p className="text-xs uppercase tracking-[0.18em] text-muted">Other drivers</p>
-					<p className="mt-3 text-3xl font-semibold tracking-tight">
-						{filtered.length - bridgeCount}
-					</p>
-					<p className="mt-2 text-sm text-muted">
-						Host, overlay, macvlan, and specialized networks.
-					</p>
+				<div className="rounded-xl border border-default/10 bg-surface p-4">
+					<p className="text-xs text-muted">Other drivers</p>
+					<p className="mt-1 text-2xl font-semibold">{filtered.length - bridgeCount}</p>
 				</div>
-			</section>
+			</div>
 
-			<section className="rounded-2xl border border-default/15 bg-surface p-5">
-				<div className="overflow-hidden rounded-xl border border-default/15">
-					<table className="min-w-full divide-y divide-default/15 text-left">
-						<thead className="bg-background/60 text-[11px] uppercase tracking-[0.18em] text-muted">
-							<tr>
+			{/* Table */}
+			<div className="rounded-xl border border-default/10 bg-surface">
+				<div className="table-scroll">
+					<table className="min-w-full text-left text-sm">
+						<thead>
+							<tr className="border-b border-default/10 text-xs text-muted">
 								<th className="px-4 py-3 font-medium">Name</th>
 								<th className="px-4 py-3 font-medium">Driver</th>
 								<th className="px-4 py-3 font-medium">Scope</th>
 								<th className="px-4 py-3 font-medium">Actions</th>
 							</tr>
 						</thead>
-						<tbody className="divide-y divide-default/10 bg-surface/40 text-sm">
+						<tbody className="divide-y divide-default/5">
 							{filtered.length ? (
 								filtered.map((network: Record<string, string>) => (
-									<tr key={`${network.ID}-${network.Name}`}>
-										<td className="px-4 py-3 font-medium">
+									<tr key={`${network.ID}-${network.Name}`} className="transition-colors hover:bg-foreground/[0.02]">
+										<td className="px-4 py-3">
 											<Link
 												href={`/dashboard/networks/${encodeURIComponent(network.Name)}?environment=${environment.id}`}
-												className="transition-colors hover:text-accent"
+												className="font-medium transition-colors hover:text-foreground/80"
 											>
 												{network.Name}
 											</Link>
 										</td>
-										<td className="px-4 py-3 text-muted">{network.Driver}</td>
-										<td className="px-4 py-3 text-muted">{network.Scope || "local"}</td>
+										<td className="px-4 py-3 text-xs text-muted">{network.Driver}</td>
+										<td className="px-4 py-3 text-xs text-muted">{network.Scope || "local"}</td>
 										<td className="px-4 py-3">
-											<div className="flex flex-wrap gap-2">
+											<div className="flex gap-1.5">
 												<Link
 													href={`/dashboard/networks/${encodeURIComponent(network.Name)}?environment=${environment.id}`}
-													className="inline-flex h-8 items-center justify-center rounded-lg border border-default/20 bg-background px-3 text-xs font-medium text-muted transition-colors hover:text-foreground"
+													className="inline-flex h-7 items-center rounded-md border border-default/10 px-2.5 text-xs font-medium text-muted transition-colors hover:text-foreground"
 												>
 													Details
 												</Link>
@@ -144,7 +135,7 @@ export default async function NetworksPage({
 													<FormSubmitButton
 														label="Delete"
 														pendingLabel="Deleting..."
-														className="inline-flex h-8 items-center justify-center rounded-lg border border-danger/30 bg-danger/10 px-3 text-xs font-medium text-danger"
+														className="inline-flex h-7 items-center rounded-md border border-red-200 bg-red-50 px-2.5 text-xs font-medium text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400"
 													/>
 												</form>
 											</div>
@@ -153,15 +144,15 @@ export default async function NetworksPage({
 								))
 							) : (
 								<tr>
-									<td colSpan={4} className="px-4 py-8 text-center text-sm text-muted">
-										No networks matched the current filters.
+									<td colSpan={4} className="px-4 py-12 text-center text-sm text-muted">
+										No networks found.
 									</td>
 								</tr>
 							)}
 						</tbody>
 					</table>
 				</div>
-			</section>
+			</div>
 		</div>
 	);
 }

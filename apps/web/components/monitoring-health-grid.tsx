@@ -11,30 +11,25 @@ export function MonitoringHealthGrid({
 	}>;
 }) {
 	return (
-		<div className="rounded-2xl border border-default/15 bg-surface p-5">
+		<div className="rounded-xl border border-default/10 bg-surface p-5">
 			<div className="flex items-center justify-between">
-				<div>
-					<p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted">
-						Monitoring fabric
-					</p>
-					<h3 className="mt-2 text-lg font-semibold tracking-tight">Scrape targets</h3>
-				</div>
-				<p className="text-sm text-muted">{targets.length} configured targets</p>
+				<h3 className="text-sm font-semibold">Scrape targets</h3>
+				<p className="text-xs text-muted">{targets.length} targets</p>
 			</div>
 			<div className="mt-4 grid gap-3 md:grid-cols-2">
 				{targets.map((target) => (
 					<div
 						key={target.scrapeUrl}
-						className="rounded-xl border border-default/15 bg-background/60 p-4"
+						className="rounded-lg border border-default/10 bg-foreground/[0.02] p-4 transition-colors hover:border-default/20"
 					>
 						<div className="flex items-center justify-between gap-3">
-							<p className="text-sm font-semibold">{target.job}</p>
+							<p className="text-sm font-medium">{target.job}</p>
 							<StatusBadge status={target.health === "up" ? "healthy" : target.health} />
 						</div>
 						<p className="mt-2 break-all text-xs text-muted">{target.scrapeUrl}</p>
-						<p className="mt-2 text-xs text-muted">
-							{target.lastError || "No scrape errors reported."}
-						</p>
+						{target.lastError ? (
+							<p className="mt-1 text-xs text-danger">{target.lastError}</p>
+						) : null}
 					</div>
 				))}
 			</div>

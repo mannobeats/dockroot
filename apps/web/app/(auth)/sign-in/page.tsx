@@ -1,6 +1,6 @@
 "use client";
 
-import { Lock, LogIn, Mail, Server } from "lucide-react";
+import { Layers3, LogIn, Mail, Lock } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { signIn } from "@/lib/auth-client";
@@ -32,22 +32,22 @@ export default function SignInPage() {
 	};
 
 	return (
-		<div className="rounded-xl border border-default/40 bg-surface">
+		<div className="rounded-xl border border-default/10 bg-surface">
 			<div className="flex flex-col items-center gap-2 px-6 pt-8">
-				<div className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent text-white">
-					<Server className="h-5 w-5" />
+				<div className="flex h-10 w-10 items-center justify-center rounded-lg bg-foreground text-background">
+					<Layers3 className="h-4 w-4" />
 				</div>
-				<h1 className="mt-1 text-lg font-semibold">Welcome Back</h1>
-				<p className="text-[13px] text-muted">Sign in to your account to continue</p>
+				<h1 className="mt-1 text-lg font-semibold">Welcome back</h1>
+				<p className="text-sm text-muted">Sign in to Dockroot</p>
 			</div>
 			<form onSubmit={handleSubmit} className="flex flex-col gap-4 px-6 py-6">
 				{error && (
-					<div className="rounded-lg bg-danger/10 px-3.5 py-2.5 text-[13px] text-danger">
+					<div className="rounded-lg bg-red-50 px-3.5 py-2.5 text-sm text-red-600 dark:bg-red-500/10 dark:text-red-400">
 						{error}
 					</div>
 				)}
 				<div className="flex flex-col gap-1.5">
-					<label htmlFor="email" className="text-[13px] font-medium">
+					<label htmlFor="email" className="text-xs font-medium text-muted">
 						Email
 					</label>
 					<div className="relative">
@@ -59,12 +59,12 @@ export default function SignInPage() {
 							value={email}
 							onChange={(e) => setEmail(e.target.value)}
 							required
-							className="h-10 w-full rounded-lg border border-default/50 bg-background pl-10 pr-4 text-[13px] outline-none transition-colors placeholder:text-muted/60 focus:border-accent focus:ring-1 focus:ring-accent"
+							className="h-10 w-full rounded-lg border border-default/10 bg-background pl-10 pr-4 text-sm outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
 						/>
 					</div>
 				</div>
 				<div className="flex flex-col gap-1.5">
-					<label htmlFor="password" className="text-[13px] font-medium">
+					<label htmlFor="password" className="text-xs font-medium text-muted">
 						Password
 					</label>
 					<div className="relative">
@@ -76,14 +76,14 @@ export default function SignInPage() {
 							value={password}
 							onChange={(e) => setPassword(e.target.value)}
 							required
-							className="h-10 w-full rounded-lg border border-default/50 bg-background pl-10 pr-4 text-[13px] outline-none transition-colors placeholder:text-muted/60 focus:border-accent focus:ring-1 focus:ring-accent"
+							className="h-10 w-full rounded-lg border border-default/10 bg-background pl-10 pr-4 text-sm outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
 						/>
 					</div>
 				</div>
 				<button
 					type="submit"
 					disabled={loading}
-					className="mt-1 inline-flex h-10 w-full items-center justify-center rounded-lg bg-accent px-4 text-[14px] font-medium text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-60"
+					className="mt-1 inline-flex h-10 w-full items-center justify-center rounded-lg bg-foreground text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
 				>
 					{loading ? (
 						"Signing in..."
@@ -95,8 +95,8 @@ export default function SignInPage() {
 					)}
 				</button>
 			</form>
-			<div className="border-t border-default/30 px-6 py-4 text-center">
-				<p className="text-[13px] text-muted">
+			<div className="border-t border-default/10 px-6 py-4 text-center">
+				<p className="text-xs text-muted">
 					Account creation is controlled by the instance owner.
 				</p>
 			</div>

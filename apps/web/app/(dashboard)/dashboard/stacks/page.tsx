@@ -32,65 +32,55 @@ export default async function StacksPage({
 		: stacks;
 
 	return (
-		<div className="space-y-6">
+		<div className="animate-in space-y-6">
 			<PageHeader
 				kicker="Operations"
-				title="Compose stacks"
-				description={
-					includeUntracked
-						? "Operate tracked Dockroot stacks and external compose projects from one fleet view."
-						: "Operate tracked Dockroot stacks that belong to your workspace."
-				}
+				title="Stacks"
+				description={`${filtered.length} compose stacks across all environments`}
 			/>
 
-			<section className="rounded-2xl border border-default/15 bg-surface p-5">
-				<div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-					<div>
-						<h2 className="text-lg font-semibold tracking-tight">Fleet</h2>
-						<p className="mt-1 text-sm text-muted">
-							{includeUntracked
-								? "Tracked stacks stay linked to projects. Untracked compose projects are still operable here."
-								: "Tracked stacks stay linked to your projects and environments."}
-						</p>
-					</div>
-					<form className="flex w-full gap-3 lg:w-auto">
-						<input
-							type="search"
-							name="q"
-							defaultValue={query.q || ""}
-							placeholder="Search stacks, projects, environments"
-							className="h-11 flex-1 rounded-xl border border-default/15 bg-background px-4 text-sm outline-none transition-colors focus:border-accent lg:w-[340px]"
-						/>
-						<button
-							type="submit"
-							className="inline-flex h-11 items-center justify-center rounded-xl border border-default/20 bg-background px-4 text-sm font-medium transition-colors hover:border-accent/30 hover:text-accent"
-						>
-							Filter
-						</button>
-					</form>
-				</div>
+			{/* Search */}
+			<div className="rounded-xl border border-default/10 bg-surface p-4">
+				<form className="flex flex-col gap-3 sm:flex-row">
+					<input
+						type="search"
+						name="q"
+						defaultValue={query.q || ""}
+						placeholder="Search stacks, projects, environments..."
+						className="h-9 flex-1 rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
+					/>
+					<button
+						type="submit"
+						className="inline-flex h-9 items-center justify-center rounded-lg border border-default/10 bg-background px-4 text-sm font-medium transition-colors hover:border-default/20"
+					>
+						Filter
+					</button>
+				</form>
+			</div>
 
-				<div className="mt-5 overflow-hidden rounded-2xl border border-default/10">
-					<table className="min-w-full divide-y divide-default/10 text-sm">
-						<thead className="bg-background/70">
-							<tr className="text-left text-muted">
+			{/* Table */}
+			<div className="rounded-xl border border-default/10 bg-surface">
+				<div className="table-scroll">
+					<table className="min-w-full text-left text-sm">
+						<thead>
+							<tr className="border-b border-default/10 text-xs text-muted">
 								<th className="px-4 py-3 font-medium">Name</th>
 								<th className="px-4 py-3 font-medium">Source</th>
 								<th className="px-4 py-3 font-medium">Project</th>
 								<th className="px-4 py-3 font-medium">Environment</th>
 								<th className="px-4 py-3 font-medium">Containers</th>
-								<th className="px-4 py-3 font-medium">Latest status</th>
+								<th className="px-4 py-3 font-medium">Status</th>
 								<th className="px-4 py-3 font-medium">Actions</th>
 							</tr>
 						</thead>
-						<tbody className="divide-y divide-default/10 bg-surface/70">
+						<tbody className="divide-y divide-default/5">
 							{filtered.length ? (
 								filtered.map((stack) => (
-									<tr key={`${stack.type}-${stack.slug}`} className="align-top">
-										<td className="px-4 py-4">
-											<div className="space-y-1">
+									<tr key={`${stack.type}-${stack.slug}`} className="group transition-colors hover:bg-foreground/[0.02]">
+										<td className="px-4 py-3">
+											<div className="space-y-0.5">
 												<div className="flex items-center gap-2">
-													<p className="font-semibold">{stack.name}</p>
+													<p className="font-medium">{stack.name}</p>
 													<StatusBadge
 														status={
 															stack.type === "tracked" ? stack.status : stack.status.split("(")[0]
@@ -98,36 +88,31 @@ export default async function StacksPage({
 													/>
 												</div>
 												<p className="text-xs text-muted">{stack.slug}</p>
-												<p className="text-xs text-muted">
-													{stack.type === "tracked"
-														? `${stack.composeFileName} • ${stack.sourceType === "github" ? "GitHub App" : "Manual"}`
-														: stack.configFiles.join(", ") || "Compose files not reported"}
-												</p>
 											</div>
 										</td>
-										<td className="px-4 py-4 text-muted">
+										<td className="px-4 py-3 text-xs text-muted">
 											{stack.type === "tracked" ? "Internal" : "Untracked"}
 										</td>
-										<td className="px-4 py-4 text-muted">{stack.projectName || "—"}</td>
-										<td className="px-4 py-4 text-muted">{stack.environmentName || "—"}</td>
-										<td className="px-4 py-4">
-											<div className="space-y-1">
-												<p className="font-medium">
-													{stack.runningCount}/{stack.containerCount} running
+										<td className="px-4 py-3 text-xs text-muted">{stack.projectName || "—"}</td>
+										<td className="px-4 py-3 text-xs text-muted">{stack.environmentName || "—"}</td>
+										<td className="px-4 py-3">
+											<div className="space-y-0.5">
+												<p className="text-sm font-medium">
+													{stack.runningCount}/{stack.containerCount}
 												</p>
 												<p className="text-xs text-muted">
 													{stack.containers
-														.slice(0, 3)
-														.map((container) => container.Names)
-														.join(", ") || "No containers reported"}
+														.slice(0, 2)
+														.map((c) => c.Names)
+														.join(", ") || "—"}
 												</p>
 											</div>
 										</td>
-										<td className="px-4 py-4 text-muted">
+										<td className="px-4 py-3 text-xs text-muted">
 											{stack.lastDeployment?.status || stack.status}
 										</td>
-										<td className="px-4 py-4">
-											<div className="flex flex-wrap gap-2">
+										<td className="px-4 py-3">
+											<div className="flex flex-wrap gap-1.5">
 												{stack.type === "tracked" ? (
 													<>
 														<form action={deployStackAction}>
@@ -135,7 +120,7 @@ export default async function StacksPage({
 															<FormSubmitButton
 																label="Deploy"
 																pendingLabel="Deploying..."
-																className="inline-flex h-9 items-center justify-center rounded-lg bg-accent px-3 text-sm font-medium text-white"
+																className="inline-flex h-7 items-center rounded-md bg-foreground px-2.5 text-xs font-medium text-background"
 															/>
 														</form>
 														<form action={destroyStackAction}>
@@ -143,12 +128,12 @@ export default async function StacksPage({
 															<FormSubmitButton
 																label="Destroy"
 																pendingLabel="Destroying..."
-																className="inline-flex h-9 items-center justify-center rounded-lg border border-danger/30 bg-danger/10 px-3 text-sm font-medium text-danger"
+																className="inline-flex h-7 items-center rounded-md border border-red-200 bg-red-50 px-2.5 text-xs font-medium text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400"
 															/>
 														</form>
 														<Link
 															href={`/dashboard/projects/${stack.projectId}/stacks/${stack.stackId}`}
-															className="inline-flex h-9 items-center justify-center rounded-lg border border-default/20 px-3 text-sm font-medium text-muted transition-colors hover:text-foreground"
+															className="inline-flex h-7 items-center rounded-md border border-default/10 px-2.5 text-xs font-medium text-muted transition-colors hover:text-foreground"
 														>
 															Open
 														</Link>
@@ -169,7 +154,7 @@ export default async function StacksPage({
 															<FormSubmitButton
 																label={action}
 																pendingLabel={`${action}ing...`}
-																className="inline-flex h-9 items-center justify-center rounded-lg border border-default/20 px-3 text-sm font-medium text-muted transition-colors hover:text-foreground"
+																className="inline-flex h-7 items-center rounded-md border border-default/10 px-2.5 text-xs font-medium text-muted transition-colors hover:text-foreground"
 															/>
 														</form>
 													))
@@ -188,7 +173,7 @@ export default async function StacksPage({
 														<FormSubmitButton
 															label="Adopt"
 															pendingLabel="Adopting..."
-															className="inline-flex h-9 items-center justify-center rounded-lg bg-accent px-3 text-sm font-medium text-white"
+															className="inline-flex h-7 items-center rounded-md bg-foreground px-2.5 text-xs font-medium text-background"
 														/>
 													</form>
 												) : null}
@@ -199,14 +184,14 @@ export default async function StacksPage({
 							) : (
 								<tr>
 									<td colSpan={7} className="px-4 py-12 text-center text-sm text-muted">
-										No compose stacks matched this filter.
+										No stacks found.
 									</td>
 								</tr>
 							)}
 						</tbody>
 					</table>
 				</div>
-			</section>
+			</div>
 		</div>
 	);
 }

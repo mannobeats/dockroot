@@ -23,24 +23,22 @@ export default async function ShellPage({
 	const isContainerShell = !allowHostShell || Boolean(selectedContainer);
 
 	return (
-		<div className="space-y-6">
+		<div className="animate-in space-y-6">
 			<PageHeader
 				kicker="Runtime"
 				title="Shell"
-				description={
-					allowHostShell
-						? "Open an interactive host shell or attach directly to a running container."
-						: "Open an interactive shell inside a container that belongs to your workspace."
-				}
+				description={allowHostShell
+					? "Open a host shell or attach to a running container."
+					: "Attach to a container in your workspace."}
 			/>
 
-			<section className="rounded-2xl border border-default/15 bg-surface p-5">
-				<form className="grid gap-3 lg:grid-cols-[180px_1fr_auto]">
+			<div className="rounded-xl border border-default/10 bg-surface p-4">
+				<form className="flex flex-col gap-3 sm:flex-row">
 					<input type="hidden" name="environment" value={environment.id} />
 					<select
 						name="target"
 						defaultValue={isContainerShell ? "container" : "host"}
-						className="h-11 rounded-xl border border-default/15 bg-background px-4 text-sm outline-none transition-colors focus:border-accent"
+						className="h-9 rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors focus:border-foreground/20"
 					>
 						{allowHostShell ? <option value="host">Host shell</option> : null}
 						<option value="container">Container shell</option>
@@ -48,7 +46,7 @@ export default async function ShellPage({
 					<select
 						name="containerId"
 						defaultValue={selectedContainer?.ID || ""}
-						className="h-11 rounded-xl border border-default/15 bg-background px-4 text-sm outline-none transition-colors focus:border-accent"
+						className="h-9 flex-1 rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors focus:border-foreground/20"
 					>
 						<option value="">Select container</option>
 						{containers.map((container: Record<string, string>) => (
@@ -59,16 +57,16 @@ export default async function ShellPage({
 					</select>
 					<button
 						type="submit"
-						className="inline-flex h-11 items-center justify-center rounded-xl bg-accent px-4 text-sm font-medium text-white"
+						className="inline-flex h-9 items-center justify-center rounded-lg bg-foreground px-4 text-sm font-medium text-background"
 					>
-						Open shell
+						Connect
 					</button>
 				</form>
-			</section>
+			</div>
 
 			{isContainerShell && !selectedContainer ? (
-				<div className="rounded-2xl border border-default/15 bg-surface p-6 text-sm text-muted">
-					No accessible containers are available for an interactive shell.
+				<div className="rounded-xl border border-dashed border-default/10 p-8 text-center text-sm text-muted">
+					No accessible containers available.
 				</div>
 			) : (
 				<TerminalPanel
@@ -76,7 +74,7 @@ export default async function ShellPage({
 					containerId={selectedContainer?.ID}
 					transport={environment.kind === "local" ? "local" : "remote"}
 					environmentId={environment.id}
-					label={isContainerShell ? selectedContainer?.Names || "Container" : "Manager host"}
+					label={isContainerShell ? selectedContainer?.Names || "Container" : "Host"}
 				/>
 			)}
 		</div>

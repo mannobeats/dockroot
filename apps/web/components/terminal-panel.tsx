@@ -49,10 +49,13 @@ export function TerminalPanel({
 				cursorBlink: true,
 				fontFamily:
 					"ui-monospace, SFMono-Regular, SF Mono, Menlo, Monaco, Consolas, Liberation Mono, monospace",
-				fontSize: 12,
+				fontSize: 13,
+				lineHeight: 1.4,
 				theme: {
-					background: "#050914",
-					foreground: "#f8fafc",
+					background: "#0a0a0a",
+					foreground: "#fafafa",
+					cursor: "#fafafa",
+					selectionBackground: "#ffffff30",
 				},
 			});
 			const fitAddon = new FitAddon();
@@ -283,18 +286,18 @@ export function TerminalPanel({
 	}, [containerId, environmentId, label, target, transport]);
 
 	return (
-		<div className="rounded-2xl border border-default/15 bg-surface p-4">
+		<div className="rounded-xl border border-default/10 bg-surface p-4">
 			<div className="flex items-center justify-between">
 				<div>
-					<p className="text-sm font-semibold">Interactive shell</p>
+					<p className="text-sm font-semibold">Terminal</p>
 					<p className="text-xs text-muted">{status}</p>
 				</div>
-				<div className="rounded-full bg-accent/10 px-3 py-1 text-[11px] font-medium text-accent">
+				<span className="rounded-md bg-foreground/[0.04] px-2.5 py-1 text-xs font-medium text-muted">
 					{label}
-				</div>
+				</span>
 			</div>
-			<div className="mt-4 overflow-hidden rounded-xl border border-default/10 bg-[#050914]">
-				<div ref={terminalRef} className="h-[620px] w-full p-3" />
+			<div className="mt-3 overflow-hidden rounded-lg border border-default/10 bg-[#0a0a0a]">
+				<div ref={terminalRef} className="h-[600px] w-full p-3" />
 			</div>
 		</div>
 	);

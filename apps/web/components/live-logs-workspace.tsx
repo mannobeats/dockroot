@@ -188,25 +188,26 @@ export function LiveLogsWorkspace({
 	});
 
 	return (
-		<div className="grid gap-5 xl:grid-cols-[320px_1fr]">
-			<section className="rounded-2xl border border-default/15 bg-surface p-4">
+		<div className="grid gap-4 xl:grid-cols-[280px_1fr]">
+			{/* Container selector */}
+			<div className="rounded-xl border border-default/10 bg-surface p-4">
 				<div className="flex items-center justify-between">
 					<p className="text-sm font-semibold">Containers</p>
-					<div className="flex items-center gap-2 rounded-xl border border-default/15 bg-background/50 p-1">
+					<div className="flex items-center gap-1 rounded-lg border border-default/10 bg-background p-0.5">
 						<button
 							type="button"
 							onClick={() => {
 								setMode("single");
 								setSelectedIds((current) => (current[0] ? [current[0]] : current));
 							}}
-							className={`rounded-lg px-3 py-2 text-xs ${mode === "single" ? "bg-accent text-white" : "text-muted"}`}
+							className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${mode === "single" ? "bg-foreground text-background" : "text-muted hover:text-foreground"}`}
 						>
 							Single
 						</button>
 						<button
 							type="button"
 							onClick={() => setMode("grouped")}
-							className={`rounded-lg px-3 py-2 text-xs ${mode === "grouped" ? "bg-accent text-white" : "text-muted"}`}
+							className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${mode === "grouped" ? "bg-foreground text-background" : "text-muted hover:text-foreground"}`}
 						>
 							Grouped
 						</button>
@@ -216,10 +217,10 @@ export function LiveLogsWorkspace({
 					type="search"
 					value={query}
 					onChange={(event) => setQuery(event.target.value)}
-					placeholder="Filter containers"
-					className="mt-4 h-11 w-full rounded-xl border border-default/15 bg-background px-4 text-sm outline-none transition-colors focus:border-accent"
+					placeholder="Filter..."
+					className="mt-3 h-8 w-full rounded-lg border border-default/10 bg-background px-3 text-xs outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
 				/>
-				<div className="mt-4 space-y-2">
+				<div className="mt-3 space-y-1">
 					{filtered.map((container) => {
 						const active = selectedIds.includes(container.id);
 						return (
@@ -240,62 +241,59 @@ export function LiveLogsWorkspace({
 										return next;
 									})
 								}
-								className={`block w-full rounded-xl border px-3 py-3 text-left text-sm transition-colors ${
+								className={`block w-full rounded-lg px-3 py-2.5 text-left text-xs transition-all ${
 									active
-										? "border-accent/30 bg-accent/10"
-										: "border-default/10 bg-background/50 hover:border-default/20"
+										? "bg-foreground/[0.06] text-foreground"
+										: "text-muted hover:bg-foreground/[0.03] hover:text-foreground"
 								}`}
 							>
-								<div className="flex items-start justify-between gap-3">
-									<div>
-										<p className="font-medium">{container.name}</p>
-										<p className="mt-1 text-xs text-muted">{container.image}</p>
+								<div className="flex items-start justify-between gap-2">
+									<div className="min-w-0">
+										<p className="truncate font-medium">{container.name}</p>
+										<p className="mt-0.5 truncate text-muted">{container.image}</p>
 									</div>
 									<span
-										className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${
-											container.state === "running"
-												? "border-success/20 bg-success/10 text-success"
-												: "border-default/20 bg-background text-muted"
+										className={`mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full ${
+											container.state === "running" ? "bg-emerald-500" : "bg-neutral-400"
 										}`}
-									>
-										{container.state}
-									</span>
+									/>
 								</div>
 							</button>
 						);
 					})}
 				</div>
-			</section>
+			</div>
 
-			<section className="rounded-2xl border border-default/15 bg-surface p-4">
+			{/* Log viewer */}
+			<div className="rounded-xl border border-default/10 bg-surface p-4">
 				<div className="flex items-center justify-between">
 					<div>
 						<p className="text-sm font-semibold">
 							{mode === "grouped"
-								? "Grouped live logs"
-								: containers.find((item) => item.id === selectedIds[0])?.name || "Live logs"}
+								? "Grouped logs"
+								: containers.find((item) => item.id === selectedIds[0])?.name || "Logs"}
 						</p>
 						<p className="text-xs text-muted">
 							{mode === "grouped"
-								? `${selectedIds.length} containers selected`
-								: "Streaming docker logs -f"}
+								? `${selectedIds.length} containers`
+								: "docker logs -f"}
 						</p>
 					</div>
-					<div className="flex flex-wrap items-center gap-2">
+					<div className="flex flex-wrap items-center gap-1.5">
 						<button
 							type="button"
 							onClick={() => setPaused((current) => !current)}
-							className="inline-flex h-9 items-center justify-center rounded-lg border border-default/20 px-3 text-xs font-medium text-muted transition-colors hover:text-foreground"
+							className="inline-flex h-7 items-center rounded-md border border-default/10 px-2.5 text-xs font-medium text-muted transition-colors hover:text-foreground"
 						>
 							{paused ? "Resume" : "Pause"}
 						</button>
 						<button
 							type="button"
 							onClick={() => setAutoScroll((current) => !current)}
-							className={`inline-flex h-9 items-center justify-center rounded-lg border px-3 text-xs font-medium transition-colors ${
+							className={`inline-flex h-7 items-center rounded-md border px-2.5 text-xs font-medium transition-colors ${
 								autoScroll
-									? "border-accent/20 bg-accent/10 text-accent"
-									: "border-default/20 text-muted hover:text-foreground"
+									? "border-foreground/20 bg-foreground/[0.06] text-foreground"
+									: "border-default/10 text-muted hover:text-foreground"
 							}`}
 						>
 							Auto-scroll
@@ -307,27 +305,27 @@ export function LiveLogsWorkspace({
 									Object.fromEntries(Object.keys(current).map((key) => [key, ""])),
 								)
 							}
-							className="inline-flex h-9 items-center justify-center rounded-lg border border-default/20 px-3 text-xs font-medium text-muted transition-colors hover:text-foreground"
+							className="inline-flex h-7 items-center rounded-md border border-default/10 px-2.5 text-xs font-medium text-muted transition-colors hover:text-foreground"
 						>
 							Clear
 						</button>
 						{selectedIds[0] ? (
 							<Link
 								href={`/dashboard/shell?target=container&containerId=${selectedIds[0]}`}
-								className="inline-flex h-9 items-center justify-center rounded-lg border border-default/20 px-3 text-xs font-medium text-muted transition-colors hover:text-foreground"
+								className="inline-flex h-7 items-center rounded-md border border-default/10 px-2.5 text-xs font-medium text-muted transition-colors hover:text-foreground"
 							>
-								Open shell
+								Shell
 							</Link>
 						) : null}
 					</div>
 				</div>
 				<pre
 					ref={logViewportRef}
-					className="mt-4 h-[720px] overflow-auto rounded-xl bg-[#050914] p-4 text-xs leading-6 text-white/85"
+					className="mt-3 h-[680px] overflow-auto rounded-lg bg-[#0a0a0a] p-4 text-xs leading-5 text-white/85"
 				>
-					{combinedLogs || "No logs available for the selected container set."}
+					{combinedLogs || "No logs available."}
 				</pre>
-			</section>
+			</div>
 		</div>
 	);
 }

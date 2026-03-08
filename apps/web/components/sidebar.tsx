@@ -5,14 +5,15 @@ import {
 	Boxes,
 	ChevronLeft,
 	ChevronRight,
-	CopyPlus,
 	Cpu,
 	FolderKanban,
+	HardDrive,
 	Layers3,
 	LayoutDashboard,
 	LogOut,
 	Logs,
 	Network,
+	Search,
 	Server,
 	Settings,
 	SquareTerminal,
@@ -20,42 +21,24 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { EnvironmentSwitcher } from "@/components/environment-switcher";
 import { signOut, useSession } from "@/lib/auth-client";
 
-const navGroups = [
-	{
-		label: "Management",
-		items: [
-			{ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-			{ href: "/dashboard/projects", label: "Projects", icon: FolderKanban },
-			{ href: "/dashboard/stacks", label: "Stacks", icon: Layers3 },
-			{ href: "/dashboard/environments", label: "Environments", icon: Server },
-		],
-	},
-	{
-		label: "Resources",
-		items: [
-			{ href: "/dashboard/containers", label: "Containers", icon: Cpu },
-			{ href: "/dashboard/shell", label: "Shell", icon: SquareTerminal },
-			{ href: "/dashboard/logs", label: "Logs", icon: Logs },
-			{ href: "/dashboard/images", label: "Images", icon: Boxes, privileged: true },
-			{ href: "/dashboard/volumes", label: "Volumes", icon: CopyPlus, privileged: true },
-			{ href: "/dashboard/networks", label: "Networks", icon: Network, privileged: true },
-		],
-	},
-	{
-		label: "Operations",
-		items: [
-			{ href: "/dashboard/activity", label: "Activity", icon: Activity },
-			{ href: "/dashboard/schedules", label: "Schedules", icon: TimerReset },
-		],
-	},
-	{
-		label: "Administration",
-		items: [{ href: "/dashboard/settings", label: "Settings", icon: Settings, privileged: true }],
-	},
+const navItems = [
+	{ href: "/dashboard", label: "Overview", icon: LayoutDashboard, group: "main" },
+	{ href: "/dashboard/projects", label: "Projects", icon: FolderKanban, group: "main" },
+	{ href: "/dashboard/stacks", label: "Stacks", icon: Layers3, group: "main" },
+	{ href: "/dashboard/environments", label: "Environments", icon: Server, group: "main" },
+	{ href: "/dashboard/containers", label: "Containers", icon: Cpu, group: "runtime" },
+	{ href: "/dashboard/shell", label: "Shell", icon: SquareTerminal, group: "runtime" },
+	{ href: "/dashboard/logs", label: "Logs", icon: Logs, group: "runtime" },
+	{ href: "/dashboard/images", label: "Images", icon: Boxes, group: "resources", privileged: true },
+	{ href: "/dashboard/volumes", label: "Volumes", icon: HardDrive, group: "resources", privileged: true },
+	{ href: "/dashboard/networks", label: "Networks", icon: Network, group: "resources", privileged: true },
+	{ href: "/dashboard/activity", label: "Activity", icon: Activity, group: "ops" },
+	{ href: "/dashboard/schedules", label: "Schedules", icon: TimerReset, group: "ops" },
+	{ href: "/dashboard/settings", label: "Settings", icon: Settings, group: "admin", privileged: true },
 ];
 
 interface SidebarProps {
@@ -77,23 +60,24 @@ export function Sidebar({
 	const { data: session } = useSession();
 	const role = session?.user && "role" in session.user ? session.user.role : undefined;
 	const isPrivileged = role === "owner" || role === "admin";
-	const [expanded, setExpanded] = useState(true);
+	const [collapsed, setCollapsed] = useState(false);
 	const [mounted, setMounted] = useState(false);
+	const [searchQuery, setSearchQuery] = useState("");
 	const selectedEnvironmentId = searchParams.get("environment") || defaultEnvironmentId || "";
 
 	useEffect(() => {
-		const saved = localStorage.getItem("dockroot-sidebar-expanded");
+		const saved = localStorage.getItem("dockroot-sidebar-collapsed");
 		if (saved) {
-			setExpanded(saved === "true");
+			setCollapsed(saved === "true");
 		}
 		setMounted(true);
 	}, []);
 
 	useEffect(() => {
 		if (mounted) {
-			localStorage.setItem("dockroot-sidebar-expanded", String(expanded));
+			localStorage.setItem("dockroot-sidebar-collapsed", String(collapsed));
 		}
-	}, [expanded, mounted]);
+	}, [collapsed, mounted]);
 
 	useEffect(() => {
 		if (pathname) {
@@ -106,11 +90,30 @@ export function Sidebar({
 		router.push("/");
 	};
 
+	const visibleItems = useMemo(() => {
+		return navItems.filter((item) => {
+			if ("privileged" in item && item.privileged && !isPrivileged) return false;
+			if (!searchQuery) return true;
+			return item.label.toLowerCase().includes(searchQuery.toLowerCase());
+		});
+	}, [isPrivileged, searchQuery]);
+
+	const groupedItems = useMemo(() => {
+		const groups: Record<string, typeof visibleItems> = {};
+		for (const item of visibleItems) {
+			if (!groups[item.group]) groups[item.group] = [];
+			groups[item.group].push(item);
+		}
+		return groups;
+	}, [visibleItems]);
+
 	if (!mounted) {
 		return (
-			<div className="hidden h-screen w-[88px] shrink-0 border-r border-default/20 md:block" />
+			<div className="hidden h-screen w-[260px] shrink-0 border-r border-default/10 md:block" />
 		);
 	}
+
+	const sidebarWidth = collapsed ? "w-[72px]" : "w-[260px]";
 
 	return (
 		<>
@@ -119,151 +122,153 @@ export function Sidebar({
 					type="button"
 					aria-label="Close sidebar"
 					onClick={onMobileClose}
-					className="fixed inset-0 z-40 bg-black/60 md:hidden"
+					className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm md:hidden"
 				/>
 			) : null}
 
 			<aside
-				className={`fixed inset-y-0 left-0 z-50 flex h-screen border-r border-default/20 bg-surface transition-transform duration-300 md:sticky md:translate-x-0 ${
+				className={`fixed inset-y-0 left-0 z-50 flex h-screen flex-col border-r border-default/10 bg-surface transition-all duration-200 ease-out md:sticky md:translate-x-0 ${sidebarWidth} ${
 					mobileOpen ? "translate-x-0" : "-translate-x-full"
 				}`}
 			>
-				<div className="flex w-[68px] flex-col items-center gap-4 border-r border-default/10 px-3 py-5">
-					<Link
-						href="/dashboard"
-						className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-accent-foreground shadow-lg shadow-accent/20 transition-transform hover:scale-[1.03]"
-					>
-						<Server className="h-4 w-4" />
-					</Link>
-
-					<div className="mt-2 flex flex-1 flex-col items-center gap-2">
-						<div className="h-px w-8 bg-default/10" />
-						<div className="flex h-10 w-10 items-center justify-center rounded-xl bg-default/30 text-muted">
-							<FolderKanban className="h-4 w-4" />
-						</div>
-						<div className="flex h-10 w-10 items-center justify-center rounded-xl bg-default/20 text-muted">
-							<Server className="h-4 w-4" />
-						</div>
-					</div>
-
+				{/* Logo / Brand */}
+				<div className={`flex h-14 items-center border-b border-default/10 ${collapsed ? "justify-center px-3" : "justify-between px-5"}`}>
+					{!collapsed ? (
+						<Link href="/dashboard" className="flex items-center gap-2.5">
+							<div className="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground text-background">
+								<Layers3 className="h-4 w-4" />
+							</div>
+							<span className="text-sm font-semibold tracking-tight">Dockroot</span>
+						</Link>
+					) : (
+						<Link href="/dashboard" className="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground text-background">
+							<Layers3 className="h-4 w-4" />
+						</Link>
+					)}
 					<button
 						type="button"
-						onClick={() => setExpanded((value) => !value)}
-						className="flex h-10 w-10 items-center justify-center rounded-xl text-muted transition-colors hover:bg-default/40 hover:text-foreground"
+						onClick={() => setCollapsed((v) => !v)}
+						className={`hidden h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-default/20 hover:text-foreground md:inline-flex ${collapsed ? "!hidden" : ""}`}
 					>
-						{expanded ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+						<ChevronLeft className="h-3.5 w-3.5" />
 					</button>
-
-					{session ? (
-						<div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/10 text-xs font-bold text-accent">
-							{session.user.name?.charAt(0)?.toUpperCase() || "U"}
-						</div>
-					) : null}
 				</div>
 
-				<div
-					className={`flex h-full flex-col overflow-hidden transition-all duration-300 ${
-						expanded ? "w-[292px] opacity-100" : "w-0 opacity-0"
-					}`}
-				>
-					<div className="flex h-full min-w-[292px] flex-col px-5 py-5">
-						<div className="rounded-2xl border border-default/20 bg-background/60 p-4">
-							<p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted">
-								Manager
-							</p>
-							<h2 className="mt-2 text-lg font-semibold tracking-tight">Unified Compose Control</h2>
-							<p className="mt-2 text-sm leading-6 text-muted">
-								Deploy stacks manually and manage every environment from one dashboard.
-							</p>
+				{/* Search (expanded only) */}
+				{!collapsed ? (
+					<div className="px-3 pt-3">
+						<div className="relative">
+							<Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
+							<input
+								type="search"
+								value={searchQuery}
+								onChange={(e) => setSearchQuery(e.target.value)}
+								placeholder="Search..."
+								className="h-9 w-full rounded-lg border border-default/10 bg-background pl-9 pr-3 text-sm outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
+							/>
 						</div>
+					</div>
+				) : null}
 
+				{/* Environment Switcher (expanded only) */}
+				{!collapsed ? (
+					<div className="px-3 pt-3">
 						<EnvironmentSwitcher
 							environments={environments}
 							defaultEnvironmentId={defaultEnvironmentId}
 						/>
-
-						<div className="mt-6 flex-1 overflow-y-auto">
-							{navGroups.map((group) => {
-								const visibleItems = group.items.filter(
-									(item) => !("privileged" in item) || !item.privileged || isPrivileged,
-								);
-
-								if (!visibleItems.length) {
-									return null;
-								}
-
-								return (
-									<div key={group.label} className="mb-6">
-										<p className="mb-3 px-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-muted">
-											{group.label}
-										</p>
-										<div className="space-y-1">
-											{visibleItems.map((item) => {
-												const isActive =
-													pathname === item.href ||
-													(item.href !== "/dashboard" && pathname.startsWith(item.href));
-
-												return (
-													<Link
-														key={item.href}
-														href={
-															selectedEnvironmentId && item.href !== "/dashboard/environments"
-																? `${item.href}?environment=${selectedEnvironmentId}`
-																: item.href
-														}
-														className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all ${
-															isActive
-																? "bg-accent/10 text-foreground"
-																: "text-muted hover:bg-default/30 hover:text-foreground"
-														}`}
-													>
-														<item.icon className="h-4 w-4" />
-														<span>{item.label}</span>
-													</Link>
-												);
-											})}
-										</div>
-									</div>
-								);
-							})}
-						</div>
-
-						{session ? (
-							<div className="mt-4 rounded-2xl border border-default/20 bg-background/60 p-4">
-								<div className="flex items-center gap-3">
-									<div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-accent/10 text-sm font-semibold text-accent">
-										{session.user.name?.charAt(0)?.toUpperCase() || "U"}
-									</div>
-									<div className="min-w-0">
-										<p className="truncate text-sm font-semibold">{session.user.name}</p>
-										<p className="truncate text-xs text-muted">{session.user.email}</p>
-									</div>
-								</div>
-								<div className="mt-4 flex gap-2">
-									{isPrivileged ? (
-										<button
-											type="button"
-											onClick={() => router.push("/dashboard/settings")}
-											className="inline-flex flex-1 items-center justify-center rounded-xl border border-default/20 px-3 py-2 text-sm text-muted transition-colors hover:bg-default/30 hover:text-foreground"
-										>
-											<Settings className="mr-2 h-4 w-4" />
-											Settings
-										</button>
-									) : null}
-									<button
-										type="button"
-										onClick={handleSignOut}
-										className={`inline-flex items-center justify-center rounded-xl border border-default/20 px-3 py-2 text-sm text-muted transition-colors hover:bg-default/30 hover:text-foreground ${
-											isPrivileged ? "" : "flex-1"
-										}`}
-									>
-										<LogOut className="h-4 w-4" />
-									</button>
-								</div>
-							</div>
-						) : null}
 					</div>
-				</div>
+				) : null}
+
+				{/* Navigation */}
+				<nav className={`mt-3 flex-1 overflow-y-auto ${collapsed ? "px-2" : "px-3"}`}>
+					{Object.entries(groupedItems).map(([group, items], index) => (
+						<div key={group} className={index > 0 ? "mt-4 border-t border-default/8 pt-4" : ""}>
+							{!collapsed ? (
+								<p className="mb-1.5 px-2 text-[11px] font-medium uppercase tracking-wider text-muted/60">
+									{group === "main" ? "" : group === "runtime" ? "Runtime" : group === "resources" ? "Resources" : group === "ops" ? "Operations" : "Admin"}
+								</p>
+							) : null}
+							<div className="space-y-0.5">
+								{items.map((item) => {
+									const isActive =
+										pathname === item.href ||
+										(item.href !== "/dashboard" && pathname.startsWith(item.href));
+
+									const linkHref = selectedEnvironmentId && item.href !== "/dashboard/environments"
+										? `${item.href}?environment=${selectedEnvironmentId}`
+										: item.href;
+
+									return (
+										<Link
+											key={item.href}
+											href={linkHref}
+											title={collapsed ? item.label : undefined}
+											className={`group flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-all ${
+												collapsed ? "justify-center" : ""
+											} ${
+												isActive
+													? "bg-foreground/[0.06] text-foreground"
+													: "text-muted hover:bg-foreground/[0.04] hover:text-foreground"
+											}`}
+										>
+											<item.icon className={`h-4 w-4 shrink-0 ${isActive ? "text-foreground" : "text-muted group-hover:text-foreground"}`} />
+											{!collapsed ? <span>{item.label}</span> : null}
+										</Link>
+									);
+								})}
+							</div>
+						</div>
+					))}
+				</nav>
+
+				{/* Collapse toggle (bottom of sidebar) */}
+				{collapsed ? (
+					<div className="border-t border-default/10 px-2 py-3">
+						<button
+							type="button"
+							onClick={() => setCollapsed(false)}
+							className="flex h-9 w-full items-center justify-center rounded-lg text-muted transition-colors hover:bg-foreground/[0.04] hover:text-foreground"
+						>
+							<ChevronRight className="h-4 w-4" />
+						</button>
+					</div>
+				) : null}
+
+				{/* User section */}
+				{session && !collapsed ? (
+					<div className="border-t border-default/10 p-3">
+						<div className="flex items-center gap-3 rounded-lg p-2">
+							<div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-foreground/[0.06] text-xs font-semibold">
+								{session.user.name?.charAt(0)?.toUpperCase() || "U"}
+							</div>
+							<div className="min-w-0 flex-1">
+								<p className="truncate text-sm font-medium">{session.user.name}</p>
+								<p className="truncate text-xs text-muted">{session.user.email}</p>
+							</div>
+							<button
+								type="button"
+								onClick={handleSignOut}
+								title="Sign out"
+								className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
+							>
+								<LogOut className="h-3.5 w-3.5" />
+							</button>
+						</div>
+					</div>
+				) : null}
+				{session && collapsed ? (
+					<div className="border-t border-default/10 p-2 py-3">
+						<button
+							type="button"
+							onClick={handleSignOut}
+							title="Sign out"
+							className="flex h-9 w-full items-center justify-center rounded-lg text-muted transition-colors hover:bg-foreground/[0.04] hover:text-foreground"
+						>
+							<LogOut className="h-4 w-4" />
+						</button>
+					</div>
+				) : null}
 			</aside>
 		</>
 	);

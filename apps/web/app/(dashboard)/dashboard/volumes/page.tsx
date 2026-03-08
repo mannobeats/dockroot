@@ -29,111 +29,100 @@ export default async function VolumesPage({
 	).length;
 
 	return (
-		<div className="space-y-6">
+		<div className="animate-in space-y-6">
 			<PageHeader
 				kicker="Runtime"
 				title="Volumes"
-				description={`Create, inspect, and remove persistent Docker volumes on ${environment.name}.`}
+				description={`${environment.name} — ${filtered.length} volumes`}
 			/>
 
-			<section className="rounded-2xl border border-default/15 bg-surface p-5">
-				<div className="grid gap-3 xl:grid-cols-[1fr_auto_auto]">
-					<form className="grid gap-3 md:grid-cols-[1fr_auto]">
+			{/* Actions */}
+			<div className="rounded-xl border border-default/10 bg-surface p-4">
+				<div className="flex flex-col gap-3 lg:flex-row">
+					<form className="flex flex-1 gap-3">
 						<input
 							type="search"
 							name="q"
 							defaultValue={params.q || ""}
-							placeholder="Search volumes"
-							className="h-11 rounded-xl border border-default/15 bg-background px-4 text-sm outline-none transition-colors focus:border-accent"
+							placeholder="Search volumes..."
+							className="h-9 flex-1 rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
 						/>
-						<button
-							type="submit"
-							className="inline-flex h-11 items-center justify-center rounded-xl border border-default/15 bg-background px-4 text-sm font-medium"
-						>
+						<button type="submit" className="inline-flex h-9 items-center rounded-lg border border-default/10 px-3 text-sm font-medium">
 							Filter
 						</button>
 					</form>
-					<form action={createVolumeAction} className="grid gap-3 md:grid-cols-[1fr_160px_auto]">
+					<form action={createVolumeAction} className="flex gap-3">
 						<input type="hidden" name="environmentId" value={environment.id} />
 						<input
 							type="text"
 							name="name"
 							required
 							placeholder="app-data"
-							className="h-11 rounded-xl border border-default/15 bg-background px-4 text-sm outline-none transition-colors focus:border-accent"
+							className="h-9 rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
 						/>
 						<select
 							name="driver"
 							defaultValue="local"
-							className="h-11 rounded-xl border border-default/15 bg-background px-4 text-sm outline-none transition-colors focus:border-accent"
+							className="h-9 rounded-lg border border-default/10 bg-background px-3 text-sm outline-none"
 						>
 							<option value="local">local</option>
 						</select>
-						<FormSubmitButton label="Create" pendingLabel="Creating..." />
+						<FormSubmitButton label="Create" pendingLabel="Creating..." className="inline-flex h-9 items-center rounded-lg bg-foreground px-3 text-sm font-medium text-background" />
 					</form>
 					<form action={pruneVolumesAction}>
 						<input type="hidden" name="environmentId" value={environment.id} />
-						<FormSubmitButton label="Prune unused" pendingLabel="Pruning..." />
+						<FormSubmitButton label="Prune" pendingLabel="Pruning..." className="inline-flex h-9 items-center rounded-lg border border-default/10 px-3 text-sm font-medium text-muted transition-colors hover:text-foreground" />
 					</form>
 				</div>
-			</section>
+			</div>
 
-			<section className="grid gap-4 lg:grid-cols-3">
-				<div className="rounded-2xl border border-default/15 bg-surface p-5">
-					<p className="text-xs uppercase tracking-[0.18em] text-muted">Visible volumes</p>
-					<p className="mt-3 text-3xl font-semibold tracking-tight">{filtered.length}</p>
-					<p className="mt-2 text-sm text-muted">
-						Persistent data attachments available on this engine.
-					</p>
+			{/* Stats */}
+			<div className="grid gap-4 sm:grid-cols-3">
+				<div className="rounded-xl border border-default/10 bg-surface p-4">
+					<p className="text-xs text-muted">Total</p>
+					<p className="mt-1 text-2xl font-semibold">{filtered.length}</p>
 				</div>
-				<div className="rounded-2xl border border-default/15 bg-surface p-5">
-					<p className="text-xs uppercase tracking-[0.18em] text-muted">Local driver</p>
-					<p className="mt-3 text-3xl font-semibold tracking-tight">{localCount}</p>
-					<p className="mt-2 text-sm text-muted">Volumes stored directly on this Docker host.</p>
+				<div className="rounded-xl border border-default/10 bg-surface p-4">
+					<p className="text-xs text-muted">Local driver</p>
+					<p className="mt-1 text-2xl font-semibold">{localCount}</p>
 				</div>
-				<div className="rounded-2xl border border-default/15 bg-surface p-5">
-					<p className="text-xs uppercase tracking-[0.18em] text-muted">Custom drivers</p>
-					<p className="mt-3 text-3xl font-semibold tracking-tight">
-						{filtered.length - localCount}
-					</p>
-					<p className="mt-2 text-sm text-muted">
-						External volume plugins or non-local storage drivers.
-					</p>
+				<div className="rounded-xl border border-default/10 bg-surface p-4">
+					<p className="text-xs text-muted">Custom drivers</p>
+					<p className="mt-1 text-2xl font-semibold">{filtered.length - localCount}</p>
 				</div>
-			</section>
+			</div>
 
-			<section className="rounded-2xl border border-default/15 bg-surface p-5">
-				<div className="overflow-hidden rounded-xl border border-default/15">
-					<table className="min-w-full divide-y divide-default/15 text-left">
-						<thead className="bg-background/60 text-[11px] uppercase tracking-[0.18em] text-muted">
-							<tr>
+			{/* Table */}
+			<div className="rounded-xl border border-default/10 bg-surface">
+				<div className="table-scroll">
+					<table className="min-w-full text-left text-sm">
+						<thead>
+							<tr className="border-b border-default/10 text-xs text-muted">
 								<th className="px-4 py-3 font-medium">Name</th>
 								<th className="px-4 py-3 font-medium">Driver</th>
 								<th className="px-4 py-3 font-medium">Mount point</th>
 								<th className="px-4 py-3 font-medium">Actions</th>
 							</tr>
 						</thead>
-						<tbody className="divide-y divide-default/10 bg-surface/40 text-sm">
+						<tbody className="divide-y divide-default/5">
 							{filtered.length ? (
 								filtered.map((volume: Record<string, string>) => (
-									<tr key={`${volume.Name}-${volume.Driver}`}>
-										<td className="px-4 py-3 font-medium">
+									<tr key={`${volume.Name}-${volume.Driver}`} className="transition-colors hover:bg-foreground/[0.02]">
+										<td className="px-4 py-3">
 											<Link
 												href={`/dashboard/volumes/${encodeURIComponent(volume.Name)}?environment=${environment.id}`}
-												className="transition-colors hover:text-accent"
+												className="font-medium transition-colors hover:text-foreground/80"
 											>
 												{volume.Name}
 											</Link>
 										</td>
-										<td className="px-4 py-3 text-muted">{volume.Driver}</td>
-										<td className="px-4 py-3 text-muted">
-											{volume.Mountpoint || "Managed by Docker"}
-										</td>
+										<td className="px-4 py-3 text-xs text-muted">{volume.Driver}</td>
+										<td className="px-4 py-3 text-xs text-muted">{volume.Mountpoint || "Docker managed"}</td>
 										<td className="px-4 py-3">
-											<div className="flex flex-wrap gap-2">
+											<div className="flex gap-1.5">
 												<Link
 													href={`/dashboard/volumes/${encodeURIComponent(volume.Name)}?environment=${environment.id}`}
-													className="inline-flex h-8 items-center justify-center rounded-lg border border-default/20 bg-background px-3 text-xs font-medium text-muted transition-colors hover:text-foreground"
+													className="inline-flex h-7 items-center rounded-md border border-default/10 px-2.5 text-xs font-medium text-muted transition-colors hover:text-foreground"
 												>
 													Details
 												</Link>
@@ -143,7 +132,7 @@ export default async function VolumesPage({
 													<FormSubmitButton
 														label="Delete"
 														pendingLabel="Deleting..."
-														className="inline-flex h-8 items-center justify-center rounded-lg border border-danger/30 bg-danger/10 px-3 text-xs font-medium text-danger"
+														className="inline-flex h-7 items-center rounded-md border border-red-200 bg-red-50 px-2.5 text-xs font-medium text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400"
 													/>
 												</form>
 											</div>
@@ -152,15 +141,15 @@ export default async function VolumesPage({
 								))
 							) : (
 								<tr>
-									<td colSpan={4} className="px-4 py-8 text-center text-sm text-muted">
-										No volumes matched the current filters.
+									<td colSpan={4} className="px-4 py-12 text-center text-sm text-muted">
+										No volumes found.
 									</td>
 								</tr>
 							)}
 						</tbody>
 					</table>
 				</div>
-			</section>
+			</div>
 		</div>
 	);
 }
