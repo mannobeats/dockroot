@@ -325,10 +325,12 @@ export async function writeContainerFile(containerId: string, targetPath: string
 		const parentPath = path.posix.dirname(targetPath);
 		await runDockerCommand([
 			"exec",
+			"-e",
+			`TARGET_PARENT=${parentPath}`,
 			containerId,
 			"sh",
 			"-lc",
-			`mkdir -p "${parentPath.replaceAll('"', '\\"')}"`,
+			'mkdir -p -- "$TARGET_PARENT"',
 		]);
 		return runDockerCommand(["cp", tempFile, `${containerId}:${targetPath}`]);
 	});
@@ -343,10 +345,12 @@ export async function uploadContainerFile(
 	return withTempFile(fileName, content, async (tempFile) => {
 		await runDockerCommand([
 			"exec",
+			"-e",
+			`TARGET_DIRECTORY=${targetDirectory}`,
 			containerId,
 			"sh",
 			"-lc",
-			`mkdir -p "${targetDirectory.replaceAll('"', '\\"')}"`,
+			'mkdir -p -- "$TARGET_DIRECTORY"',
 		]);
 		return runDockerCommand([
 			"cp",
@@ -359,10 +363,12 @@ export async function uploadContainerFile(
 export async function deleteContainerPath(containerId: string, targetPath: string) {
 	return runDockerCommand([
 		"exec",
+		"-e",
+		`TARGET_PATH=${targetPath}`,
 		containerId,
 		"sh",
 		"-lc",
-		`rm -rf "${targetPath.replaceAll('"', '\\"')}"`,
+		'rm -rf -- "$TARGET_PATH"',
 	]);
 }
 

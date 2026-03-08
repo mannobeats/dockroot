@@ -10,7 +10,7 @@ import {
 	projects,
 	stacks,
 } from "@dockroot/db";
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import {
 	downloadRepositoryTarball,
@@ -105,12 +105,29 @@ async function issueRegistrationToken(agentId: string) {
 	await db
 		.update(agents)
 		.set({
-			registrationToken: token,
+			registrationToken: hashToken(token),
 			updatedAt: now(),
 		})
 		.where(eq(agents.id, agentId));
 
 	return token;
+}
+
+async function findAgentByRegistrationToken(registrationToken: string) {
+	const hashedToken = hashToken(registrationToken);
+	return db.query.agents.findFirst({
+		where: or(eq(agents.registrationToken, hashedToken), eq(agents.registrationToken, registrationToken)),
+		with: {
+			environment: true,
+		},
+	});
+}
+
+async function findAgentByAccessToken(accessToken: string) {
+	const hashedToken = hashToken(accessToken);
+	return db.query.agents.findFirst({
+		where: or(eq(agents.accessToken, hashedToken), eq(agents.accessToken, accessToken)),
+	});
 }
 
 async function requireOwnedProject(projectId: string, userId: string) {
@@ -671,7 +688,7 @@ export async function createEnvironment({
 		id: crypto.randomUUID(),
 		environmentId,
 		status: "provisioning",
-		registrationToken,
+		registrationToken: hashToken(registrationToken),
 		createdAt,
 		updatedAt: createdAt,
 	});
@@ -1216,19 +1233,6 @@ export async function deleteEnvironment({
 	revalidatePath("/dashboard/logs");
 }
 
-export async function getAgentInstallContext(registrationToken: string) {
-	const allAgents = await db.query.agents.findMany({
-		with: {
-			environment: true,
-		},
-	});
-
-	return (
-		allAgents.find((agent) => matchesStoredToken(agent.registrationToken, registrationToken)) ||
-		null
-	);
-}
-
 export async function registerAgent({
 	registrationToken,
 	hostname,
@@ -1242,15 +1246,7 @@ export async function registerAgent({
 	architecture?: string;
 	dockerVersion?: string;
 }) {
-	const allAgents = await db.query.agents.findMany({
-		with: {
-			environment: true,
-		},
-	});
-	const agent =
-		allAgents.find((candidate) =>
-			matchesStoredToken(candidate.registrationToken, registrationToken),
-		) || null;
+	const agent = await findAgentByRegistrationToken(registrationToken);
 
 	if (!agent) {
 		throw new Error("Invalid registration token");
@@ -1267,7 +1263,8 @@ export async function registerAgent({
 			architecture: architecture || agent.architecture,
 			dockerVersion: dockerVersion || agent.dockerVersion,
 			status: "healthy",
-			accessToken,
+			accessToken: hashToken(accessToken),
+			registrationToken: hashToken(randomToken(48)),
 			lastSeenAt: updatedAt,
 			installedAt: agent.installedAt ?? updatedAt,
 			updatedAt,
@@ -1291,10 +1288,7 @@ export async function registerAgent({
 }
 
 export async function heartbeatAgent(accessToken: string) {
-	const allAgents = await db.query.agents.findMany();
-	const agent = allAgents.find((candidate) =>
-		matchesStoredToken(candidate.accessToken, accessToken),
-	);
+	const agent = await findAgentByAccessToken(accessToken);
 
 	if (!agent) {
 		throw new Error("Invalid agent token");
@@ -1508,9 +1502,7 @@ export async function getInstallCommand(environmentId: string, userId: string) {
 		throw new Error("Environment not found");
 	}
 
-	const registrationToken =
-		environment.agent[0].registrationToken ||
-		(await issueRegistrationToken(environment.agent[0].id));
+	const registrationToken = await issueRegistrationToken(environment.agent[0].id);
 	const managerUrl = publicEnv.appUrl.replace(/\/$/, "");
 	const dataVolumeName = `dockroot_agent_data_${environment.slug.replace(/-/g, "_")}`;
 	const dockerRun = [
@@ -1550,7 +1542,7 @@ export async function getInstallCommand(environmentId: string, userId: string) {
 		registrationToken,
 		dockerRun,
 		dockerCompose,
-		legacyInstallScript: `${publicEnv.appUrl.replace(/\/$/, "")}/api/agent/install/${registrationToken}`,
+		legacyInstallScript: `${publicEnv.appUrl.replace(/\/$/, "")}/api/agent/install/${environment.id}`,
 	};
 }
 

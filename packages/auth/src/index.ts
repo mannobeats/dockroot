@@ -1,7 +1,7 @@
 import { db, schema } from "@dockroot/db";
 import { APIError, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { count } from "drizzle-orm";
+import { count, sql } from "drizzle-orm";
 
 function getRequiredEnv(name: string) {
 	const value = process.env[name];
@@ -65,22 +65,45 @@ export const auth = betterAuth({
 	},
 	databaseHooks: {
 		user: {
-			create: {
-				before: async (user) => {
-					const [{ value: existingUsers }] = await db.select({ value: count() }).from(schema.user);
+				create: {
+					before: async (user) => {
+						const [{ value: existingUsers }] = await db.select({ value: count() }).from(schema.user);
+						const ownerRows = await db.execute<{ key: string }>(sql`
+							with reset as (
+								delete from "instance_bootstrap"
+								where "key" = 'owner-bootstrap'
+								  and not exists (select 1 from "user")
+								  and not exists (select 1 from "user" where "role" = 'owner')
+								returning "key"
+							),
+							claim as (
+								insert into "instance_bootstrap" ("key")
+								select 'owner-bootstrap'
+								where not exists (select 1 from "user" where "role" = 'owner')
+								on conflict do nothing
+								returning "key"
+							)
+							select "key" from claim
+						`);
 
-					if (!existingUsers) {
-						return {
-							data: {
-								...user,
+						if (ownerRows.length > 0) {
+							return {
+								data: {
+									...user,
 								role: "owner",
 							},
 						};
-					}
+						}
 
-					if (!publicSignupsAllowed()) {
-						throw new APIError("FORBIDDEN", {
-							message: "Public sign-up is disabled for this instance.",
+						if (!existingUsers) {
+							throw new APIError("FORBIDDEN", {
+								message: "Instance bootstrap is already in progress. Please try again.",
+							});
+						}
+
+						if (!publicSignupsAllowed()) {
+							throw new APIError("FORBIDDEN", {
+								message: "Public sign-up is disabled for this instance.",
 						});
 					}
 

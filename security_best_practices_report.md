@@ -1,156 +1,204 @@
-# Security Best Practices Report
-
-Date: March 8, 2026
+# Dockroot Security And Reliability Review
 
 ## Executive Summary
 
-This codebase is not production-ready in its current form.
+Dockroot has a solid baseline in a few areas: server-side session checks are broadly present, Better Auth is configured with secure-cookie toggles, the app has baseline security headers, and the new deployment/env structure is much cleaner than before. The main production blockers are in runtime-control surfaces and bootstrap/state races, not in the basic auth scaffolding.
 
-The main issue is not syntax or build stability. `pnpm lint` passes and a production `pnpm build` succeeds when network access is available for Google Fonts. The blocking problems are architectural security gaps around remote control surfaces:
+The highest-risk issues are:
 
-1. the Socket.IO server exposes shell and log streaming without any authentication or authorization,
-2. public self-service sign-up is enabled in an app that grants host-level Docker control after login,
-3. tenant isolation is incomplete and currently leaks deployment data across accounts.
+1. command injection risk in container file operations
+2. plaintext agent bearer tokens plus full-table token lookup
+3. owner-assignment race on first-user creation
 
-I also confirmed at runtime that `GET /api/metrics` is publicly readable and the Socket.IO polling handshake is reachable without authentication from `http://127.0.0.1:3000`.
+Those three should be treated as release blockers for a production control plane.
 
-## Verification Performed
-
-- Static review of the Next.js app, shared auth package, DB schema, Docker/runtime helpers, agent routes, and GitHub integration
-- `pnpm lint` -> passed
-- `pnpm build` -> passed after allowing network access for `next/font`
-- Runtime HTTP checks against the local app:
-  - `GET /sign-in` returned `200`
-  - `GET /api/metrics` returned `200` with live infrastructure metrics
-  - `GET /socket.io/?EIO=4&transport=polling` returned a Socket.IO session handshake without authentication
+---
 
 ## Critical Findings
 
-### F-001
+### 1. Command injection in container file-management paths
 
+- Rule ID: NEXT-INJECT-001
 - Severity: Critical
-- Rule ID: NEXT-AUTHZ-001
-- Location: `server.mjs:42`, `server.mjs:52`, `server.mjs:87`, `server.mjs:172`
-- Evidence: The Socket.IO server accepts any connection, enables `cors.origin = true`, and never binds the socket to a validated user session before allowing `terminal:create`, `logs:subscribe`, or arbitrary room joins.
-- Impact: Any reachable client can open a host shell, attach to containers, stream logs, and subscribe to internal deployment rooms without first authenticating through the app. This is effectively remote command execution on the manager host.
-- Fix: Require session authentication during the Socket.IO handshake, reject unauthenticated sockets, and add per-event authorization checks so a socket can only access resources owned by the authenticated user.
-- Mitigation: Disable the shell and log streaming features entirely until the socket layer is protected.
-- False positive notes: Runtime confirmed on March 8, 2026: `GET /socket.io/?EIO=4&transport=polling` returned `200 OK` and a valid Engine.IO session payload without credentials.
+- Location:
+  - [apps/web/lib/platform/docker.ts](/Users/mannobeats/Documents/Software%20Development/dockroot/apps/web/lib/platform/docker.ts#L322)
+  - [apps/web/lib/platform/docker.ts](/Users/mannobeats/Documents/Software%20Development/dockroot/apps/web/lib/platform/docker.ts#L337)
+  - [apps/web/lib/platform/docker.ts](/Users/mannobeats/Documents/Software%20Development/dockroot/apps/web/lib/platform/docker.ts#L359)
+  - [packages/agent/src/index.mjs](/Users/mannobeats/Documents/Software%20Development/dockroot/packages/agent/src/index.mjs#L158)
+  - [packages/agent/src/index.mjs](/Users/mannobeats/Documents/Software%20Development/dockroot/packages/agent/src/index.mjs#L173)
+  - [packages/agent/src/index.mjs](/Users/mannobeats/Documents/Software%20Development/dockroot/packages/agent/src/index.mjs#L190)
+- Evidence:
+  - `mkdir -p "${parentPath.replaceAll('"', '\\"')}"`
+  - `mkdir -p "${targetDirectory.replaceAll('"', '\\"')}"`
+  - `rm -rf "${targetPath.replaceAll('"', '\\"')}"`
+- Impact:
+  User-controlled paths are interpolated into `sh -lc` strings. Double-quote escaping is not sufficient against shell expansion such as `$(...)` or backticks, so an attacker with container file access can potentially execute arbitrary shell commands inside the target container.
+- Fix:
+  Remove shell interpolation entirely for path-handling operations. Use `docker exec` with argv-safe forms, or pass the path through an environment variable and reference it as a quoted variable inside a constant script. Reject dangerous path patterns and normalize to a safe subset before execution.
+- Mitigation:
+  Disable container file write/delete features in production until this path is fixed.
 
-### F-002
-
-- Severity: Critical
-- Rule ID: NEXT-AUTHZ-002
-- Location: `packages/auth/src/index.ts:32`, `apps/web/app/(auth)/sign-up/page.tsx:23`, `apps/web/app/(dashboard)/actions.ts:205`, `apps/web/app/(dashboard)/actions.ts:231`, `apps/web/app/(dashboard)/actions.ts:247`, `apps/web/app/(dashboard)/actions.ts:279`, `apps/web/app/(dashboard)/actions.ts:310`
-- Evidence: Email/password auth is globally enabled, the public sign-up page calls `signUp.email(...)`, and authenticated users can then invoke host-level actions including container control, compose control, image pulls/removals, volume/network mutations, and deployments.
-- Impact: On any internet-exposed deployment, a new attacker can register an account and immediately gain effective infrastructure-admin capabilities over the Docker host.
-- Fix: Decide on an access model and enforce it. For a control-plane product like this, default to invite-only or bootstrap-admin-only registration, then add explicit roles such as `owner`, `admin`, and `viewer` with server-side authorization around every destructive action.
-- Mitigation: Remove or disable `/sign-up` in production until RBAC exists.
-- False positive notes: If this product is intentionally single-user, document that clearly and still disable self-service registration after bootstrap.
+---
 
 ## High Findings
 
-### F-003
+### 2. Agent registration and access tokens are stored in plaintext and matched by scanning the full agents table
 
+- Rule ID: NEXT-SECRETS-001
 - Severity: High
-- Rule ID: NEXT-DATA-001
-- Location: `apps/web/lib/platform.ts:185`, `apps/web/lib/platform.ts:404`, `apps/web/app/(dashboard)/dashboard/page.tsx:175`, `apps/web/app/(dashboard)/dashboard/activity/page.tsx:13`
-- Evidence: `getDashboardData()` fetches `recentDeployments` without filtering by `createdByUserId`, and `listDeployments()` returns the latest 25 deployments globally, then both dashboard pages render the associated stack names, environment names, status, summaries, and logs.
-- Impact: One account can see other tenants' deployment history and logs, which leaks stack names, environment names, operational status, and potentially secrets embedded in deployment output.
-- Fix: Filter deployments through stack ownership in the query layer, not in the page layer. The safest pattern is to join through `stacks` and require `stacks.createdByUserId = userId` for every deployment read.
-- Mitigation: Remove deployment logs from shared views until queries are tenant-safe.
-- False positive notes: The code currently filters some counters by user, which makes this inconsistency easy to miss during manual testing.
+- Location:
+  - [apps/web/lib/platform.ts](/Users/mannobeats/Documents/Software%20Development/dockroot/apps/web/lib/platform.ts#L637)
+  - [apps/web/lib/platform.ts](/Users/mannobeats/Documents/Software%20Development/dockroot/apps/web/lib/platform.ts#L1219)
+  - [apps/web/lib/platform.ts](/Users/mannobeats/Documents/Software%20Development/dockroot/apps/web/lib/platform.ts#L1245)
+  - [apps/web/lib/platform.ts](/Users/mannobeats/Documents/Software%20Development/dockroot/apps/web/lib/platform.ts#L1293)
+- Evidence:
+  - new agent environments persist `registrationToken` directly
+  - `registerAgent` persists `accessToken` directly
+  - token lookup loads all agents with `findMany()` and compares in application code
+- Impact:
+  A database leak or debug exposure immediately yields live agent credentials. Full-table token lookup also scales poorly and creates an avoidable hot path for every heartbeat, registration, and job-claim operation.
+- Fix:
+  Hash registration and access tokens before storing them, add indexed hash columns, and query by hash instead of loading all agents into memory. Keep plaintext tokens only at issuance time.
+- Mitigation:
+  Rotate all registration and access tokens after implementing hashed storage.
 
-### F-004
+### 3. First-user owner assignment is race-prone
 
+- Rule ID: NEXT-AUTHZ-001
 - Severity: High
-- Rule ID: NEXT-AUTHZ-003
-- Location: `apps/web/lib/platform.ts:564`, `apps/web/lib/platform.ts:797`
-- Evidence: `createStack()` and `createGitHubStack()` trust the caller-supplied `projectId` and `environmentId` and insert rows directly without verifying that both referenced resources belong to the authenticated user.
-- Impact: If an attacker learns another tenant's project or environment ID, they can create cross-tenant relationships, pollute another tenant's workspace, and potentially route deployments through an environment they do not own.
-- Fix: Look up the referenced project and environment by `(id, createdByUserId)` before inserting the stack, and reject mismatches.
-- Mitigation: Add database-level protection where possible, such as composite foreign-key patterns or application-enforced ownership invariants.
-- False positive notes: The current stack read paths often filter by `createdByUserId`, but the write path still allows invalid cross-tenant references to be created.
+- Location:
+  - [packages/auth/src/index.ts](/Users/mannobeats/Documents/Software%20Development/dockroot/packages/auth/src/index.ts#L66)
+- Evidence:
+  - the role decision uses `count()` of existing users in a `before create` hook
+  - there is no transaction or uniqueness invariant enforcing a single owner bootstrap
+- Impact:
+  Two concurrent first-user signups can both observe zero users and both become `owner`. That is a privilege-escalation race at instance bootstrap.
+- Fix:
+  Enforce owner bootstrap in a transaction or add a dedicated instance-bootstrap table/lock. At minimum, perform the first-owner decision under a DB constraint that guarantees only one row can win.
+- Mitigation:
+  Keep public signup off in production until first-user bootstrap is made atomic.
+
+### 4. Agent installer exposes registration tokens in URL paths and generated shell scripts
+
+- Rule ID: NEXT-SECRETS-001
+- Severity: High
+- Location:
+  - [apps/web/app/api/agent/install/[token]/route.ts](/Users/mannobeats/Documents/Software%20Development/dockroot/apps/web/app/api/agent/install/[token]/route.ts#L6)
+  - [apps/web/app/api/agent/install/[token]/route.ts](/Users/mannobeats/Documents/Software%20Development/dockroot/apps/web/app/api/agent/install/[token]/route.ts#L24)
+  - [apps/web/app/api/agent/install/[token]/route.ts](/Users/mannobeats/Documents/Software%20Development/dockroot/apps/web/app/api/agent/install/[token]/route.ts#L43)
+- Evidence:
+  - registration token is accepted as a URL path segment
+  - the route returns a shell script that embeds the token directly
+- Impact:
+  URL-carried bearer secrets can leak into browser history, reverse-proxy logs, analytics, terminal scrollback, and screenshots. In a control-plane product, that is an unnecessary credential-exposure pattern.
+- Fix:
+  Replace token-in-URL delivery with an authenticated one-time installer download or an authenticated “generate install command” POST that returns a short-lived secret. Do not use GET path parameters for bearer-style credentials.
+- Mitigation:
+  Document token rotation and make rotation one-click in the UI.
+
+---
 
 ## Medium Findings
 
-### F-005
+### 5. Custom GitHub install cookies are not marked `Secure`
 
+- Rule ID: NEXT-COOKIE-001
 - Severity: Medium
-- Rule ID: NEXT-INFO-001
-- Location: `apps/web/app/api/metrics/route.ts:6`
-- Evidence: The metrics route returns the full Prometheus registry without checking a session or bearer token.
-- Impact: Anonymous callers can enumerate project counts, deployment counts by status, container/image/volume/network totals, memory usage, process stats, and Node.js runtime telemetry. This materially improves recon for attackers and leaks internal platform state.
-- Fix: Protect `/api/metrics` behind a dedicated metrics token, private network boundary, or authenticated admin check.
-- Mitigation: If Prometheus scraping is required, expose a separate private bind address or reverse-proxy ACL for metrics only.
-- False positive notes: Runtime confirmed on March 8, 2026: `GET /api/metrics` returned `200 OK` with live metrics and no authentication.
+- Location:
+  - [apps/web/app/api/github/install/route.ts](/Users/mannobeats/Documents/Software%20Development/dockroot/apps/web/app/api/github/install/route.ts#L27)
+  - [apps/web/app/api/github/install/route.ts](/Users/mannobeats/Documents/Software%20Development/dockroot/apps/web/app/api/github/install/route.ts#L33)
+- Evidence:
+  - custom cookies are set with `httpOnly` and `sameSite`, but not `secure`
+- Impact:
+  On HTTPS production deployments, these cookies are still allowed over non-secure transport if a misconfiguration or mixed environment exists. That is weaker than the rest of the session posture.
+- Fix:
+  Set `secure` conditionally using the same production/TLS logic used for auth cookies.
 
-### F-006
+### 6. Current CSP is too minimal for a control-plane UI
 
+- Rule ID: NEXT-HEADERS-001
 - Severity: Medium
-- Rule ID: NEXT-REDIRECT-001
-- Location: `apps/web/app/api/github/install/route.ts:20`, `apps/web/app/api/github/callback/route.ts:26`, `apps/web/app/api/github/callback/route.ts:45`
-- Evidence: `redirectTo` is accepted from the query string, signed, stored in a cookie, and then passed to `new URL(...)` during the callback redirect without constraining it to an internal path.
-- Impact: An attacker can send a victim through the GitHub install flow and bounce them to an arbitrary external URL after completion, which enables phishing and trust abuse.
-- Fix: Only allow internal relative paths that start with `/dashboard` or another explicit allowlist.
-- Mitigation: If cross-origin redirects are ever required, use a strict allowlist of exact origins.
-- False positive notes: State signing protects integrity, not destination safety.
+- Location:
+  - [apps/web/next.config.ts](/Users/mannobeats/Documents/Software%20Development/dockroot/apps/web/next.config.ts#L5)
+- Evidence:
+  - CSP only includes `base-uri`, `form-action`, `frame-ancestors`, and `object-src`
+  - there is no `default-src`, `script-src`, `style-src`, `img-src`, or `connect-src`
+- Impact:
+  The current header helps, but it does not materially constrain script, connection, or asset sources. That weakens XSS defense-in-depth for a platform that exposes terminals, logs, GitHub integration, and runtime control.
+- Fix:
+  Move to a real CSP baseline with explicit `default-src 'self'` and scoped allowances for script/style/connect/image/font sources actually required by the app.
 
-### F-007
+### 7. Error surfaces return raw backend and runtime messages to clients
 
+- Rule ID: NEXT-ERR-001
 - Severity: Medium
-- Rule ID: NEXT-SECRETS-003
-- Location: `packages/db/src/schema/platform.ts:80`, `packages/db/src/schema/platform.ts:81`, `apps/web/lib/platform.ts:945`, `apps/web/lib/platform.ts:980`
-- Evidence: Agent registration tokens and long-lived access tokens are stored and looked up in plaintext.
-- Impact: A database leak immediately becomes agent compromise because the stored token is the bearer credential. There is no additional cryptographic boundary.
-- Fix: Store a hash of each token, compare via a derived hash during lookup, and rotate tokens on re-registration.
-- Mitigation: Reduce token lifetime and add explicit revocation/rotation support.
-- False positive notes: Long random tokens are good for entropy, but they still should not be stored as reusable secrets in cleartext.
+- Location:
+  - [apps/web/app/api/runtime/terminal/route.ts](/Users/mannobeats/Documents/Software%20Development/dockroot/apps/web/app/api/runtime/terminal/route.ts#L49)
+  - [apps/web/app/api/containers/[containerId]/files/route.ts](/Users/mannobeats/Documents/Software%20Development/dockroot/apps/web/app/api/containers/[containerId]/files/route.ts#L33)
+  - [apps/web/lib/environment-runtime.ts](/Users/mannobeats/Documents/Software%20Development/dockroot/apps/web/lib/environment-runtime.ts#L78)
+- Evidence:
+  - route handlers and agent bridges often return raw `error.message` or raw agent response text
+- Impact:
+  Internal command failures, filesystem paths, proxy details, or remote agent messages can be reflected directly to the UI. That increases information leakage and makes future hardening harder.
+- Fix:
+  Normalize external API errors to controlled user-safe messages and log detailed failures only on the server.
 
-## Additional Implementation Risks
+---
 
-### R-001
+## Reliability / Consistency Findings
 
-- Severity: Medium
-- Location: `apps/web/app/api/containers/[containerId]/files/route.ts:24`, `apps/web/lib/platform/docker.ts:322`, `apps/web/lib/platform/docker.ts:359`
-- Evidence: Any authenticated session can write, upload, or delete arbitrary paths in any named container once the container ID is known.
-- Impact: This is consistent with the product's current "all logged-in users are operators" model, but it becomes a major privilege-escalation path in any multi-user deployment.
-- Recommendation: When RBAC is added, scope container file access to resources reachable through owned stacks/environments and keep explicit audit logs for file mutations.
+### 8. Default local environment bootstrap was race-prone
 
-### R-002
+- Rule ID: REL-BOOT-001
+- Severity: High
+- Location:
+  - [apps/web/lib/platform.ts](/Users/mannobeats/Documents/Software%20Development/dockroot/apps/web/lib/platform.ts#L206)
+- Evidence:
+  - duplicate insert attempts on `ensureDefaultLocalEnvironment` caused first-load failures after signup
+- Impact:
+  New users could see a runtime error on first dashboard load even though refresh would succeed.
+- Status:
+  Fixed in the current worktree by making the creation path idempotent and conflict-safe.
 
-- Severity: Low
-- Location: `apps/web/app/api/github/callback/route.ts:15`
-- Evidence: The callback parses auth cookies by applying a regex to the raw `cookie` header instead of using the framework cookie API.
-- Impact: This is brittle and easier to get wrong as cookie handling evolves.
-- Recommendation: Switch to `request.cookies.get(...)` or `cookies()` so decoding and parsing stay framework-managed.
+---
 
-## Remediation Plan
+## Recommended Remediation Plan
 
-### Phase 1: Block Internet-Exposed Abuse Immediately
+### Phase 1: Release Blockers
 
-1. Disable public sign-up in production.
-2. Remove or hard-disable shell, live logs, and container file mutation features until socket and action authorization is complete.
-3. Put `/api/metrics` behind a private boundary or admin token.
+1. Remove shell interpolation from all container file operations in both manager and agent runtimes.
+2. Hash and index agent registration/access tokens; eliminate full-table token scans.
+3. Make first-owner bootstrap atomic and impossible to win twice.
+4. Replace token-in-URL installer flow with authenticated short-lived install issuance.
 
-### Phase 2: Establish Real Authorization
+### Phase 2: Production Hardening
 
-1. Add a role model to the user table and enforce it in server actions, route handlers, and socket events.
-2. Authenticate Socket.IO handshakes from the Better Auth session cookie.
-3. Require resource ownership checks for every stack, project, environment, deployment, and container operation.
+1. Strengthen CSP to a real allowlist policy.
+2. Mark custom OAuth/GitHub cookies as `Secure` in production.
+3. Normalize error messages returned from runtime and agent APIs.
+4. Add request-size and rate limits to high-risk runtime endpoints and socket actions.
 
-### Phase 3: Repair Tenant Isolation
+### Phase 3: Consistency And Operability
 
-1. Fix every deployment query to join through stack ownership.
-2. Review all list/detail functions for missing `createdByUserId` predicates.
-3. Add regression tests for cross-account reads and writes.
+1. Add concurrency-safe patterns to other bootstrap/default-resource flows, not just local environments.
+2. Add security-focused integration tests for:
+   - first-user bootstrap
+   - agent registration
+   - runtime terminal authorization
+   - container file operations with malicious path payloads
+3. Add a production readiness checklist covering:
+   - TLS/proxy requirements
+   - secure cookie settings
+   - token rotation
+   - disabled public signup after owner bootstrap
 
-### Phase 4: Secret Hygiene and Operational Hardening
+---
 
-1. Hash agent tokens at rest and add token rotation.
-2. Add audit logging for destructive runtime actions.
-3. Move runtime admin endpoints behind rate limiting and, where appropriate, CSRF-resistant POST patterns.
+## Suggested Next Fix Order
 
-## Overall Readiness
+1. Fix command injection in file-management paths.
+2. Fix agent token storage and lookup.
+3. Fix owner-bootstrap race.
+4. Fix installer token delivery.
+5. Harden CSP and cookie flags.
 
-The underlying app compiles and the UI surface appears mostly coherent from a static perspective, but the control plane is still operating with a "logged in means root-equivalent" trust model and an unauthenticated websocket backdoor. Until those issues are fixed, this should not be deployed to production or exposed to untrusted networks.

@@ -78,8 +78,8 @@ export default async function EnvironmentDetailPage({
 				<div className="space-y-4">
 					<Panel padding="sm" className="flex items-center justify-between">
 						<div>
-							<p className="text-sm font-semibold">Registration token</p>
-							<p className="mt-0.5 text-xs text-muted">Stable until you rotate it manually.</p>
+							<p className="text-sm font-semibold">Install token</p>
+							<p className="mt-0.5 text-xs text-muted">A fresh install token is generated when these commands are rendered.</p>
 						</div>
 						<form action={rotateAgentRegistrationTokenAction}>
 							<input type="hidden" name="environmentId" value={environment.id} />

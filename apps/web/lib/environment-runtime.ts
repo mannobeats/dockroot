@@ -76,8 +76,11 @@ async function fetchAgent(
 	});
 
 	if (!response.ok) {
-		const message = await response.text();
-		throw new Error(message || `Agent request failed for ${path}`);
+		throw new Error(
+			response.status === 401 || response.status === 403
+				? "Agent request was not authorized."
+				: `Agent request failed for ${path}.`,
+		);
 	}
 
 	return response;

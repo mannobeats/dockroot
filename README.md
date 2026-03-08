@@ -176,7 +176,7 @@ Useful commands:
 | `pnpm lint:fix` | Apply Biome fixes |
 | `pnpm db:generate` | Generate Drizzle migrations |
 | `pnpm db:migrate` | Run Drizzle migrations |
-| `pnpm db:push` | Push schema directly to the local development database |
+| `pnpm db:push` | Legacy schema sync for exceptional local recovery only |
 | `pnpm db:studio` | Open Drizzle Studio |
 
 ## Security Notes

@@ -1,17 +1,20 @@
 import { NextResponse } from "next/server";
-import { getAgentInstallContext } from "@/lib/platform";
+import { requireUserSession } from "@/lib/authorization";
+import { getEnvironmentById, getInstallCommand } from "@/lib/platform";
 
 export const runtime = "nodejs";
 
-export async function GET(_request: Request, { params }: { params: Promise<{ token: string }> }) {
-	const { token } = await params;
-	const context = await getAgentInstallContext(token);
+export async function GET(request: Request, { params }: { params: Promise<{ token: string }> }) {
+	const auth = await requireUserSession(request.headers);
+	const { token: environmentId } = await params;
+	const environment = await getEnvironmentById(environmentId, auth.userId);
 
-	if (!context) {
-		return new NextResponse("Unknown registration token", { status: 404 });
+	if (!environment?.agent[0]) {
+		return new NextResponse("Environment not found", { status: 404 });
 	}
 
 	const managerUrl = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
+	const installCommand = await getInstallCommand(environment.id, auth.userId);
 
 	const script = `#!/usr/bin/env bash
 set -euo pipefail
@@ -22,7 +25,7 @@ if [ "\${EUID}" -ne 0 ]; then
 fi
 
 MANAGER_URL="${managerUrl}"
-REGISTRATION_TOKEN="${context.registrationToken}"
+REGISTRATION_TOKEN="${installCommand.registrationToken}"
 INSTALL_ROOT="/opt/dockroot-agent"
 BIN_PATH="/usr/local/bin/dockroot-agent"
 CONFIG_PATH="\${INSTALL_ROOT}/agent.env"
@@ -42,7 +45,7 @@ DOCKER_VERSION="$(docker version --format '{{.Server.Version}}' 2>/dev/null || e
 
 REGISTER_RESPONSE="$(curl -fsSL -X POST "\${MANAGER_URL}/api/agent/register" \\
   -H 'content-type: application/json' \\
-  -d "{\\"registrationToken\\":\\"${context.registrationToken}\\",\\"hostname\\":\\"\${HOSTNAME_VALUE}\\",\\"operatingSystem\\":\\"\${OS_VALUE}\\",\\"architecture\\":\\"\${ARCH_VALUE}\\",\\"dockerVersion\\":\\"\${DOCKER_VERSION}\\"}")"
+  -d "{\\"registrationToken\\":\\"${installCommand.registrationToken}\\",\\"hostname\\":\\"\${HOSTNAME_VALUE}\\",\\"operatingSystem\\":\\"\${OS_VALUE}\\",\\"architecture\\":\\"\${ARCH_VALUE}\\",\\"dockerVersion\\":\\"\${DOCKER_VERSION}\\"}")"
 
 printf '%s\n' "\${REGISTER_RESPONSE}" > "\${CONFIG_PATH}"
 echo "REGISTRATION_TOKEN=\${REGISTRATION_TOKEN}" >> "\${CONFIG_PATH}"
@@ -137,14 +140,14 @@ SERVICE
 systemctl daemon-reload
 systemctl enable --now dockroot-agent.service
 
-echo "Dockroot agent installed for environment: ${context.environment.name}"
+echo "Dockroot agent installed for environment: ${environment.name}"
 echo "Manager URL: \${MANAGER_URL}"
 `;
 
 	return new NextResponse(script, {
-		headers: {
-			"content-type": "text/x-shellscript; charset=utf-8",
-			"content-disposition": `inline; filename="dockroot-agent-install-${context.environment.slug}.sh"`,
-		},
-	});
+			headers: {
+				"content-type": "text/x-shellscript; charset=utf-8",
+				"content-disposition": `inline; filename="dockroot-agent-install-${environment.slug}.sh"`,
+			},
+		});
 }

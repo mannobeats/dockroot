@@ -31,7 +31,7 @@ help:
 	@printf "  make infra-down   Stop local Docker infra\n"
 	@printf "  make postgres-up  Start only PostgreSQL in Docker\n"
 	@printf "  make postgres-down Stop only PostgreSQL container\n"
-	@printf "  make db-push      Push schema to the database\n"
+	@printf "  make db-push      Legacy schema sync (avoid for normal workflow)\n"
 	@printf "  make db-generate  Generate Drizzle migrations\n"
 	@printf "  make db-migrate   Run Drizzle migrations\n"
 	@printf "  make db-studio    Open Drizzle Studio\n"
@@ -82,10 +82,10 @@ db-migrate: env-check-local
 db-studio: env-check-local
 	$(PNPM) run db:studio
 
-dev-lite: dev-prepare postgres-up
+dev-lite: dev-prepare env-local env-check-local postgres-up db-migrate
 	$(PNPM) dev
 
-dev-full: dev-prepare env-local install env-check-local infra-up db-push
+dev-full: dev-prepare env-local install env-check-local infra-up db-migrate
 	$(PNPM) dev
 
 dev: dev-full

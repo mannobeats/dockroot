@@ -5,6 +5,12 @@ import { verifyGitHubAppState } from "@/lib/github-app";
 import { syncGitHubInstallation } from "@/lib/platform";
 import { getServerSession } from "@/lib/session";
 
+function useSecureCookies() {
+	return process.env.SESSION_COOKIE_SECURE === undefined
+		? process.env.NODE_ENV === "production"
+		: process.env.SESSION_COOKIE_SECURE === "true";
+}
+
 export async function GET(request: Request) {
 	const session = await getServerSession();
 	if (!session?.user.id) {
@@ -46,12 +52,14 @@ export async function GET(request: Request) {
 	response.cookies.set("dockroot_github_redirect_to", "", {
 		httpOnly: true,
 		sameSite: "lax",
+		secure: useSecureCookies(),
 		path: "/",
 		maxAge: 0,
 	});
 	response.cookies.set("dockroot_github_user_id", "", {
 		httpOnly: true,
 		sameSite: "lax",
+		secure: useSecureCookies(),
 		path: "/",
 		maxAge: 0,
 	});

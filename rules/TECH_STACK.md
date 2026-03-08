@@ -62,9 +62,9 @@ pnpm build             # Production build
 pnpm lint              # Check with Biome
 pnpm lint:fix          # Auto-fix with Biome
 pnpm format            # Format with Biome
-pnpm run db:push       # Push schema to the local development database
 pnpm run db:generate   # Generate migrations
 pnpm run db:migrate    # Run migrations
+pnpm run db:push       # Legacy schema sync for exceptional local recovery only
 pnpm run db:studio     # Open Drizzle Studio
 ```
 

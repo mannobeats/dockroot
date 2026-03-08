@@ -32,7 +32,7 @@ export async function GET(
 		return NextResponse.json(result.browser);
 	} catch (error) {
 		return NextResponse.json(
-			{ error: error instanceof Error ? error.message : "Unable to browse files." },
+			{ error: "Unable to browse files." },
 			{ status: 500 },
 		);
 	}
@@ -68,7 +68,7 @@ export async function PUT(
 		return NextResponse.json({ ok: result.ok, output: result.stderr || result.stdout });
 	} catch (error) {
 		return NextResponse.json(
-			{ error: error instanceof Error ? error.message : "Unable to save file." },
+			{ error: "Unable to save file." },
 			{ status: 500 },
 		);
 	}
@@ -108,7 +108,7 @@ export async function POST(
 		return NextResponse.json({ ok: result.ok, output: result.stderr || result.stdout });
 	} catch (error) {
 		return NextResponse.json(
-			{ error: error instanceof Error ? error.message : "Unable to upload file." },
+			{ error: "Unable to upload file." },
 			{ status: 500 },
 		);
 	}
@@ -143,7 +143,7 @@ export async function DELETE(
 		return NextResponse.json({ ok: result.ok, output: result.stderr || result.stdout });
 	} catch (error) {
 		return NextResponse.json(
-			{ error: error instanceof Error ? error.message : "Unable to delete path." },
+			{ error: "Unable to delete path." },
 			{ status: 500 },
 		);
 	}
