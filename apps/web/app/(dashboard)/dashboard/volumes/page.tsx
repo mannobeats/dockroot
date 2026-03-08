@@ -16,15 +16,17 @@ export default async function VolumesPage({
 }) {
 	const session = await requirePrivilegedPageSession();
 	const params = await searchParams;
-	const environment = await resolveRuntimeEnvironment(session.user.id, params.environment);
+	const environment = await resolveRuntimeEnvironment(session.userId, params.environment);
 	const query = (params.q || "").toLowerCase();
-	const { volumes } = await listVolumesForEnvironment(session.user.id, environment.id);
-	const filtered = volumes.filter((volume) =>
+	const { volumes } = await listVolumesForEnvironment(session.userId, environment.id);
+	const filtered = volumes.filter((volume: Record<string, string>) =>
 		!query
 			? true
 			: `${volume.Name} ${volume.Driver} ${volume.Mountpoint || ""}`.toLowerCase().includes(query),
 	);
-	const localCount = filtered.filter((volume) => volume.Driver === "local").length;
+	const localCount = filtered.filter(
+		(volume: Record<string, string>) => volume.Driver === "local",
+	).length;
 
 	return (
 		<div className="space-y-6">
@@ -113,7 +115,7 @@ export default async function VolumesPage({
 						</thead>
 						<tbody className="divide-y divide-default/10 bg-surface/40 text-sm">
 							{filtered.length ? (
-								filtered.map((volume) => (
+								filtered.map((volume: Record<string, string>) => (
 									<tr key={`${volume.Name}-${volume.Driver}`}>
 										<td className="px-4 py-3 font-medium">
 											<Link

@@ -16,15 +16,17 @@ export default async function NetworksPage({
 }) {
 	const session = await requirePrivilegedPageSession();
 	const params = await searchParams;
-	const environment = await resolveRuntimeEnvironment(session.user.id, params.environment);
+	const environment = await resolveRuntimeEnvironment(session.userId, params.environment);
 	const query = (params.q || "").toLowerCase();
-	const { networks } = await listNetworksForEnvironment(session.user.id, environment.id);
-	const filtered = networks.filter((network) =>
+	const { networks } = await listNetworksForEnvironment(session.userId, environment.id);
+	const filtered = networks.filter((network: Record<string, string>) =>
 		!query
 			? true
 			: `${network.Name} ${network.Driver} ${network.Scope}`.toLowerCase().includes(query),
 	);
-	const bridgeCount = filtered.filter((network) => network.Driver === "bridge").length;
+	const bridgeCount = filtered.filter(
+		(network: Record<string, string>) => network.Driver === "bridge",
+	).length;
 
 	return (
 		<div className="space-y-6">
@@ -116,7 +118,7 @@ export default async function NetworksPage({
 						</thead>
 						<tbody className="divide-y divide-default/10 bg-surface/40 text-sm">
 							{filtered.length ? (
-								filtered.map((network) => (
+								filtered.map((network: Record<string, string>) => (
 									<tr key={`${network.ID}-${network.Name}`}>
 										<td className="px-4 py-3 font-medium">
 											<Link

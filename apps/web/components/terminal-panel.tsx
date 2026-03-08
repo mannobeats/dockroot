@@ -9,15 +9,21 @@ export function TerminalPanel({
 	target,
 	containerId,
 	label,
+	transport = "local",
+	environmentId,
 }: {
 	target: "host" | "container";
 	containerId?: string;
 	label: string;
+	transport?: "local" | "remote";
+	environmentId?: string;
 }) {
 	const terminalRef = useRef<HTMLDivElement | null>(null);
 	const terminalInstanceRef = useRef<{ dispose: () => void } | null>(null);
 	const fitRef = useRef<{ fit: () => void } | null>(null);
 	const sessionIdRef = useRef<string | null>(null);
+	const cursorRef = useRef(0);
+	const pollTimerRef = useRef<number | null>(null);
 	const [status, setStatus] = useState("Connecting...");
 
 	useEffect(() => {
@@ -57,6 +63,153 @@ export function TerminalPanel({
 			terminal.focus();
 			terminalInstanceRef.current = terminal;
 			fitRef.current = fitAddon;
+			cursorRef.current = 0;
+
+			const resizeObserver = new ResizeObserver(() => {
+				fitAddon.fit();
+				if (transport === "local" && sessionIdRef.current) {
+					const socket = getSocket();
+					socket.emit("terminal:resize", {
+						sessionId: sessionIdRef.current,
+						cols: terminal.cols,
+						rows: terminal.rows,
+					});
+				}
+				if (transport === "remote" && sessionIdRef.current && environmentId) {
+					void fetch(
+						`/api/runtime/terminal/${encodeURIComponent(sessionIdRef.current)}?environmentId=${encodeURIComponent(environmentId)}`,
+						{
+							method: "POST",
+							headers: {
+								"content-type": "application/json",
+							},
+							body: JSON.stringify({
+								type: "resize",
+								cols: terminal.cols,
+								rows: terminal.rows,
+							}),
+						},
+					);
+				}
+			});
+			resizeObserver.observe(terminalRef.current);
+
+			if (transport === "remote" && environmentId) {
+				const createResponse = await fetch("/api/runtime/terminal", {
+					method: "POST",
+					headers: {
+						"content-type": "application/json",
+					},
+					body: JSON.stringify({
+						target,
+						containerId,
+						environmentId,
+						cols: terminal.cols,
+						rows: terminal.rows,
+					}),
+				});
+				const createPayload = (await createResponse.json()) as {
+					sessionId?: string;
+					error?: string;
+				};
+
+				if (!createResponse.ok || !createPayload.sessionId) {
+					setStatus(createPayload.error || "Unable to start shell session.");
+					terminal.writeln(`\r\n${createPayload.error || "Unable to start shell session."}`);
+					resizeObserver.disconnect();
+					return;
+				}
+
+				sessionIdRef.current = createPayload.sessionId;
+				setStatus(`Connected to ${label}`);
+
+				const disposable = terminal.onData((data) => {
+					if (!sessionIdRef.current || !environmentId) {
+						return;
+					}
+
+					void fetch(
+						`/api/runtime/terminal/${encodeURIComponent(sessionIdRef.current)}?environmentId=${encodeURIComponent(environmentId)}`,
+						{
+							method: "POST",
+							headers: {
+								"content-type": "application/json",
+							},
+							body: JSON.stringify({
+								type: "input",
+								data,
+							}),
+						},
+					);
+				});
+
+				const poll = async () => {
+					if (!sessionIdRef.current || !environmentId) {
+						return;
+					}
+
+					try {
+						const response = await fetch(
+							`/api/runtime/terminal/${encodeURIComponent(sessionIdRef.current)}?environmentId=${encodeURIComponent(environmentId)}&cursor=${cursorRef.current}`,
+							{
+								cache: "no-store",
+							},
+						);
+						const payload = (await response.json()) as {
+							chunks?: string[];
+							cursor?: number;
+							closed?: boolean;
+							exitCode?: number;
+							error?: string;
+						};
+
+						if (!response.ok) {
+							setStatus(payload.error || "Remote shell disconnected.");
+							return;
+						}
+
+						for (const chunk of payload.chunks || []) {
+							terminal.write(chunk);
+						}
+						cursorRef.current = Number(payload.cursor || cursorRef.current);
+
+						if (payload.closed) {
+							setStatus(`Session closed (${payload.exitCode ?? 0})`);
+							terminal.writeln(`\r\nSession closed (${payload.exitCode ?? 0}).`);
+							return;
+						}
+
+						pollTimerRef.current = window.setTimeout(poll, 350);
+					} catch {
+						setStatus("Remote shell disconnected.");
+					}
+				};
+
+				pollTimerRef.current = window.setTimeout(poll, 100);
+
+				cleanup = () => {
+					disposable.dispose();
+					resizeObserver.disconnect();
+					if (pollTimerRef.current) {
+						window.clearTimeout(pollTimerRef.current);
+						pollTimerRef.current = null;
+					}
+					if (sessionIdRef.current && environmentId) {
+						void fetch(
+							`/api/runtime/terminal/${encodeURIComponent(sessionIdRef.current)}?environmentId=${encodeURIComponent(environmentId)}`,
+							{
+								method: "DELETE",
+							},
+						);
+					}
+					terminal.dispose();
+					terminalInstanceRef.current = null;
+					fitRef.current = null;
+					sessionIdRef.current = null;
+				};
+
+				return;
+			}
 
 			const socket = getSocket();
 
@@ -106,18 +259,6 @@ export function TerminalPanel({
 			socket.on("terminal:data", onData);
 			socket.on("terminal:exit", onExit);
 
-			const resizeObserver = new ResizeObserver(() => {
-				fitAddon.fit();
-				if (sessionIdRef.current) {
-					socket.emit("terminal:resize", {
-						sessionId: sessionIdRef.current,
-						cols: terminal.cols,
-						rows: terminal.rows,
-					});
-				}
-			});
-			resizeObserver.observe(terminalRef.current);
-
 			cleanup = () => {
 				disposable.dispose();
 				resizeObserver.disconnect();
@@ -139,7 +280,7 @@ export function TerminalPanel({
 			disposed = true;
 			cleanup();
 		};
-	}, [containerId, label, target]);
+	}, [containerId, environmentId, label, target, transport]);
 
 	return (
 		<div className="rounded-2xl border border-default/15 bg-surface p-4">

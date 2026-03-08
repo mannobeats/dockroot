@@ -4,9 +4,11 @@ import { db, environments } from "@dockroot/db";
 import { and, eq } from "drizzle-orm";
 import { ensureDefaultLocalEnvironment } from "@/lib/platform";
 import {
+	browseContainerPath,
 	controlContainer,
 	createNetwork,
 	createVolume,
+	deleteContainerPath,
 	getContainerDetails,
 	getContainerLogs,
 	getImageDetails,
@@ -24,6 +26,8 @@ import {
 	removeImage,
 	removeNetwork,
 	removeVolume,
+	uploadContainerFile,
+	writeContainerFile,
 } from "@/lib/platform/docker";
 
 async function getEnvironmentRecord(environmentId: string | undefined, userId: string) {
@@ -40,7 +44,12 @@ async function getEnvironmentRecord(environmentId: string | undefined, userId: s
 		}
 	}
 
-	return ensureDefaultLocalEnvironment(userId);
+	const fallback = await ensureDefaultLocalEnvironment(userId);
+	if (!fallback) {
+		throw new Error("No runtime environment is available for this user.");
+	}
+
+	return fallback;
 }
 
 async function fetchAgent(
@@ -184,6 +193,196 @@ export async function controlContainerForEnvironment(input: {
 			"content-type": "application/json",
 		},
 		body: JSON.stringify({ action: input.action }),
+	});
+}
+
+export async function browseContainerPathForEnvironment(
+	userId: string,
+	containerId: string,
+	targetPath: string,
+	environmentId?: string,
+) {
+	const environment = await getEnvironmentRecord(environmentId, userId);
+	if (environment.kind === "local") {
+		return {
+			environment,
+			browser: await browseContainerPath(containerId, targetPath),
+		};
+	}
+
+	return {
+		environment,
+		browser: await fetchAgentJson(
+			environment,
+			`/containers/${encodeURIComponent(containerId)}/files?path=${encodeURIComponent(targetPath)}`,
+		),
+	};
+}
+
+export async function writeContainerFileForEnvironment(
+	userId: string,
+	containerId: string,
+	targetPath: string,
+	content: string,
+	environmentId?: string,
+) {
+	const environment = await getEnvironmentRecord(environmentId, userId);
+	if (environment.kind === "local") {
+		return writeContainerFile(containerId, targetPath, content);
+	}
+
+	return fetchAgentJson(environment, `/containers/${encodeURIComponent(containerId)}/files`, {
+		method: "PUT",
+		headers: {
+			"content-type": "application/json",
+		},
+		body: JSON.stringify({ path: targetPath, content }),
+	});
+}
+
+export async function uploadContainerFileForEnvironment(
+	userId: string,
+	containerId: string,
+	targetDirectory: string,
+	fileName: string,
+	content: Buffer,
+	environmentId?: string,
+) {
+	const environment = await getEnvironmentRecord(environmentId, userId);
+	if (environment.kind === "local") {
+		return uploadContainerFile(containerId, targetDirectory, fileName, content);
+	}
+
+	return fetchAgentJson(environment, `/containers/${encodeURIComponent(containerId)}/files`, {
+		method: "POST",
+		headers: {
+			"content-type": "application/json",
+		},
+		body: JSON.stringify({
+			path: targetDirectory,
+			fileName,
+			contentBase64: content.toString("base64"),
+		}),
+	});
+}
+
+export async function deleteContainerPathForEnvironment(
+	userId: string,
+	containerId: string,
+	targetPath: string,
+	environmentId?: string,
+) {
+	const environment = await getEnvironmentRecord(environmentId, userId);
+	if (environment.kind === "local") {
+		return deleteContainerPath(containerId, targetPath);
+	}
+
+	return fetchAgentJson(environment, `/containers/${encodeURIComponent(containerId)}/files`, {
+		method: "DELETE",
+		headers: {
+			"content-type": "application/json",
+		},
+		body: JSON.stringify({ path: targetPath }),
+	});
+}
+
+export async function createTerminalSessionForEnvironment(input: {
+	userId: string;
+	environmentId?: string;
+	target: "host" | "container";
+	containerId?: string;
+	cols?: number;
+	rows?: number;
+}) {
+	const environment = await getEnvironmentRecord(input.environmentId, input.userId);
+	if (environment.kind === "local") {
+		throw new Error("Local terminal sessions are handled through the manager socket.");
+	}
+
+	return fetchAgentJson(environment, "/terminal/sessions", {
+		method: "POST",
+		headers: {
+			"content-type": "application/json",
+		},
+		body: JSON.stringify({
+			target: input.target,
+			containerId: input.containerId,
+			cols: input.cols,
+			rows: input.rows,
+		}),
+	});
+}
+
+export async function readTerminalSessionForEnvironment(
+	userId: string,
+	sessionId: string,
+	environmentId?: string,
+	cursor?: number,
+) {
+	const environment = await getEnvironmentRecord(environmentId, userId);
+	if (environment.kind === "local") {
+		throw new Error("Local terminal sessions are handled through the manager socket.");
+	}
+
+	return fetchAgentJson(
+		environment,
+		`/terminal/sessions/${encodeURIComponent(sessionId)}?cursor=${Number(cursor || 0)}`,
+	);
+}
+
+export async function writeTerminalInputForEnvironment(input: {
+	userId: string;
+	environmentId?: string;
+	sessionId: string;
+	data: string;
+}) {
+	const environment = await getEnvironmentRecord(input.environmentId, input.userId);
+	if (environment.kind === "local") {
+		throw new Error("Local terminal sessions are handled through the manager socket.");
+	}
+
+	return fetchAgentJson(environment, `/terminal/sessions/${encodeURIComponent(input.sessionId)}`, {
+		method: "POST",
+		headers: {
+			"content-type": "application/json",
+		},
+		body: JSON.stringify({ type: "input", data: input.data }),
+	});
+}
+
+export async function resizeTerminalSessionForEnvironment(input: {
+	userId: string;
+	environmentId?: string;
+	sessionId: string;
+	cols: number;
+	rows: number;
+}) {
+	const environment = await getEnvironmentRecord(input.environmentId, input.userId);
+	if (environment.kind === "local") {
+		throw new Error("Local terminal sessions are handled through the manager socket.");
+	}
+
+	return fetchAgentJson(environment, `/terminal/sessions/${encodeURIComponent(input.sessionId)}`, {
+		method: "POST",
+		headers: {
+			"content-type": "application/json",
+		},
+		body: JSON.stringify({ type: "resize", cols: input.cols, rows: input.rows }),
+	});
+}
+
+export async function closeTerminalSessionForEnvironment(
+	userId: string,
+	sessionId: string,
+	environmentId?: string,
+) {
+	const environment = await getEnvironmentRecord(environmentId, userId);
+	if (environment.kind === "local") {
+		throw new Error("Local terminal sessions are handled through the manager socket.");
+	}
+
+	return fetchAgentJson(environment, `/terminal/sessions/${encodeURIComponent(sessionId)}`, {
+		method: "DELETE",
 	});
 }
 

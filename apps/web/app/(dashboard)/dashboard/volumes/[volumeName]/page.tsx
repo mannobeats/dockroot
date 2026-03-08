@@ -18,9 +18,9 @@ export default async function VolumeDetailPage({
 	const { volumeName } = await params;
 	const query = await searchParams;
 	const decodedName = decodeURIComponent(volumeName);
-	const environment = await resolveRuntimeEnvironment(session.user.id, query.environment);
+	const environment = await resolveRuntimeEnvironment(session.userId, query.environment);
 	const { volume } = await getVolumeDetailsForEnvironment(
-		session.user.id,
+		session.userId,
 		decodedName,
 		environment.id,
 	);

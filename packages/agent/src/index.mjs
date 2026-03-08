@@ -1,5 +1,5 @@
-import { execFile } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { execFile, spawn } from "node:child_process";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import os from "node:os";
 import path from "node:path";
@@ -18,6 +18,7 @@ const listenPort = Number(process.env.DOCKROOT_AGENT_PORT || 9095);
 const pollIntervalMs = Math.max(2000, Number(process.env.DOCKROOT_AGENT_POLL_INTERVAL_MS || 10000));
 const statePath = path.join(dataDir, "state.json");
 const stacksDir = path.join(dataDir, "stacks");
+const terminalSessions = new Map();
 
 const metrics = {
 	registered: 0,
@@ -131,6 +132,134 @@ async function runDocker(args) {
 			stderr: error instanceof Error ? error.message : "Docker command failed",
 		};
 	}
+}
+
+async function withTempFile(fileName, content, run) {
+	const tempDir = await mkdtemp(path.join(os.tmpdir(), "dockroot-agent-"));
+	const tempFile = path.join(tempDir, fileName);
+
+	try {
+		await writeFile(tempFile, content);
+		return await run(tempFile);
+	} finally {
+		await rm(tempDir, { recursive: true, force: true });
+	}
+}
+
+async function writeContainerFile(containerId, targetPath, content) {
+	const fileName = path.basename(targetPath) || "file.txt";
+	return withTempFile(fileName, content, async (tempFile) => {
+		const parentPath = path.posix.dirname(targetPath);
+		await runDocker([
+			"exec",
+			containerId,
+			"sh",
+			"-lc",
+			`mkdir -p "${parentPath.replaceAll('"', '\\"')}"`,
+		]);
+		return runDocker(["cp", tempFile, `${containerId}:${targetPath}`]);
+	});
+}
+
+async function uploadContainerFile(containerId, targetDirectory, fileName, content) {
+	return withTempFile(fileName, content, async (tempFile) => {
+		await runDocker([
+			"exec",
+			containerId,
+			"sh",
+			"-lc",
+			`mkdir -p "${targetDirectory.replaceAll('"', '\\"')}"`,
+		]);
+		return runDocker([
+			"cp",
+			tempFile,
+			`${containerId}:${targetDirectory.replace(/\/$/, "")}/${fileName}`,
+		]);
+	});
+}
+
+async function deleteContainerPath(containerId, targetPath) {
+	return runDocker([
+		"exec",
+		containerId,
+		"sh",
+		"-lc",
+		`rm -rf "${targetPath.replaceAll('"', '\\"')}"`,
+	]);
+}
+
+async function browseContainerPath(containerId, targetPath) {
+	const result = await runDocker([
+		"exec",
+		"-e",
+		`TARGET_PATH=${targetPath}`,
+		containerId,
+		"sh",
+		"-lc",
+		`
+if [ -d "$TARGET_PATH" ]; then
+  echo "__DIR__"
+  for entry in "$TARGET_PATH"/* "$TARGET_PATH"/.[!.]* "$TARGET_PATH"/..?*; do
+    [ ! -e "$entry" ] && continue
+    name=$(basename "$entry")
+    if [ -d "$entry" ]; then
+      printf "dir\\t%s\\n" "$name"
+    elif [ -f "$entry" ]; then
+      printf "file\\t%s\\n" "$name"
+    else
+      printf "other\\t%s\\n" "$name"
+    fi
+  done
+elif [ -f "$TARGET_PATH" ]; then
+  echo "__FILE__"
+  sed -n '1,240p' "$TARGET_PATH"
+else
+  echo "__MISSING__"
+fi
+		`,
+	]);
+
+	const output = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
+
+	if (output.startsWith("__DIR__")) {
+		const entries = output
+			.split("\n")
+			.slice(1)
+			.map((line) => line.trim())
+			.filter(Boolean)
+			.map((line) => {
+				const [kind, ...rest] = line.split("\t");
+				return {
+					kind: kind || "other",
+					name: rest.join("\t"),
+				};
+			})
+			.sort((left, right) => {
+				if (left.kind === right.kind) {
+					return left.name.localeCompare(right.name);
+				}
+				return left.kind === "dir" ? -1 : 1;
+			});
+
+		return {
+			kind: "directory",
+			path: targetPath,
+			entries,
+		};
+	}
+
+	if (output.startsWith("__FILE__")) {
+		return {
+			kind: "file",
+			path: targetPath,
+			content: output.split("\n").slice(1).join("\n"),
+		};
+	}
+
+	return {
+		kind: "missing",
+		path: targetPath,
+	};
 }
 
 async function ensureRegistered(state) {
@@ -398,6 +527,75 @@ async function getContainerDetails(containerId) {
 	};
 }
 
+function closeTerminalSession(sessionId) {
+	const session = terminalSessions.get(sessionId);
+	if (!session) {
+		return;
+	}
+
+	session.process.kill("SIGTERM");
+	session.closed = true;
+	setTimeout(() => {
+		terminalSessions.delete(sessionId);
+	}, 60_000).unref?.();
+}
+
+async function createTerminalSession(payload) {
+	const sessionId = globalThis.crypto.randomUUID();
+	const isContainer = payload?.target === "container" && payload?.containerId;
+	const child = isContainer
+		? spawn(
+				"docker",
+				[
+					"exec",
+					"-i",
+					payload.containerId,
+					"sh",
+					"-lc",
+					"if command -v bash >/dev/null 2>&1; then exec bash; else exec sh; fi",
+				],
+				{ cwd: "/", env: process.env, stdio: "pipe" },
+			)
+		: spawn(
+				"sh",
+				["-lc", "if command -v bash >/dev/null 2>&1; then exec bash -i; else exec sh -i; fi"],
+				{
+					cwd: "/",
+					env: process.env,
+					stdio: "pipe",
+				},
+			);
+
+	const session = {
+		process: child,
+		events: [],
+		nextCursor: 1,
+		closed: false,
+		exitCode: null,
+	};
+
+	const onData = (chunk) => {
+		session.events.push({
+			cursor: session.nextCursor,
+			data: chunk.toString(),
+		});
+		session.nextCursor += 1;
+		if (session.events.length > 512) {
+			session.events.shift();
+		}
+	};
+	child.stdout.on("data", onData);
+	child.stderr.on("data", onData);
+	child.on("close", (code) => {
+		session.closed = true;
+		session.exitCode = code ?? 0;
+	});
+
+	terminalSessions.set(sessionId, session);
+
+	return sessionId;
+}
+
 function startHttpServer() {
 	const server = createServer(async (request, response) => {
 		if (!request.url) {
@@ -415,13 +613,18 @@ function startHttpServer() {
 			return;
 		}
 
+		const authedState = pathName === "/healthz" ? null : await requireAgentAuth(request);
 		if (pathName === "/metrics") {
+			if (!authedState) {
+				response.writeHead(401, { "content-type": "text/plain; charset=utf-8" });
+				response.end("Unauthorized");
+				return;
+			}
 			response.writeHead(200, { "content-type": "text/plain; version=0.0.4; charset=utf-8" });
 			response.end(renderMetrics());
 			return;
 		}
 
-		const authedState = await requireAgentAuth(request);
 		if (!authedState) {
 			response.writeHead(401, { "content-type": "text/plain; charset=utf-8" });
 			response.end("Unauthorized");
@@ -459,6 +662,47 @@ function startHttpServer() {
 			return;
 		}
 
+		const containerFilesMatch = pathName.match(/^\/containers\/([^/]+)\/files$/);
+		if (containerFilesMatch) {
+			const containerId = decodeURIComponent(containerFilesMatch[1]);
+
+			if (request.method === "GET") {
+				const targetPath = url.searchParams.get("path") || "/";
+				sendJson(response, 200, await browseContainerPath(containerId, targetPath));
+				return;
+			}
+
+			if (request.method === "PUT") {
+				const { path: targetPath, content } = await readRequestJson(request);
+				const result = await writeContainerFile(
+					containerId,
+					String(targetPath || "/"),
+					String(content || ""),
+				);
+				sendJson(response, result.ok ? 200 : 400, result);
+				return;
+			}
+
+			if (request.method === "POST") {
+				const { path: targetPath, fileName, contentBase64 } = await readRequestJson(request);
+				const result = await uploadContainerFile(
+					containerId,
+					String(targetPath || "/"),
+					String(fileName || "upload.bin"),
+					Buffer.from(String(contentBase64 || ""), "base64"),
+				);
+				sendJson(response, result.ok ? 200 : 400, result);
+				return;
+			}
+
+			if (request.method === "DELETE") {
+				const { path: targetPath } = await readRequestJson(request);
+				const result = await deleteContainerPath(containerId, String(targetPath || "/"));
+				sendJson(response, result.ok ? 200 : 400, result);
+				return;
+			}
+		}
+
 		const containerActionsMatch = pathName.match(/^\/containers\/([^/]+)\/actions$/);
 		if (request.method === "POST" && containerActionsMatch) {
 			const { action } = await readRequestJson(request);
@@ -467,6 +711,64 @@ function startHttpServer() {
 			const result = await runDocker(args);
 			sendJson(response, result.ok ? 200 : 400, result);
 			return;
+		}
+
+		if (request.method === "POST" && pathName === "/terminal/sessions") {
+			const payload = await readRequestJson(request);
+			const sessionId = await createTerminalSession(payload);
+			sendJson(response, 200, { sessionId });
+			return;
+		}
+
+		const terminalSessionMatch = pathName.match(/^\/terminal\/sessions\/([^/]+)$/);
+		if (terminalSessionMatch) {
+			const sessionId = decodeURIComponent(terminalSessionMatch[1]);
+			const session = terminalSessions.get(sessionId);
+
+			if (!session) {
+				sendJson(response, 404, { error: "Terminal session not found." });
+				return;
+			}
+
+			if (request.method === "GET") {
+				const cursor = Number(url.searchParams.get("cursor") || 0);
+				const chunks = session.events
+					.filter((entry) => entry.cursor > cursor)
+					.map((entry) => entry.data);
+				const nextCursor = session.events.length
+					? session.events[session.events.length - 1].cursor
+					: cursor;
+				sendJson(response, 200, {
+					chunks,
+					cursor: nextCursor,
+					closed: session.closed,
+					exitCode: session.exitCode,
+				});
+				return;
+			}
+
+			if (request.method === "POST") {
+				const payload = await readRequestJson(request);
+				if (payload.type === "input") {
+					session.process.stdin.write(String(payload.data || ""));
+					sendJson(response, 200, { ok: true });
+					return;
+				}
+
+				if (payload.type === "resize") {
+					sendJson(response, 200, { ok: true });
+					return;
+				}
+
+				sendJson(response, 400, { error: "Unsupported terminal operation." });
+				return;
+			}
+
+			if (request.method === "DELETE") {
+				closeTerminalSession(sessionId);
+				sendJson(response, 200, { ok: true });
+				return;
+			}
 		}
 
 		if (request.method === "GET" && pathName === "/images") {

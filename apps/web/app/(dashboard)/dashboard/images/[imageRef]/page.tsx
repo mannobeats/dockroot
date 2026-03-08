@@ -21,10 +21,10 @@ export default async function ImageDetailPage({
 	const { imageRef } = await params;
 	const query = await searchParams;
 	const decodedRef = decodeURIComponent(imageRef);
-	const environment = await resolveRuntimeEnvironment(session.user.id, query.environment);
+	const environment = await resolveRuntimeEnvironment(session.userId, query.environment);
 	const [{ image }, { containers }] = await Promise.all([
-		getImageDetailsForEnvironment(session.user.id, decodedRef, environment.id),
-		listContainersForEnvironment(session.user.id, environment.id),
+		getImageDetailsForEnvironment(session.userId, decodedRef, environment.id),
+		listContainersForEnvironment(session.userId, environment.id),
 	]);
 
 	if (!image) {
@@ -32,7 +32,7 @@ export default async function ImageDetailPage({
 	}
 
 	const attachedContainers = containers.filter(
-		(container) =>
+		(container: Record<string, string>) =>
 			`${container.Image}` === decodedRef ||
 			`${container.Image}:${container.Tag || ""}` === decodedRef,
 	);
@@ -95,7 +95,7 @@ export default async function ImageDetailPage({
 						<p className="text-sm font-semibold">Runtime usage</p>
 						<div className="mt-3 space-y-2 text-sm text-muted">
 							{attachedContainers.length ? (
-								attachedContainers.map((container) => (
+								attachedContainers.map((container: Record<string, string>) => (
 									<Link
 										key={container.ID}
 										href={`/dashboard/containers/${container.ID}?environment=${environment.id}`}

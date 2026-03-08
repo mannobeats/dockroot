@@ -1,11 +1,42 @@
 import { NextResponse } from "next/server";
 import { requireUserSession } from "@/lib/authorization";
 import {
-	deleteContainerPath,
-	uploadContainerFile,
-	writeContainerFile,
-} from "@/lib/platform/docker";
+	browseContainerPathForEnvironment,
+	deleteContainerPathForEnvironment,
+	uploadContainerFileForEnvironment,
+	writeContainerFileForEnvironment,
+} from "@/lib/environment-runtime";
 import { requireAccessibleContainerForUser } from "@/lib/runtime-access";
+
+export async function GET(
+	request: Request,
+	{ params }: { params: Promise<{ containerId: string }> },
+) {
+	try {
+		const auth = await requireUserSession(request.headers);
+		const { containerId } = await params;
+		const environmentId = new URL(request.url).searchParams.get("environmentId") || undefined;
+		await requireAccessibleContainerForUser({
+			containerId,
+			userId: auth.userId,
+			role: auth.role,
+			environmentId,
+		});
+		const path = new URL(request.url).searchParams.get("path") || "/";
+		const result = await browseContainerPathForEnvironment(
+			auth.userId,
+			containerId,
+			path,
+			environmentId,
+		);
+		return NextResponse.json(result.browser);
+	} catch (error) {
+		return NextResponse.json(
+			{ error: error instanceof Error ? error.message : "Unable to browse files." },
+			{ status: 500 },
+		);
+	}
+}
 
 export async function PUT(
 	request: Request,
@@ -14,10 +45,12 @@ export async function PUT(
 	try {
 		const auth = await requireUserSession(request.headers);
 		const { containerId } = await params;
+		const environmentId = new URL(request.url).searchParams.get("environmentId") || undefined;
 		await requireAccessibleContainerForUser({
 			containerId,
 			userId: auth.userId,
 			role: auth.role,
+			environmentId,
 		});
 		const body = (await request.json()) as { path?: string; content?: string };
 
@@ -25,7 +58,13 @@ export async function PUT(
 			return NextResponse.json({ error: "Path is required." }, { status: 400 });
 		}
 
-		const result = await writeContainerFile(containerId, body.path, body.content || "");
+		const result = await writeContainerFileForEnvironment(
+			auth.userId,
+			containerId,
+			body.path,
+			body.content || "",
+			environmentId,
+		);
 		return NextResponse.json({ ok: result.ok, output: result.stderr || result.stdout });
 	} catch (error) {
 		return NextResponse.json(
@@ -42,10 +81,12 @@ export async function POST(
 	try {
 		const auth = await requireUserSession(request.headers);
 		const { containerId } = await params;
+		const environmentId = new URL(request.url).searchParams.get("environmentId") || undefined;
 		await requireAccessibleContainerForUser({
 			containerId,
 			userId: auth.userId,
 			role: auth.role,
+			environmentId,
 		});
 		const formData = await request.formData();
 		const targetDirectory = String(formData.get("path") || "").trim();
@@ -56,7 +97,14 @@ export async function POST(
 		}
 
 		const buffer = Buffer.from(await file.arrayBuffer());
-		const result = await uploadContainerFile(containerId, targetDirectory, file.name, buffer);
+		const result = await uploadContainerFileForEnvironment(
+			auth.userId,
+			containerId,
+			targetDirectory,
+			file.name,
+			buffer,
+			environmentId,
+		);
 		return NextResponse.json({ ok: result.ok, output: result.stderr || result.stdout });
 	} catch (error) {
 		return NextResponse.json(
@@ -73,10 +121,12 @@ export async function DELETE(
 	try {
 		const auth = await requireUserSession(request.headers);
 		const { containerId } = await params;
+		const environmentId = new URL(request.url).searchParams.get("environmentId") || undefined;
 		await requireAccessibleContainerForUser({
 			containerId,
 			userId: auth.userId,
 			role: auth.role,
+			environmentId,
 		});
 		const body = (await request.json()) as { path?: string };
 
@@ -84,7 +134,12 @@ export async function DELETE(
 			return NextResponse.json({ error: "Path is required." }, { status: 400 });
 		}
 
-		const result = await deleteContainerPath(containerId, body.path);
+		const result = await deleteContainerPathForEnvironment(
+			auth.userId,
+			containerId,
+			body.path,
+			environmentId,
+		);
 		return NextResponse.json({ ok: result.ok, output: result.stderr || result.stdout });
 	} catch (error) {
 		return NextResponse.json(

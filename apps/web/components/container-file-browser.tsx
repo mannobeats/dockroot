@@ -25,7 +25,12 @@ interface ContainerFileBrowserProps {
 		  };
 }
 
-export function ContainerFileBrowser({ containerId, path, browser }: ContainerFileBrowserProps) {
+export function ContainerFileBrowser({
+	containerId,
+	path,
+	browser,
+	environmentId,
+}: ContainerFileBrowserProps & { environmentId?: string }) {
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
 	const [editorValue, setEditorValue] = useState(browser.kind === "file" ? browser.content : "");
@@ -36,7 +41,10 @@ export function ContainerFileBrowser({ containerId, path, browser }: ContainerFi
 			return;
 		}
 
-		const response = await fetch(`/api/containers/${containerId}/files`, {
+		const url = environmentId
+			? `/api/containers/${containerId}/files?environmentId=${encodeURIComponent(environmentId)}`
+			: `/api/containers/${containerId}/files`;
+		const response = await fetch(url, {
 			method: "PUT",
 			headers: {
 				"content-type": "application/json",
@@ -57,7 +65,10 @@ export function ContainerFileBrowser({ containerId, path, browser }: ContainerFi
 	}
 
 	async function deletePath(targetPath: string) {
-		const response = await fetch(`/api/containers/${containerId}/files`, {
+		const url = environmentId
+			? `/api/containers/${containerId}/files?environmentId=${encodeURIComponent(environmentId)}`
+			: `/api/containers/${containerId}/files`;
+		const response = await fetch(url, {
 			method: "DELETE",
 			headers: {
 				"content-type": "application/json",
@@ -73,14 +84,17 @@ export function ContainerFileBrowser({ containerId, path, browser }: ContainerFi
 		if (response.ok) {
 			startTransition(() =>
 				router.push(
-					`/dashboard/containers/${containerId}?path=${encodeURIComponent(path === targetPath ? "/" : path)}`,
+					`/dashboard/containers/${containerId}?path=${encodeURIComponent(path === targetPath ? "/" : path)}${environmentId ? `&environment=${encodeURIComponent(environmentId)}` : ""}`,
 				),
 			);
 		}
 	}
 
 	async function uploadFile(formData: FormData) {
-		const response = await fetch(`/api/containers/${containerId}/files`, {
+		const url = environmentId
+			? `/api/containers/${containerId}/files?environmentId=${encodeURIComponent(environmentId)}`
+			: `/api/containers/${containerId}/files`;
+		const response = await fetch(url, {
 			method: "POST",
 			body: formData,
 		});
@@ -105,7 +119,7 @@ export function ContainerFileBrowser({ containerId, path, browser }: ContainerFi
 						const formData = new FormData(form);
 						const nextPath = String(formData.get("path") || "/");
 						router.push(
-							`/dashboard/containers/${containerId}?path=${encodeURIComponent(nextPath)}`,
+							`/dashboard/containers/${containerId}?path=${encodeURIComponent(nextPath)}${environmentId ? `&environment=${encodeURIComponent(environmentId)}` : ""}`,
 						);
 					}}
 				>
@@ -156,7 +170,7 @@ export function ContainerFileBrowser({ containerId, path, browser }: ContainerFi
 					</form>
 					{browser.path !== "/" ? (
 						<Link
-							href={`/dashboard/containers/${containerId}?path=${encodeURIComponent(browser.path.split("/").slice(0, -1).join("/") || "/")}`}
+							href={`/dashboard/containers/${containerId}?path=${encodeURIComponent(browser.path.split("/").slice(0, -1).join("/") || "/")}${environmentId ? `&environment=${encodeURIComponent(environmentId)}` : ""}`}
 							className="block rounded-xl border border-default/15 bg-background/60 px-4 py-3 text-sm font-medium"
 						>
 							..
@@ -173,7 +187,7 @@ export function ContainerFileBrowser({ containerId, path, browser }: ContainerFi
 								className="flex items-center justify-between gap-3 rounded-xl border border-default/15 bg-background/60 px-4 py-3"
 							>
 								<Link
-									href={`/dashboard/containers/${containerId}?path=${encodeURIComponent(nextPath)}`}
+									href={`/dashboard/containers/${containerId}?path=${encodeURIComponent(nextPath)}${environmentId ? `&environment=${encodeURIComponent(environmentId)}` : ""}`}
 									className="min-w-0 flex-1"
 								>
 									<p className="truncate font-medium">{entry.name}</p>

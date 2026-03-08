@@ -10,10 +10,10 @@ import { RuntimePortLinks } from "@/components/runtime-port-links";
 import { StatusBadge } from "@/components/status-badge";
 import { isPrivilegedRole, requireUserSession } from "@/lib/authorization";
 import {
+	browseContainerPathForEnvironment,
 	getContainerDetailsForEnvironment,
 	resolveRuntimeEnvironment,
 } from "@/lib/environment-runtime";
-import { browseContainerPath } from "@/lib/platform/docker";
 import { getPrometheusContainerMetrics } from "@/lib/prometheus";
 import { requireAccessibleContainerForUser } from "@/lib/runtime-access";
 import { getProtectedContainerLabel, isProtectedManagerContainer } from "@/lib/runtime-protection";
@@ -75,10 +75,12 @@ export default async function ContainerDetailPage({
 		return <div className="text-sm text-muted">Container not found.</div>;
 	}
 
-	const browser =
-		environment.kind === "local"
-			? await browseContainerPath(containerId, targetPath)
-			: { kind: "missing" as const, path: targetPath };
+	const { browser } = await browseContainerPathForEnvironment(
+		auth.userId,
+		containerId,
+		targetPath,
+		environment.id,
+	);
 	const canOpenRuntimeTopology = isPrivilegedRole(auth.role);
 	const mounts = Array.isArray(inspect.Mounts) ? inspect.Mounts : [];
 	const envVars = redactEnvVars(inspect.Config?.Env || []);
@@ -119,7 +121,6 @@ export default async function ContainerDetailPage({
 		environment.kind === "local" && isProtectedManagerContainer(protectedContainer);
 	const protectedLabel =
 		environment.kind === "local" ? getProtectedContainerLabel(protectedContainer) : "";
-	const canUseLocalRuntimeTools = environment.kind === "local";
 
 	return (
 		<div className="space-y-6">
@@ -154,14 +155,12 @@ export default async function ContainerDetailPage({
 								/>
 							</form>
 						))}
-						{canUseLocalRuntimeTools ? (
-							<Link
-								href={`/dashboard/shell?target=container&containerId=${containerId}&environment=${environment.id}`}
-								className="inline-flex h-11 items-center justify-center rounded-xl border border-default/20 bg-surface px-4 text-sm font-medium text-muted transition-colors hover:text-foreground"
-							>
-								Shell
-							</Link>
-						) : null}
+						<Link
+							href={`/dashboard/shell?target=container&containerId=${containerId}&environment=${environment.id}`}
+							className="inline-flex h-11 items-center justify-center rounded-xl border border-default/20 bg-surface px-4 text-sm font-medium text-muted transition-colors hover:text-foreground"
+						>
+							Shell
+						</Link>
 					</>
 				}
 			/>
@@ -294,27 +293,18 @@ export default async function ContainerDetailPage({
 			</div>
 
 			<div className="grid gap-5 xl:grid-cols-[0.88fr_1.12fr]">
-				{canUseLocalRuntimeTools ? (
-					<ContainerFileBrowser
-						containerId={containerId}
-						path={targetPath}
-						browser={
-							browser.kind === "directory"
-								? { kind: "directory", path: browser.path, entries: browser.entries || [] }
-								: browser.kind === "file"
-									? { kind: "file", path: browser.path, content: browser.content || "" }
-									: { kind: "missing", path: browser.path }
-						}
-					/>
-				) : (
-					<section className="rounded-2xl border border-default/15 bg-surface p-5">
-						<h2 className="text-lg font-semibold tracking-tight">Container filesystem</h2>
-						<p className="mt-4 text-sm text-muted">
-							File browsing is currently available only for the local manager environment. Remote
-							agents already support runtime inspection, logs, images, volumes, and networks.
-						</p>
-					</section>
-				)}
+				<ContainerFileBrowser
+					containerId={containerId}
+					path={targetPath}
+					environmentId={environment.id}
+					browser={
+						browser.kind === "directory"
+							? { kind: "directory", path: browser.path, entries: browser.entries || [] }
+							: browser.kind === "file"
+								? { kind: "file", path: browser.path, content: browser.content || "" }
+								: { kind: "missing", path: browser.path }
+					}
+				/>
 
 				<section className="rounded-2xl border border-default/15 bg-surface p-5">
 					<h2 className="text-lg font-semibold tracking-tight">Environment and labels</h2>

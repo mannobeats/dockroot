@@ -23,7 +23,7 @@ export default async function ContainersPage({
 	const status = (params.status || "all").toLowerCase();
 	const containers = await listAccessibleContainersForUser(userId, role, environment.id);
 	const includeRuntime = isPrivilegedRole(role) && environment.kind === "local";
-	const filtered = containers.filter((container) => {
+	const filtered = containers.filter((container: Record<string, string>) => {
 		const matchesQuery =
 			!query ||
 			container.Names?.toLowerCase().includes(query) ||
@@ -31,8 +31,12 @@ export default async function ContainersPage({
 		const matchesStatus = status === "all" || (container.State || "").toLowerCase() === status;
 		return matchesQuery && matchesStatus;
 	});
-	const runningCount = filtered.filter((container) => container.State === "running").length;
-	const publishedCount = filtered.filter((container) => container.Ports?.includes("->")).length;
+	const runningCount = filtered.filter(
+		(container: Record<string, string>) => container.State === "running",
+	).length;
+	const publishedCount = filtered.filter((container: Record<string, string>) =>
+		container.Ports?.includes("->"),
+	).length;
 
 	return (
 		<div className="space-y-6">
@@ -115,9 +119,11 @@ export default async function ContainersPage({
 						</thead>
 						<tbody className="divide-y divide-default/10 bg-surface/40 text-sm">
 							{filtered.length ? (
-								filtered.map((container) => {
-									const isProtected = isProtectedManagerContainer(container);
-									const protectedLabel = getProtectedContainerLabel(container);
+								filtered.map((container: Record<string, string>) => {
+									const isProtected =
+										environment.kind === "local" && isProtectedManagerContainer(container);
+									const protectedLabel =
+										environment.kind === "local" ? getProtectedContainerLabel(container) : "";
 
 									return (
 										<tr key={`${container.ID}-${container.Names}`}>
@@ -164,7 +170,7 @@ export default async function ContainersPage({
 											<td className="px-4 py-3">
 												<div className="flex flex-wrap gap-2">
 													<Link
-														href={`/dashboard/containers/${container.ID}`}
+														href={`/dashboard/containers/${container.ID}?environment=${environment.id}`}
 														className="inline-flex h-8 items-center justify-center rounded-lg border border-accent/20 bg-accent/10 px-3 text-xs font-medium text-accent transition-colors hover:bg-accent/15"
 													>
 														open
@@ -187,14 +193,12 @@ export default async function ContainersPage({
 															/>
 														</form>
 													))}
-													{environment.kind === "local" ? (
-														<Link
-															href={`/dashboard/shell?target=container&containerId=${container.ID}&environment=${environment.id}`}
-															className="inline-flex h-8 items-center justify-center rounded-lg border border-default/20 bg-background px-3 text-xs font-medium text-muted transition-colors hover:text-foreground"
-														>
-															shell
-														</Link>
-													) : null}
+													<Link
+														href={`/dashboard/shell?target=container&containerId=${container.ID}&environment=${environment.id}`}
+														className="inline-flex h-8 items-center justify-center rounded-lg border border-default/20 bg-background px-3 text-xs font-medium text-muted transition-colors hover:text-foreground"
+													>
+														shell
+													</Link>
 													<Link
 														href={`/dashboard/logs?mode=single&container=${container.ID}&environment=${environment.id}`}
 														className="inline-flex h-8 items-center justify-center rounded-lg border border-default/20 bg-background px-3 text-xs font-medium text-muted transition-colors hover:text-foreground"

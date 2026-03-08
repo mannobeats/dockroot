@@ -29,7 +29,9 @@ export default async function LogsPage({
 					.map((value) => value.trim())
 					.filter(Boolean)
 			: ([params.container].filter(Boolean) as string[]);
-	const accessibleIds = new Set(containers.map((container) => container.ID));
+	const accessibleIds = new Set(
+		containers.map((container: Record<string, string>) => container.ID),
+	);
 	const initialSelectedIds = (
 		initialMode === "grouped"
 			? requestedIds
@@ -37,12 +39,12 @@ export default async function LogsPage({
 				? requestedIds
 				: [containers[0]?.ID].filter(Boolean)
 	).filter((containerId) => accessibleIds.has(containerId));
-	const selectedContainers = containers.filter((container) =>
+	const selectedContainers = containers.filter((container: Record<string, string>) =>
 		initialSelectedIds.includes(container.ID),
 	);
 	const initialLogs = Object.fromEntries(
 		await Promise.all(
-			selectedContainers.map(async (container) => [
+			selectedContainers.map(async (container: Record<string, string>) => [
 				container.ID,
 				(
 					await getContainerLogsForEnvironment(userId, container.ID, environment.id, {
@@ -62,7 +64,7 @@ export default async function LogsPage({
 			/>
 
 			<LiveLogsWorkspace
-				containers={containers.map((container) => ({
+				containers={containers.map((container: Record<string, string>) => ({
 					id: container.ID,
 					name: container.Names,
 					image: container.Image,

@@ -18,21 +18,25 @@ export default async function ImagesPage({
 }) {
 	const session = await requirePrivilegedPageSession();
 	const params = await searchParams;
-	const environment = await resolveRuntimeEnvironment(session.user.id, params.environment);
+	const environment = await resolveRuntimeEnvironment(session.userId, params.environment);
 	const query = (params.q || "").toLowerCase();
-	const { images } = await listImagesForEnvironment(session.user.id, environment.id);
-	const filtered = images.filter((image) =>
+	const { images } = await listImagesForEnvironment(session.userId, environment.id);
+	const filtered = images.filter((image: Record<string, string>) =>
 		!query
 			? true
 			: `${image.Repository}:${image.Tag}`.toLowerCase().includes(query) ||
 				(image.ID || "").toLowerCase().includes(query),
 	);
-	const { containers } = await listContainersForEnvironment(session.user.id, environment.id);
+	const { containers } = await listContainersForEnvironment(session.userId, environment.id);
 	const protectedImageRefs =
 		environment.kind === "local" ? getProtectedImageRefs(containers) : new Set<string>();
-	const taggedCount = filtered.filter((image) => image.Tag && image.Tag !== "<none>").length;
-	const inUseCount = filtered.filter((image) =>
-		containers.some((container) => container.Image === `${image.Repository}:${image.Tag}`),
+	const taggedCount = filtered.filter(
+		(image: Record<string, string>) => image.Tag && image.Tag !== "<none>",
+	).length;
+	const inUseCount = filtered.filter((image: Record<string, string>) =>
+		containers.some(
+			(container: Record<string, string>) => container.Image === `${image.Repository}:${image.Tag}`,
+		),
 	).length;
 
 	return (
@@ -123,7 +127,7 @@ export default async function ImagesPage({
 						</thead>
 						<tbody className="divide-y divide-default/10 bg-surface/40 text-sm">
 							{filtered.length ? (
-								filtered.map((image) => {
+								filtered.map((image: Record<string, string>) => {
 									const imageRef = `${image.Repository}:${image.Tag}`;
 									const isProtected = protectedImageRefs.has(imageRef);
 									return (

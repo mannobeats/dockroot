@@ -271,7 +271,7 @@ export async function controlContainerAction(formData: FormData) {
 		environment.kind === "local"
 			? await listContainers()
 			: await listAccessibleContainersForUser(auth.userId, auth.role, environment.id);
-	const container = containers.find((entry) => entry.ID === containerId);
+	const container = containers.find((entry: Record<string, string>) => entry.ID === containerId);
 
 	if (environment.kind === "local" && container && isProtectedManagerContainer(container)) {
 		throw new Error("Dockroot protected containers cannot be modified from the runtime dashboard.");

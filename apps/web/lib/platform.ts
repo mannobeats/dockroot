@@ -60,6 +60,36 @@ function getRequiredTokenPepper() {
 	return process.env.DOCKROOT_TOKEN_PEPPER || process.env.BETTER_AUTH_SECRET || "";
 }
 
+function normalizeAgentUrl(value: string | undefined) {
+	const trimmed = value?.trim();
+	if (!trimmed) {
+		return null;
+	}
+
+	let parsed: URL;
+	try {
+		parsed = new URL(trimmed);
+	} catch {
+		throw new Error("Agent URL must be a valid absolute URL.");
+	}
+
+	if (!["http:", "https:"].includes(parsed.protocol)) {
+		throw new Error("Agent URL must use http or https.");
+	}
+
+	if (
+		parsed.username ||
+		parsed.password ||
+		parsed.search ||
+		parsed.hash ||
+		parsed.pathname !== "/"
+	) {
+		throw new Error("Agent URL must not include credentials, query params, or a path.");
+	}
+
+	return parsed.toString().replace(/\/$/, "");
+}
+
 function matchesStoredToken(storedToken: string | null | undefined, candidate: string) {
 	if (!storedToken) {
 		return false;
@@ -601,6 +631,7 @@ export async function createEnvironment({
 	const environmentId = crypto.randomUUID();
 	const slug = await ensureUniqueEnvironmentSlug(name);
 	const registrationToken = randomToken(48);
+	const normalizedAgentUrl = normalizeAgentUrl(agentUrl);
 
 	await db.insert(environments).values({
 		id: environmentId,
@@ -609,7 +640,7 @@ export async function createEnvironment({
 		description: description?.trim() || null,
 		kind: "agent",
 		status: "provisioning",
-		managerUrl: agentUrl?.trim() || null,
+		managerUrl: normalizedAgentUrl,
 		createdByUserId: userId,
 		createdAt,
 		updatedAt: createdAt,
@@ -1307,12 +1338,13 @@ export async function getInstallCommand(environmentId: string, userId: string) {
 		environment.agent[0].registrationToken ||
 		(await issueRegistrationToken(environment.agent[0].id));
 	const managerUrl = publicEnv.appUrl.replace(/\/$/, "");
+	const dataVolumeName = `dockroot_agent_data_${environment.slug.replace(/-/g, "_")}`;
 	const dockerRun = [
 		"docker run -d \\",
 		`  --name dockroot-agent-${environment.slug} \\`,
 		"  --restart unless-stopped \\",
 		"  -v /var/run/docker.sock:/var/run/docker.sock \\",
-		"  -v dockroot_agent_data:/var/lib/dockroot-agent \\",
+		`  -v ${dataVolumeName}:/var/lib/dockroot-agent \\`,
 		`  -p ${AGENT_PORT}:${AGENT_PORT} \\`,
 		`  -e DOCKROOT_MANAGER_URL=${managerUrl} \\`,
 		`  -e DOCKROOT_AGENT_REGISTRATION_TOKEN=${registrationToken} \\`,
@@ -1332,12 +1364,12 @@ export async function getInstallCommand(environmentId: string, userId: string) {
 		"      DOCKROOT_AGENT_DATA_DIR: /var/lib/dockroot-agent",
 		"    volumes:",
 		"      - /var/run/docker.sock:/var/run/docker.sock",
-		"      - dockroot_agent_data:/var/lib/dockroot-agent",
+		`      - ${dataVolumeName}:/var/lib/dockroot-agent`,
 		"    ports:",
 		`      - "${AGENT_PORT}:${AGENT_PORT}"`,
 		"",
 		"volumes:",
-		"  dockroot_agent_data:",
+		`  ${dataVolumeName}:`,
 	].join("\n");
 
 	return {

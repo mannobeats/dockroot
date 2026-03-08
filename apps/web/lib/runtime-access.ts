@@ -37,7 +37,7 @@ export async function listAccessibleContainersForUser(
 	});
 	const ownedSlugs = new Set(ownedStacks.map((stack) => stack.slug));
 
-	return containers.filter((container) => {
+	return containers.filter((container: Record<string, string>) => {
 		const composeProject = getComposeProjectSlug(container.Labels);
 		return composeProject ? ownedSlugs.has(composeProject) : false;
 	});
@@ -54,7 +54,9 @@ export async function requireAccessibleContainerForUser(input: {
 		input.role,
 		input.environmentId,
 	);
-	const container = containers.find((candidate) => candidate.ID === input.containerId);
+	const container = containers.find(
+		(candidate: Record<string, string>) => candidate.ID === input.containerId,
+	);
 
 	if (!container) {
 		throw new Error("Container not found");
