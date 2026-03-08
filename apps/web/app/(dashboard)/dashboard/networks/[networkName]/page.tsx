@@ -54,10 +54,14 @@ export default async function NetworkDetailPage({
 						<div className="mt-3 space-y-2 text-sm text-muted">
 							{containers.length ? (
 								containers.map(([containerId, container]) => (
-									<div key={containerId} className="rounded-lg bg-surface px-3 py-2">
+									<Link
+										key={containerId}
+										href={`/dashboard/containers/${containerId}`}
+										className="block rounded-lg bg-surface px-3 py-2 transition-colors hover:text-foreground"
+									>
 										<p className="font-medium">{container.Name || containerId}</p>
 										<p className="mt-1 text-xs">{containerId}</p>
-									</div>
+									</Link>
 								))
 							) : (
 								<p>No containers are attached to this network.</p>

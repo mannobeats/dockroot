@@ -6,6 +6,7 @@ import { ContainerFileBrowser } from "@/components/container-file-browser";
 import { ContainerMetricsPanel } from "@/components/container-metrics-panel";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { PageHeader } from "@/components/page-header";
+import { RuntimePortLinks } from "@/components/runtime-port-links";
 import { StatusBadge } from "@/components/status-badge";
 import { browseContainerPath, getContainerDetails } from "@/lib/platform/docker";
 import { getPrometheusContainerMetrics } from "@/lib/prometheus";
@@ -67,6 +68,23 @@ export default async function ContainerDetailPage({
 			{ IPAddress?: string; Gateway?: string }
 		>,
 	);
+	const publishedPorts = Object.entries(
+		(inspect.NetworkSettings?.Ports || {}) as Record<
+			string,
+			Array<{ HostIp?: string; HostPort?: string }> | null
+		>,
+	)
+		.flatMap(([containerPort, bindings]) =>
+			(bindings || []).map((binding) => ({
+				containerPort,
+				hostIp: binding.HostIp || "localhost",
+				hostPort: binding.HostPort || "",
+			})),
+		)
+		.filter((binding) => binding.hostPort);
+	const publishedPortSummary = publishedPorts
+		.map((binding) => `${binding.hostIp}:${binding.hostPort}->${binding.containerPort}`)
+		.join(", ");
 
 	return (
 		<div className="space-y-6">
@@ -131,6 +149,12 @@ export default async function ContainerDetailPage({
 							<p className="text-xs text-muted">Restart count</p>
 							<p className="mt-2 text-sm font-medium">{inspect.RestartCount || 0}</p>
 						</div>
+						<div className="rounded-xl border border-default/15 bg-background/60 p-4 sm:col-span-2">
+							<p className="text-xs text-muted">Published ports</p>
+							<div className="mt-3">
+								<RuntimePortLinks ports={publishedPortSummary} />
+							</div>
+						</div>
 						<div className="rounded-xl border border-default/15 bg-background/60 p-4">
 							<p className="text-xs text-muted">Writable layer size</p>
 							<p className="mt-2 text-sm font-medium">{details.stats?.Size || "—"}</p>
@@ -172,12 +196,16 @@ export default async function ContainerDetailPage({
 								{networkEntries.length ? (
 									networkEntries.map(
 										([name, network]: [string, { IPAddress?: string; Gateway?: string }]) => (
-											<div key={name} className="rounded-lg bg-surface px-3 py-2">
+											<Link
+												key={name}
+												href={`/dashboard/networks/${encodeURIComponent(name)}`}
+												className="block rounded-lg bg-surface px-3 py-2 transition-colors hover:text-foreground"
+											>
 												<p>{name}</p>
 												<p className="mt-1 text-xs">
 													IP {network.IPAddress || "—"} · GW {network.Gateway || "—"}
 												</p>
-											</div>
+											</Link>
 										),
 									)
 								) : (

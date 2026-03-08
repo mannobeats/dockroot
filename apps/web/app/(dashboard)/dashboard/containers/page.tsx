@@ -3,6 +3,7 @@ import { controlContainerAction } from "@/app/(dashboard)/actions";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { LiveRuntimePanel } from "@/components/live-runtime-panel";
 import { PageHeader } from "@/components/page-header";
+import { RuntimePortLinks } from "@/components/runtime-port-links";
 import { StatusBadge } from "@/components/status-badge";
 import { listContainers } from "@/lib/platform/docker";
 
@@ -23,6 +24,8 @@ export default async function ContainersPage({
 		const matchesStatus = status === "all" || (container.State || "").toLowerCase() === status;
 		return matchesQuery && matchesStatus;
 	});
+	const runningCount = filtered.filter((container) => container.State === "running").length;
+	const publishedCount = filtered.filter((container) => container.Ports?.includes("->")).length;
 
 	return (
 		<div className="space-y-6">
@@ -33,6 +36,28 @@ export default async function ContainersPage({
 			/>
 
 			<LiveRuntimePanel />
+
+			<section className="grid gap-4 lg:grid-cols-3">
+				<div className="rounded-2xl border border-default/15 bg-surface p-5">
+					<p className="text-xs uppercase tracking-[0.18em] text-muted">Visible containers</p>
+					<p className="mt-3 text-3xl font-semibold tracking-tight">{filtered.length}</p>
+					<p className="mt-2 text-sm text-muted">Filtered runtime scope for this host.</p>
+				</div>
+				<div className="rounded-2xl border border-default/15 bg-surface p-5">
+					<p className="text-xs uppercase tracking-[0.18em] text-muted">Running now</p>
+					<p className="mt-3 text-3xl font-semibold tracking-tight">{runningCount}</p>
+					<p className="mt-2 text-sm text-muted">
+						Live workloads that can be opened, tailed, or shelled.
+					</p>
+				</div>
+				<div className="rounded-2xl border border-default/15 bg-surface p-5">
+					<p className="text-xs uppercase tracking-[0.18em] text-muted">Published ports</p>
+					<p className="mt-3 text-3xl font-semibold tracking-tight">{publishedCount}</p>
+					<p className="mt-2 text-sm text-muted">
+						Containers exposing host ports with direct browser links.
+					</p>
+				</div>
+			</section>
 
 			<section className="rounded-2xl border border-default/15 bg-surface p-5">
 				<form className="grid gap-3 lg:grid-cols-[1fr_180px_auto]">
@@ -82,22 +107,42 @@ export default async function ContainersPage({
 								filtered.map((container) => (
 									<tr key={`${container.ID}-${container.Names}`}>
 										<td className="px-4 py-3 font-medium">
-											<Link
-												href={`/dashboard/containers/${container.ID}`}
-												className="transition-colors hover:text-accent"
-											>
-												{container.Names}
-											</Link>
+											<div className="space-y-1">
+												<Link
+													href={`/dashboard/containers/${container.ID}`}
+													className="transition-colors hover:text-accent"
+												>
+													{container.Names}
+												</Link>
+												{container.Labels?.includes("com.docker.compose.project=") ? (
+													<p className="text-xs text-muted">
+														Stack{" "}
+														{container.Labels.split(",")
+															.find((label) => label.startsWith("com.docker.compose.project="))
+															?.split("=")
+															.slice(1)
+															.join("=")}
+													</p>
+												) : null}
+											</div>
 										</td>
 										<td className="px-4 py-3 text-muted">{container.Image}</td>
 										<td className="px-4 py-3">
 											<StatusBadge status={(container.State || "offline").toLowerCase()} />
 										</td>
 										<td className="px-4 py-3 text-muted">{container.Status || "—"}</td>
-										<td className="px-4 py-3 text-muted">{container.Ports || "—"}</td>
+										<td className="px-4 py-3">
+											<RuntimePortLinks ports={container.Ports} compact />
+										</td>
 										<td className="px-4 py-3 text-muted">{container.Size || "—"}</td>
 										<td className="px-4 py-3">
 											<div className="flex flex-wrap gap-2">
+												<Link
+													href={`/dashboard/containers/${container.ID}`}
+													className="inline-flex h-8 items-center justify-center rounded-lg border border-accent/20 bg-accent/10 px-3 text-xs font-medium text-accent transition-colors hover:bg-accent/15"
+												>
+													open
+												</Link>
 												{(["start", "stop", "restart", "remove"] as const).map((action) => (
 													<form key={action} action={controlContainerAction}>
 														<input type="hidden" name="containerId" value={container.ID} />

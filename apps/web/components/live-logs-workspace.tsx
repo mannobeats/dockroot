@@ -26,7 +26,10 @@ export function LiveLogsWorkspace({
 	const [mode, setMode] = useState<"single" | "grouped">(initialMode);
 	const [selectedIds, setSelectedIds] = useState<string[]>(initialSelectedIds);
 	const [logsByContainer, setLogsByContainer] = useState<Record<string, string>>(initialLogs);
+	const [paused, setPaused] = useState(false);
+	const [autoScroll, setAutoScroll] = useState(true);
 	const sessionIdRef = useRef<string | null>(null);
+	const logViewportRef = useRef<HTMLPreElement | null>(null);
 
 	const filtered = useMemo(() => {
 		const normalized = query.trim().toLowerCase();
@@ -62,6 +65,10 @@ export function LiveLogsWorkspace({
 		);
 
 		const onData = (payload: { sessionId: string; containerId: string; chunk: string }) => {
+			if (paused) {
+				return;
+			}
+
 			setLogsByContainer((current) => ({
 				...current,
 				[payload.containerId]: `${current[payload.containerId] || ""}${payload.chunk}`.slice(
@@ -80,7 +87,7 @@ export function LiveLogsWorkspace({
 			}
 			socket.off("logs:data", onData);
 		};
-	}, [selectedIds]);
+	}, [paused, selectedIds]);
 
 	const combinedLogs = selectedIds
 		.map((containerId) => {
@@ -97,6 +104,14 @@ export function LiveLogsWorkspace({
 				.join("\n");
 		})
 		.join("\n");
+
+	useEffect(() => {
+		if (!autoScroll || !logViewportRef.current) {
+			return;
+		}
+
+		logViewportRef.current.scrollTop = logViewportRef.current.scrollHeight;
+	});
 
 	return (
 		<div className="grid gap-5 xl:grid-cols-[320px_1fr]">
@@ -154,9 +169,21 @@ export function LiveLogsWorkspace({
 										: "border-default/10 bg-background/50 hover:border-default/20"
 								}`}
 							>
-								<p className="font-medium">{container.name}</p>
-								<p className="mt-1 text-xs text-muted">{container.image}</p>
-								<p className="mt-1 text-xs text-muted">{container.state}</p>
+								<div className="flex items-start justify-between gap-3">
+									<div>
+										<p className="font-medium">{container.name}</p>
+										<p className="mt-1 text-xs text-muted">{container.image}</p>
+									</div>
+									<span
+										className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${
+											container.state === "running"
+												? "border-success/20 bg-success/10 text-success"
+												: "border-default/20 bg-background text-muted"
+										}`}
+									>
+										{container.state}
+									</span>
+								</div>
 							</button>
 						);
 					})}
@@ -177,16 +204,50 @@ export function LiveLogsWorkspace({
 								: "Streaming docker logs -f"}
 						</p>
 					</div>
-					{selectedIds[0] ? (
-						<Link
-							href={`/dashboard/shell?target=container&containerId=${selectedIds[0]}`}
+					<div className="flex flex-wrap items-center gap-2">
+						<button
+							type="button"
+							onClick={() => setPaused((current) => !current)}
 							className="inline-flex h-9 items-center justify-center rounded-lg border border-default/20 px-3 text-xs font-medium text-muted transition-colors hover:text-foreground"
 						>
-							Open shell
-						</Link>
-					) : null}
+							{paused ? "Resume" : "Pause"}
+						</button>
+						<button
+							type="button"
+							onClick={() => setAutoScroll((current) => !current)}
+							className={`inline-flex h-9 items-center justify-center rounded-lg border px-3 text-xs font-medium transition-colors ${
+								autoScroll
+									? "border-accent/20 bg-accent/10 text-accent"
+									: "border-default/20 text-muted hover:text-foreground"
+							}`}
+						>
+							Auto-scroll
+						</button>
+						<button
+							type="button"
+							onClick={() =>
+								setLogsByContainer((current) =>
+									Object.fromEntries(Object.keys(current).map((key) => [key, ""])),
+								)
+							}
+							className="inline-flex h-9 items-center justify-center rounded-lg border border-default/20 px-3 text-xs font-medium text-muted transition-colors hover:text-foreground"
+						>
+							Clear
+						</button>
+						{selectedIds[0] ? (
+							<Link
+								href={`/dashboard/shell?target=container&containerId=${selectedIds[0]}`}
+								className="inline-flex h-9 items-center justify-center rounded-lg border border-default/20 px-3 text-xs font-medium text-muted transition-colors hover:text-foreground"
+							>
+								Open shell
+							</Link>
+						) : null}
+					</div>
 				</div>
-				<pre className="mt-4 min-h-[720px] overflow-auto rounded-xl bg-[#050914] p-4 text-xs leading-6 text-white/85">
+				<pre
+					ref={logViewportRef}
+					className="mt-4 min-h-[720px] overflow-auto rounded-xl bg-[#050914] p-4 text-xs leading-6 text-white/85"
+				>
 					{combinedLogs || "No logs available for the selected container set."}
 				</pre>
 			</section>

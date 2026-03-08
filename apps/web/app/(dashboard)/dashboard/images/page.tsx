@@ -2,8 +2,7 @@ import Link from "next/link";
 import { pruneImagesAction, pullImageAction, removeImageAction } from "@/app/(dashboard)/actions";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { PageHeader } from "@/components/page-header";
-import { StatusBadge } from "@/components/status-badge";
-import { getImageDetails, listImages } from "@/lib/platform/docker";
+import { listContainers, listImages } from "@/lib/platform/docker";
 
 export default async function ImagesPage({
 	searchParams,
@@ -19,9 +18,11 @@ export default async function ImagesPage({
 			: `${image.Repository}:${image.Tag}`.toLowerCase().includes(query) ||
 				(image.ID || "").toLowerCase().includes(query),
 	);
-	const selectedImageRef =
-		params.image || (filtered[0] ? `${filtered[0].Repository}:${filtered[0].Tag}` : "");
-	const selectedImage = selectedImageRef ? await getImageDetails(selectedImageRef) : null;
+	const containers = await listContainers();
+	const taggedCount = filtered.filter((image) => image.Tag && image.Tag !== "<none>").length;
+	const inUseCount = filtered.filter((image) =>
+		containers.some((container) => container.Image === `${image.Repository}:${image.Tag}`),
+	).length;
 
 	return (
 		<div className="space-y-6">
@@ -74,38 +75,63 @@ export default async function ImagesPage({
 				</div>
 			</section>
 
-			<div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
-				<section className="rounded-2xl border border-default/15 bg-surface p-5">
-					<div className="overflow-hidden rounded-xl border border-default/15">
-						<table className="min-w-full divide-y divide-default/15 text-left">
-							<thead className="bg-background/60 text-[11px] uppercase tracking-[0.18em] text-muted">
-								<tr>
-									<th className="px-4 py-3 font-medium">Image</th>
-									<th className="px-4 py-3 font-medium">Tag</th>
-									<th className="px-4 py-3 font-medium">Size</th>
-									<th className="px-4 py-3 font-medium">Updated</th>
-									<th className="px-4 py-3 font-medium">Actions</th>
-								</tr>
-							</thead>
-							<tbody className="divide-y divide-default/10 bg-surface/40 text-sm">
-								{filtered.length ? (
-									filtered.map((image) => {
-										const imageRef = `${image.Repository}:${image.Tag}`;
-										const active = imageRef === selectedImageRef;
-										return (
-											<tr key={`${image.ID}-${imageRef}`} className={active ? "bg-accent/5" : ""}>
-												<td className="px-4 py-3 font-medium">
+			<section className="grid gap-4 lg:grid-cols-3">
+				<div className="rounded-2xl border border-default/15 bg-surface p-5">
+					<p className="text-xs uppercase tracking-[0.18em] text-muted">Visible images</p>
+					<p className="mt-3 text-3xl font-semibold tracking-tight">{filtered.length}</p>
+					<p className="mt-2 text-sm text-muted">Repository entries available on this engine.</p>
+				</div>
+				<div className="rounded-2xl border border-default/15 bg-surface p-5">
+					<p className="text-xs uppercase tracking-[0.18em] text-muted">Tagged builds</p>
+					<p className="mt-3 text-3xl font-semibold tracking-tight">{taggedCount}</p>
+					<p className="mt-2 text-sm text-muted">Images ready to inspect and reuse.</p>
+				</div>
+				<div className="rounded-2xl border border-default/15 bg-surface p-5">
+					<p className="text-xs uppercase tracking-[0.18em] text-muted">In active use</p>
+					<p className="mt-3 text-3xl font-semibold tracking-tight">{inUseCount}</p>
+					<p className="mt-2 text-sm text-muted">
+						Containers currently referencing these image tags.
+					</p>
+				</div>
+			</section>
+
+			<section className="rounded-2xl border border-default/15 bg-surface p-5">
+				<div className="overflow-hidden rounded-xl border border-default/15">
+					<table className="min-w-full divide-y divide-default/15 text-left">
+						<thead className="bg-background/60 text-[11px] uppercase tracking-[0.18em] text-muted">
+							<tr>
+								<th className="px-4 py-3 font-medium">Image</th>
+								<th className="px-4 py-3 font-medium">Tag</th>
+								<th className="px-4 py-3 font-medium">Size</th>
+								<th className="px-4 py-3 font-medium">Updated</th>
+								<th className="px-4 py-3 font-medium">Actions</th>
+							</tr>
+						</thead>
+						<tbody className="divide-y divide-default/10 bg-surface/40 text-sm">
+							{filtered.length ? (
+								filtered.map((image) => {
+									const imageRef = `${image.Repository}:${image.Tag}`;
+									return (
+										<tr key={`${image.ID}-${imageRef}`}>
+											<td className="px-4 py-3 font-medium">
+												<Link
+													href={`/dashboard/images/${encodeURIComponent(imageRef)}`}
+													className="transition-colors hover:text-accent"
+												>
+													{image.Repository}
+												</Link>
+											</td>
+											<td className="px-4 py-3 text-muted">{image.Tag}</td>
+											<td className="px-4 py-3 text-muted">{image.Size}</td>
+											<td className="px-4 py-3 text-muted">{image.CreatedSince}</td>
+											<td className="px-4 py-3">
+												<div className="flex flex-wrap gap-2">
 													<Link
 														href={`/dashboard/images/${encodeURIComponent(imageRef)}`}
-														className="transition-colors hover:text-accent"
+														className="inline-flex h-8 items-center justify-center rounded-lg border border-default/20 bg-background px-3 text-xs font-medium text-muted transition-colors hover:text-foreground"
 													>
-														{image.Repository}
+														Details
 													</Link>
-												</td>
-												<td className="px-4 py-3 text-muted">{image.Tag}</td>
-												<td className="px-4 py-3 text-muted">{image.Size}</td>
-												<td className="px-4 py-3 text-muted">{image.CreatedSince}</td>
-												<td className="px-4 py-3">
 													<form action={removeImageAction}>
 														<input type="hidden" name="imageRef" value={imageRef} />
 														<FormSubmitButton
@@ -114,54 +140,22 @@ export default async function ImagesPage({
 															className="inline-flex h-8 items-center justify-center rounded-lg border border-danger/30 bg-danger/10 px-3 text-xs font-medium text-danger"
 														/>
 													</form>
-												</td>
-											</tr>
-										);
-									})
-								) : (
-									<tr>
-										<td colSpan={5} className="px-4 py-8 text-center text-sm text-muted">
-											No images matched the current filters.
-										</td>
-									</tr>
-								)}
-							</tbody>
-						</table>
-					</div>
-				</section>
-
-				<section className="rounded-2xl border border-default/15 bg-surface p-5">
-					<div className="flex items-center justify-between">
-						<h2 className="text-lg font-semibold tracking-tight">Image inspection</h2>
-						{selectedImage ? <StatusBadge status="healthy" /> : null}
-					</div>
-					{selectedImage ? (
-						<div className="mt-4 space-y-4">
-							<div className="grid gap-3 sm:grid-cols-2">
-								<div className="rounded-xl border border-default/15 bg-background/60 p-4">
-									<p className="text-xs text-muted">Architecture</p>
-									<p className="mt-2 text-sm font-medium">
-										{String(selectedImage.Architecture || "unknown")}
-									</p>
-								</div>
-								<div className="rounded-xl border border-default/15 bg-background/60 p-4">
-									<p className="text-xs text-muted">OS</p>
-									<p className="mt-2 text-sm font-medium">
-										{String(selectedImage.Os || "unknown")}
-									</p>
-								</div>
-							</div>
-							<pre className="max-h-[560px] overflow-auto rounded-xl bg-[#050914] p-4 text-xs leading-6 text-white/85">
-								{JSON.stringify(selectedImage, null, 2)}
-							</pre>
-						</div>
-					) : (
-						<div className="mt-4 rounded-xl border border-dashed border-default/20 bg-background/60 p-6 text-sm text-muted">
-							Select an image to inspect it.
-						</div>
-					)}
-				</section>
-			</div>
+												</div>
+											</td>
+										</tr>
+									);
+								})
+							) : (
+								<tr>
+									<td colSpan={5} className="px-4 py-8 text-center text-sm text-muted">
+										No images matched the current filters.
+									</td>
+								</tr>
+							)}
+						</tbody>
+					</table>
+				</div>
+			</section>
 		</div>
 	);
 }
