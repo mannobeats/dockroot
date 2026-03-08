@@ -7,6 +7,13 @@ import postgres from "postgres";
 import * as pty from "node-pty";
 import next from "next";
 import { Server as SocketIOServer } from "socket.io";
+import {
+	closeLocalTerminalSession,
+	createLocalTerminalSession,
+	readLocalTerminalSession,
+	resizeLocalTerminalSession,
+	writeLocalTerminalInput,
+} from "./local-terminal.mjs";
 import { getDatabaseUrl } from "./scripts/database-url.mjs";
 import { validateRuntimeEnv } from "./scripts/runtime-env.mjs";
 
@@ -68,6 +75,31 @@ function isPrivilegedRole(role) {
 
 function getAppBaseUrl() {
 	return `http://127.0.0.1:${port}`;
+}
+
+async function readJsonBody(req) {
+	const chunks = [];
+	for await (const chunk of req) {
+		chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+	}
+
+	if (!chunks.length) {
+		return {};
+	}
+
+	try {
+		return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+	} catch {
+		return {};
+	}
+}
+
+function sendJson(res, statusCode, body) {
+	res.writeHead(statusCode, {
+		"content-type": "application/json; charset=utf-8",
+		"cache-control": "no-store",
+	});
+	res.end(JSON.stringify(body));
 }
 
 async function getSessionFromSocket(socket) {
@@ -206,7 +238,69 @@ async function getRuntimeMetrics() {
 
 await app.prepare();
 
-const server = createServer((req, res) => handle(req, res));
+const server = createServer(async (req, res) => {
+	if (req.url) {
+		const url = new URL(req.url, getAppBaseUrl());
+		if (url.pathname === "/internal/local-terminal/sessions") {
+			if (req.headers["x-dockroot-internal-token"] !== process.env.DOCKROOT_TOKEN_PEPPER) {
+				sendJson(res, 403, { error: "Forbidden" });
+				return;
+			}
+
+			if (req.method === "POST") {
+				const payload = await readJsonBody(req);
+				sendJson(res, 200, createLocalTerminalSession(payload));
+				return;
+			}
+		}
+
+		const sessionMatch = url.pathname.match(/^\/internal\/local-terminal\/sessions\/([^/]+)$/);
+		if (sessionMatch) {
+			if (req.headers["x-dockroot-internal-token"] !== process.env.DOCKROOT_TOKEN_PEPPER) {
+				sendJson(res, 403, { error: "Forbidden" });
+				return;
+			}
+
+			const sessionId = decodeURIComponent(sessionMatch[1]);
+
+			try {
+				if (req.method === "GET") {
+					sendJson(res, 200, readLocalTerminalSession(sessionId, Number(url.searchParams.get("cursor") || 0)));
+					return;
+				}
+
+				if (req.method === "POST") {
+					const payload = await readJsonBody(req);
+					if (payload.type === "resize") {
+						sendJson(
+							res,
+							200,
+							resizeLocalTerminalSession(sessionId, Number(payload.cols || 120), Number(payload.rows || 36)),
+						);
+						return;
+					}
+
+					sendJson(res, 200, writeLocalTerminalInput(sessionId, String(payload.data || "")));
+					return;
+				}
+
+				if (req.method === "DELETE") {
+					sendJson(res, 200, closeLocalTerminalSession(sessionId));
+					return;
+				}
+			} catch (error) {
+				sendJson(
+					res,
+					error instanceof Error && error.message === "Terminal session not found." ? 404 : 500,
+					{ error: error instanceof Error ? error.message : "Terminal request failed." },
+				);
+				return;
+			}
+		}
+	}
+
+	handle(req, res);
+});
 const io = new SocketIOServer(server, {
 	path: "/socket.io",
 	cors: {
@@ -364,7 +458,14 @@ io.on("connection", (socket) => {
 				socketId: socket.id,
 			});
 
+			let handshakeComplete = false;
+			const initialOutput = [];
 			terminalSession.onData((data) => {
+				if (!handshakeComplete) {
+					initialOutput.push(data);
+					return;
+				}
+
 				socket.emit("terminal:data", {
 					sessionId,
 					data,
@@ -379,8 +480,14 @@ io.on("connection", (socket) => {
 				terminalSessions.delete(sessionId);
 			});
 
+			await new Promise((resolve) => {
+				setTimeout(resolve, 75);
+			});
+			handshakeComplete = true;
+
 			callback?.({
 				sessionId,
+				initialData: initialOutput.join(""),
 			});
 		} catch (error) {
 			callback?.({

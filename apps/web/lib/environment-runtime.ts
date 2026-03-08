@@ -102,6 +102,27 @@ async function fetchAgentText(
 	return (await fetchAgent(environment, path, init)).text();
 }
 
+async function fetchLocalTerminal(path: string, init?: RequestInit) {
+	const response = await fetch(`http://127.0.0.1:${process.env.PORT || 3080}${path}`, {
+		...init,
+		headers: {
+			"x-dockroot-internal-token": process.env.DOCKROOT_TOKEN_PEPPER || "",
+			...(init?.headers || {}),
+		},
+		cache: "no-store",
+	});
+
+	if (!response.ok) {
+		throw new Error(
+			response.status === 404
+				? "Terminal session not found."
+				: "Local terminal request failed.",
+		);
+	}
+
+	return response.json();
+}
+
 export async function resolveRuntimeEnvironment(userId: string, environmentId?: string) {
 	return getEnvironmentRecord(environmentId, userId);
 }
@@ -299,7 +320,18 @@ export async function createTerminalSessionForEnvironment(input: {
 }) {
 	const environment = await getEnvironmentRecord(input.environmentId, input.userId);
 	if (environment.kind === "local") {
-		throw new Error("Local terminal sessions are handled through the manager socket.");
+		return fetchLocalTerminal("/internal/local-terminal/sessions", {
+			method: "POST",
+			headers: {
+				"content-type": "application/json",
+			},
+			body: JSON.stringify({
+				target: input.target,
+				containerId: input.containerId,
+				cols: input.cols,
+				rows: input.rows,
+			}),
+		});
 	}
 
 	return fetchAgentJson(environment, "/terminal/sessions", {
@@ -324,7 +356,9 @@ export async function readTerminalSessionForEnvironment(
 ) {
 	const environment = await getEnvironmentRecord(environmentId, userId);
 	if (environment.kind === "local") {
-		throw new Error("Local terminal sessions are handled through the manager socket.");
+		return fetchLocalTerminal(
+			`/internal/local-terminal/sessions/${encodeURIComponent(sessionId)}?cursor=${Number(cursor || 0)}`,
+		);
 	}
 
 	return fetchAgentJson(
@@ -341,7 +375,13 @@ export async function writeTerminalInputForEnvironment(input: {
 }) {
 	const environment = await getEnvironmentRecord(input.environmentId, input.userId);
 	if (environment.kind === "local") {
-		throw new Error("Local terminal sessions are handled through the manager socket.");
+		return fetchLocalTerminal(`/internal/local-terminal/sessions/${encodeURIComponent(input.sessionId)}`, {
+			method: "POST",
+			headers: {
+				"content-type": "application/json",
+			},
+			body: JSON.stringify({ type: "input", data: input.data }),
+		});
 	}
 
 	return fetchAgentJson(environment, `/terminal/sessions/${encodeURIComponent(input.sessionId)}`, {
@@ -362,7 +402,13 @@ export async function resizeTerminalSessionForEnvironment(input: {
 }) {
 	const environment = await getEnvironmentRecord(input.environmentId, input.userId);
 	if (environment.kind === "local") {
-		throw new Error("Local terminal sessions are handled through the manager socket.");
+		return fetchLocalTerminal(`/internal/local-terminal/sessions/${encodeURIComponent(input.sessionId)}`, {
+			method: "POST",
+			headers: {
+				"content-type": "application/json",
+			},
+			body: JSON.stringify({ type: "resize", cols: input.cols, rows: input.rows }),
+		});
 	}
 
 	return fetchAgentJson(environment, `/terminal/sessions/${encodeURIComponent(input.sessionId)}`, {
@@ -381,7 +427,9 @@ export async function closeTerminalSessionForEnvironment(
 ) {
 	const environment = await getEnvironmentRecord(environmentId, userId);
 	if (environment.kind === "local") {
-		throw new Error("Local terminal sessions are handled through the manager socket.");
+		return fetchLocalTerminal(`/internal/local-terminal/sessions/${encodeURIComponent(sessionId)}`, {
+			method: "DELETE",
+		});
 	}
 
 	return fetchAgentJson(environment, `/terminal/sessions/${encodeURIComponent(sessionId)}`, {

@@ -21,11 +21,13 @@ export function TerminalPanel({
 	environmentId?: string;
 }) {
 	const terminalRef = useRef<HTMLDivElement | null>(null);
-	const terminalInstanceRef = useRef<{ dispose: () => void } | null>(null);
+	const terminalInstanceRef = useRef<{ dispose: () => void; focus: () => void; write: (data: string) => void } | null>(null);
 	const fitRef = useRef<{ fit: () => void } | null>(null);
 	const sessionIdRef = useRef<string | null>(null);
 	const cursorRef = useRef(0);
 	const pollTimerRef = useRef<number | null>(null);
+	const pendingChunksRef = useRef<Array<{ sessionId: string; data: string }>>([]);
+	const pendingExitsRef = useRef<Array<{ sessionId: string; exitCode?: number }>>([]);
 	const [status, setStatus] = useState("Connecting...");
 
 	useEffect(() => {
@@ -48,6 +50,7 @@ export function TerminalPanel({
 			}
 
 			const terminal = new Terminal({
+				convertEol: true,
 				cursorBlink: true,
 				fontFamily:
 					"ui-monospace, SFMono-Regular, SF Mono, Menlo, Monaco, Consolas, Liberation Mono, monospace",
@@ -69,6 +72,29 @@ export function TerminalPanel({
 			terminalInstanceRef.current = terminal;
 			fitRef.current = fitAddon;
 			cursorRef.current = 0;
+			pendingChunksRef.current = [];
+			pendingExitsRef.current = [];
+
+			const flushPendingSocketEvents = (sessionId: string) => {
+				for (const payload of pendingChunksRef.current) {
+					if (payload.sessionId === sessionId) {
+						terminal.write(payload.data);
+					}
+				}
+				pendingChunksRef.current = pendingChunksRef.current.filter(
+					(payload) => payload.sessionId !== sessionId,
+				);
+
+				for (const payload of pendingExitsRef.current) {
+					if (payload.sessionId === sessionId) {
+						setStatus(`Session closed (${payload.exitCode ?? 0})`);
+						terminal.writeln(`\r\nSession closed (${payload.exitCode ?? 0}).`);
+					}
+				}
+				pendingExitsRef.current = pendingExitsRef.current.filter(
+					(payload) => payload.sessionId !== sessionId,
+				);
+			};
 
 			const resizeObserver = new ResizeObserver(() => {
 				fitAddon.fit();
@@ -218,6 +244,31 @@ export function TerminalPanel({
 
 			const socket = getSocket();
 
+			const onData = (payload: { sessionId: string; data: string }) => {
+				if (!sessionIdRef.current) {
+					pendingChunksRef.current.push(payload);
+					return;
+				}
+
+				if (payload.sessionId === sessionIdRef.current) {
+					terminal.write(payload.data);
+				}
+			};
+			const onExit = (payload: { sessionId: string; exitCode?: number }) => {
+				if (!sessionIdRef.current) {
+					pendingExitsRef.current.push(payload);
+					return;
+				}
+
+				if (payload.sessionId === sessionIdRef.current) {
+					setStatus(`Session closed (${payload.exitCode ?? 0})`);
+					terminal.writeln(`\r\nSession closed (${payload.exitCode ?? 0}).`);
+				}
+			};
+
+			socket.on("terminal:data", onData);
+			socket.on("terminal:exit", onExit);
+
 			socket.emit(
 				"terminal:create",
 				{
@@ -226,7 +277,7 @@ export function TerminalPanel({
 					cols: terminal.cols,
 					rows: terminal.rows,
 				},
-				(response: { sessionId?: string; error?: string }) => {
+				(response: { sessionId?: string; initialData?: string; error?: string }) => {
 					if (response.error || !response.sessionId) {
 						setStatus(response.error || "Unable to start shell session.");
 						terminal.writeln(`\r\n${response.error || "Unable to start shell session."}`);
@@ -235,6 +286,13 @@ export function TerminalPanel({
 
 					sessionIdRef.current = response.sessionId;
 					setStatus(`Connected to ${label}`);
+					if (response.initialData) {
+						terminal.write(response.initialData);
+					}
+					flushPendingSocketEvents(response.sessionId);
+					window.requestAnimationFrame(() => {
+						terminal.focus();
+					});
 				},
 			);
 
@@ -248,21 +306,6 @@ export function TerminalPanel({
 					data,
 				});
 			});
-
-			const onData = (payload: { sessionId: string; data: string }) => {
-				if (payload.sessionId === sessionIdRef.current) {
-					terminal.write(payload.data);
-				}
-			};
-			const onExit = (payload: { sessionId: string; exitCode?: number }) => {
-				if (payload.sessionId === sessionIdRef.current) {
-					setStatus(`Session closed (${payload.exitCode ?? 0})`);
-					terminal.writeln(`\r\nSession closed (${payload.exitCode ?? 0}).`);
-				}
-			};
-
-			socket.on("terminal:data", onData);
-			socket.on("terminal:exit", onExit);
 
 			cleanup = () => {
 				disposable.dispose();
@@ -278,6 +321,8 @@ export function TerminalPanel({
 				terminalInstanceRef.current = null;
 				fitRef.current = null;
 				sessionIdRef.current = null;
+				pendingChunksRef.current = [];
+				pendingExitsRef.current = [];
 			};
 		})();
 
@@ -298,9 +343,24 @@ export function TerminalPanel({
 					{label}
 				</Badge>
 			</div>
-			<div className="mt-3 overflow-hidden rounded-lg border border-default/10 bg-console">
+			<div
+				className="mt-3 overflow-hidden rounded-lg border border-default/10 bg-console"
+				role="button"
+				tabIndex={0}
+				aria-label="Focus terminal"
+				onClick={() => terminalInstanceRef.current?.focus()}
+				onKeyDown={(event) => {
+					if (event.key === "Enter" || event.key === " ") {
+						event.preventDefault();
+						terminalInstanceRef.current?.focus();
+					}
+				}}
+			>
 				<div ref={terminalRef} className="h-[600px] w-full p-3" />
 			</div>
+			<p className="mt-2 text-xs text-muted">
+				Click inside the terminal to focus it, then type commands normally.
+			</p>
 		</Panel>
 	);
 }

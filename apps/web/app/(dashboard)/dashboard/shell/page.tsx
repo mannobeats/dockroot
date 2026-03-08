@@ -1,9 +1,7 @@
 import { PageHeader } from "@/components/page-header";
+import { ShellSessionControls } from "@/components/shell-session-controls";
 import { TerminalPanel } from "@/components/terminal-panel";
-import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Panel } from "@/components/ui/panel";
-import { Select } from "@/components/ui/select";
 import { isPrivilegedRole, requireUserSession } from "@/lib/authorization";
 import { resolveRuntimeEnvironment } from "@/lib/environment-runtime";
 import { listAccessibleContainersForUser } from "@/lib/runtime-access";
@@ -18,13 +16,19 @@ export default async function ShellPage({
 	const environment = await resolveRuntimeEnvironment(userId, params.environment);
 	const containers = await listAccessibleContainersForUser(userId, role, environment.id);
 	const allowHostShell = isPrivilegedRole(role);
-	const requestedContainer =
-		params.target === "container" && params.containerId
-			? containers.find((container: Record<string, string>) => container.ID === params.containerId)
-			: null;
+	const requestedTarget = !allowHostShell
+		? "container"
+		: params.target === "container"
+			? "container"
+			: params.target === "host"
+				? "host"
+				: null;
+	const selectedTarget = requestedTarget || (allowHostShell ? "host" : "container");
 	const selectedContainer =
-		requestedContainer || (params.target === "container" || !allowHostShell ? containers[0] : null);
-	const isContainerShell = !allowHostShell || Boolean(selectedContainer);
+		requestedTarget === "container" && params.containerId
+			? containers.find((container: Record<string, string>) => container.ID === params.containerId) || null
+			: null;
+	const shouldRenderTerminal = requestedTarget === "host" || Boolean(selectedContainer);
 
 	return (
 		<div className="animate-in space-y-6">
@@ -38,43 +42,43 @@ export default async function ShellPage({
 				}
 			/>
 
-			<Panel padding="sm">
-				<form className="flex flex-col gap-3 sm:flex-row">
-					<input type="hidden" name="environment" value={environment.id} />
-					<Select
-						name="target"
-						defaultValue={isContainerShell ? "container" : "host"}
-					>
-						{allowHostShell ? <option value="host">Host shell</option> : null}
-						<option value="container">Container shell</option>
-					</Select>
-					<Select
-						name="containerId"
-						defaultValue={selectedContainer?.ID || ""}
-						className="flex-1"
-					>
-						<option value="">Select container</option>
-						{containers.map((container: Record<string, string>) => (
-							<option key={container.ID} value={container.ID}>
-								{container.Names} ({container.State})
-							</option>
-						))}
-					</Select>
-					<Button type="submit">
-						Connect
-					</Button>
-				</form>
-			</Panel>
+			<ShellSessionControls
+				environmentId={environment.id}
+				allowHostShell={allowHostShell}
+				containers={containers.map((container: Record<string, string>) => ({
+					id: container.ID,
+					name: container.Names,
+					state: container.State,
+				}))}
+				initialTarget={selectedTarget}
+				initialContainerId={selectedContainer?.ID}
+			/>
 
-			{isContainerShell && !selectedContainer ? (
-				<EmptyState title="No accessible containers available" className="p-8" />
+			{selectedTarget === "container" && containers.length === 0 ? (
+				<EmptyState
+					title="No accessible containers available"
+					description="Start a container or deploy a stack before opening a container shell."
+					className="p-8"
+				/>
+			) : !requestedTarget ? (
+				<EmptyState
+					title="Choose a shell target"
+					description="Pick host or container access above, then open the shell when you are ready."
+					className="p-8"
+				/>
+			) : !shouldRenderTerminal ? (
+				<EmptyState
+					title="Select a container to continue"
+					description="The shell opens only after you explicitly choose which running container to attach to."
+					className="p-8"
+				/>
 			) : (
 				<TerminalPanel
-					target={isContainerShell ? "container" : "host"}
+					target={selectedTarget}
 					containerId={selectedContainer?.ID}
-					transport={environment.kind === "local" ? "local" : "remote"}
+					transport="remote"
 					environmentId={environment.id}
-					label={isContainerShell ? selectedContainer?.Names || "Container" : "Host"}
+					label={selectedTarget === "container" ? selectedContainer?.Names || "Container" : "Host"}
 				/>
 			)}
 		</div>
