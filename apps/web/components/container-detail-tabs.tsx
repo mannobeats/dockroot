@@ -8,6 +8,17 @@ import { ContainerMetricsPanel } from "@/components/container-metrics-panel";
 import { RuntimePortLinks } from "@/components/runtime-port-links";
 
 type Tab = "overview" | "metrics" | "logs" | "config" | "networks" | "files";
+type ContainerMetrics = {
+	available: boolean;
+	cpuPercent: number | null;
+	memoryBytes: number | null;
+	rxBytes: number | null;
+	txBytes: number | null;
+	cpuSeries: Array<{ time: string; value: number }>;
+	memorySeries: Array<{ time: string; value: number }>;
+	rxSeries: Array<{ time: string; value: number }>;
+	txSeries: Array<{ time: string; value: number }>;
+};
 
 export function ContainerDetailTabs({
 	containerId,
@@ -29,8 +40,7 @@ export function ContainerDetailTabs({
 	environmentId: string;
 	inspect: Record<string, unknown>;
 	details: Record<string, unknown> | null;
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	metrics: any;
+	metrics: ContainerMetrics | null;
 	mounts: Array<{ Source?: string; Destination?: string; Type?: string }>;
 	envVars: string[];
 	labels: Record<string, string>;
@@ -38,7 +48,11 @@ export function ContainerDetailTabs({
 	publishedPortSummary: string;
 	canOpenRuntimeTopology: boolean;
 	browser:
-		| { kind: "directory"; path: string; entries: Array<{ name: string; kind: "dir" | "file" | "other" }> }
+		| {
+				kind: "directory";
+				path: string;
+				entries: Array<{ name: string; kind: "dir" | "file" | "other" }>;
+		  }
 		| { kind: "file"; path: string; content: string }
 		| { kind: "missing"; path: string };
 	targetPath: string;
@@ -78,15 +92,21 @@ export function ContainerDetailTabs({
 						<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
 							<div className="rounded-xl border border-default/10 bg-surface p-4">
 								<p className="text-xs text-muted">Image</p>
-								<p className="mt-2 break-all text-sm font-medium">{String((inspect.Config as Record<string, unknown>)?.Image || "—")}</p>
+								<p className="mt-2 break-all text-sm font-medium">
+									{String((inspect.Config as Record<string, unknown>)?.Image || "—")}
+								</p>
 							</div>
 							<div className="rounded-xl border border-default/10 bg-surface p-4">
 								<p className="text-xs text-muted">Started at</p>
-								<p className="mt-2 text-sm font-medium">{String((inspect.State as Record<string, unknown>)?.StartedAt || "—")}</p>
+								<p className="mt-2 text-sm font-medium">
+									{String((inspect.State as Record<string, unknown>)?.StartedAt || "—")}
+								</p>
 							</div>
 							<div className="rounded-xl border border-default/10 bg-surface p-4">
 								<p className="text-xs text-muted">Restart count</p>
-								<p className="mt-2 text-sm font-medium">{String((inspect as Record<string, unknown>).RestartCount || 0)}</p>
+								<p className="mt-2 text-sm font-medium">
+									{String((inspect as Record<string, unknown>).RestartCount || 0)}
+								</p>
 							</div>
 							<div className="rounded-xl border border-default/10 bg-surface p-4">
 								<p className="text-xs text-muted">Memory / CPU</p>
@@ -201,7 +221,9 @@ export function ContainerDetailTabs({
 															name
 														)}
 													</td>
-													<td className="px-4 py-3 text-xs text-muted">{network.IPAddress || "—"}</td>
+													<td className="px-4 py-3 text-xs text-muted">
+														{network.IPAddress || "—"}
+													</td>
 													<td className="px-4 py-3 text-xs text-muted">{network.Gateway || "—"}</td>
 												</tr>
 											))
@@ -223,9 +245,14 @@ export function ContainerDetailTabs({
 							<div className="mt-3 space-y-2 text-sm text-muted">
 								{mounts.length ? (
 									mounts.map((mount) => (
-										<div key={`${mount.Source}-${mount.Destination}`} className="rounded-lg bg-foreground/[0.03] px-3 py-2">
+										<div
+											key={`${mount.Source}-${mount.Destination}`}
+											className="rounded-lg bg-foreground/[0.03] px-3 py-2"
+										>
 											<p className="font-medium text-foreground">{mount.Destination}</p>
-											<p className="mt-0.5 text-xs">{mount.Source || mount.Type || "Docker managed"}</p>
+											<p className="mt-0.5 text-xs">
+												{mount.Source || mount.Type || "Docker managed"}
+											</p>
 										</div>
 									))
 								) : (

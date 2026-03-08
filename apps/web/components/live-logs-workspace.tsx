@@ -274,9 +274,7 @@ export function LiveLogsWorkspace({
 								: containers.find((item) => item.id === selectedIds[0])?.name || "Logs"}
 						</p>
 						<p className="text-xs text-muted">
-							{mode === "grouped"
-								? `${selectedIds.length} containers`
-								: "docker logs -f"}
+							{mode === "grouped" ? `${selectedIds.length} containers` : "docker logs -f"}
 						</p>
 					</div>
 					<div className="flex flex-wrap items-center gap-1.5">
@@ -320,11 +318,11 @@ export function LiveLogsWorkspace({
 					</div>
 				</div>
 				<pre
-				ref={logViewportRef}
-				className="log-viewport mt-3 h-[680px] rounded-lg bg-[#0a0a0a] p-4 text-xs leading-5 text-white/85"
-			>
-				{combinedLogs || "No logs available."}
-			</pre>
+					ref={logViewportRef}
+					className="log-viewport mt-3 h-[680px] rounded-lg bg-[#0a0a0a] p-4 text-xs leading-5 text-white/85"
+				>
+					{combinedLogs || "No logs available."}
+				</pre>
 			</div>
 		</div>
 	);

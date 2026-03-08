@@ -116,9 +116,7 @@ export default async function DashboardPage({
 							</div>
 							<div className="rounded-lg bg-foreground/[0.02] p-3">
 								<p className="text-xs text-muted">Resources</p>
-								<p className="mt-1.5 text-sm font-medium">
-									{runtime.snapshot.host.cpus} CPU
-								</p>
+								<p className="mt-1.5 text-sm font-medium">{runtime.snapshot.host.cpus} CPU</p>
 								<p className="text-xs text-muted">
 									{memoryUsed} / {runtime.snapshot.host.totalMemoryGb} GB
 								</p>
@@ -133,7 +131,8 @@ export default async function DashboardPage({
 					<div className="rounded-xl border border-default/10 bg-surface p-5">
 						<h2 className="text-sm font-semibold">Workspace overview</h2>
 						<p className="mt-2 max-w-lg text-sm text-muted">
-							Scoped to owned projects, environments, stacks, and containers. Host telemetry restricted to privileged operators.
+							Scoped to owned projects, environments, stacks, and containers. Host telemetry
+							restricted to privileged operators.
 						</p>
 					</div>
 				)}
@@ -141,7 +140,10 @@ export default async function DashboardPage({
 				<div className="rounded-xl border border-default/10 bg-surface p-5">
 					<div className="flex items-center justify-between">
 						<h2 className="text-sm font-semibold">Recent projects</h2>
-						<Link href="/dashboard/projects" className="text-xs font-medium text-muted transition-colors hover:text-foreground">
+						<Link
+							href="/dashboard/projects"
+							className="text-xs font-medium text-muted transition-colors hover:text-foreground"
+						>
 							View all
 						</Link>
 					</div>
@@ -184,7 +186,10 @@ export default async function DashboardPage({
 			<div className="rounded-xl border border-default/10 bg-surface p-5">
 				<div className="flex items-center justify-between">
 					<h2 className="text-sm font-semibold">Latest deployments</h2>
-					<Link href="/dashboard/activity" className="text-xs font-medium text-muted transition-colors hover:text-foreground">
+					<Link
+						href="/dashboard/activity"
+						className="text-xs font-medium text-muted transition-colors hover:text-foreground"
+					>
 						View all
 					</Link>
 				</div>

@@ -76,7 +76,10 @@ export default async function StacksPage({
 						<tbody className="divide-y divide-default/5">
 							{filtered.length ? (
 								filtered.map((stack) => (
-									<tr key={`${stack.type}-${stack.slug}`} className="group transition-colors hover:bg-foreground/[0.02]">
+									<tr
+										key={`${stack.type}-${stack.slug}`}
+										className="group transition-colors hover:bg-foreground/[0.02]"
+									>
 										<td className="px-4 py-3">
 											<div className="space-y-0.5">
 												<div className="flex items-center gap-2">

@@ -49,7 +49,9 @@ export default async function EnvironmentsPage() {
 											>
 												{environment.name}
 											</Link>
-											<p className="mt-0.5 text-xs text-muted">{environment.description || "No description"}</p>
+											<p className="mt-0.5 text-xs text-muted">
+												{environment.description || "No description"}
+											</p>
 										</td>
 										<td className="px-4 py-3">
 											<StatusBadge status={environment.status} />

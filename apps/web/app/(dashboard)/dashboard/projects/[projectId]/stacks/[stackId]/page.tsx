@@ -9,7 +9,6 @@ import {
 import { CodeEditor } from "@/components/code-editor";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { LiveStackFeed } from "@/components/live-stack-feed";
-import { RuntimePortLinks } from "@/components/runtime-port-links";
 import { StackServicesAccordion } from "@/components/stack-services-accordion";
 import { StatusBadge } from "@/components/status-badge";
 import { getStackById } from "@/lib/platform";
@@ -39,7 +38,8 @@ export default async function StackWorkspacePage({
 	}
 
 	const containers = await listStackContainers(stack.slug);
-	const containerDetailsMap: Record<string, { inspect: Record<string, unknown>; logs: string }> = {};
+	const containerDetailsMap: Record<string, { inspect: Record<string, unknown>; logs: string }> =
+		{};
 	for (const container of containers) {
 		try {
 			const details = await getContainerDetails(container.ID);
@@ -65,7 +65,9 @@ export default async function StackWorkspacePage({
 					</Link>
 					<div>
 						<div className="flex items-center gap-2">
-							<p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted">Stack</p>
+							<p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted">
+								Stack
+							</p>
 							<StatusBadge status={stack.status} />
 						</div>
 						<h1 className="text-lg font-semibold">{stack.name}</h1>
@@ -111,9 +113,7 @@ export default async function StackWorkspacePage({
 					</span>
 				) : null}
 				{stack.sourceType === "github" && stack.githubBranch ? (
-					<span className="rounded-md bg-foreground/[0.04] px-2 py-1">
-						{stack.githubBranch}
-					</span>
+					<span className="rounded-md bg-foreground/[0.04] px-2 py-1">{stack.githubBranch}</span>
 				) : null}
 			</div>
 

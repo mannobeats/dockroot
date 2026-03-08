@@ -114,7 +114,9 @@ export default async function ImagesPage({
 				</div>
 				<div className="rounded-xl border border-default/10 bg-surface p-4">
 					<p className="text-xs text-muted">In use</p>
-					<p className="mt-1 text-2xl font-semibold text-emerald-600 dark:text-emerald-400">{inUseCount}</p>
+					<p className="mt-1 text-2xl font-semibold text-emerald-600 dark:text-emerald-400">
+						{inUseCount}
+					</p>
 				</div>
 			</div>
 
@@ -137,7 +139,10 @@ export default async function ImagesPage({
 									const imageRef = `${image.Repository}:${image.Tag}`;
 									const isProtected = protectedImageRefs.has(imageRef);
 									return (
-										<tr key={`${image.ID}-${imageRef}`} className="transition-colors hover:bg-foreground/[0.02]">
+										<tr
+											key={`${image.ID}-${imageRef}`}
+											className="transition-colors hover:bg-foreground/[0.02]"
+										>
 											<td className="px-4 py-3">
 												<div className="flex items-center gap-2">
 													<Link

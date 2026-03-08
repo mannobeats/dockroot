@@ -51,7 +51,9 @@ export default async function ImageDetailPage({
 					</Link>
 					<div>
 						<div className="flex items-center gap-2">
-							<p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted">Image</p>
+							<p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted">
+								Image
+							</p>
 							<StatusBadge status="healthy" />
 							{isProtected ? (
 								<span

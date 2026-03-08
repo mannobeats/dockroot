@@ -1,5 +1,5 @@
 import { execFile, spawn } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import os from "node:os";
 import path from "node:path";
@@ -100,6 +100,15 @@ async function requestText(url, options = {}) {
 		throw new Error(text || `Request failed for ${url}`);
 	}
 	return text;
+}
+
+async function requestBuffer(url, options = {}) {
+	const response = await fetch(url, options);
+	const buffer = Buffer.from(await response.arrayBuffer());
+	if (!response.ok) {
+		throw new Error(buffer.toString("utf8") || `Request failed for ${url}`);
+	}
+	return buffer;
 }
 
 async function detectDockerVersion() {
@@ -332,9 +341,81 @@ async function pollJob(state) {
 	return parseEnvPayload(response);
 }
 
-async function runComposeJob(job) {
+function resolveWorkspaceFilePath(rootDir, relativePath, fallback) {
+	const candidate = (relativePath || fallback).trim() || fallback;
+	const resolved = path.resolve(rootDir, candidate);
+	const relative = path.relative(rootDir, resolved);
+
+	if (
+		!relative ||
+		relative === ".." ||
+		relative.startsWith(`..${path.sep}`) ||
+		path.isAbsolute(relative)
+	) {
+		throw new Error("GitHub stack paths must stay within the repository workspace.");
+	}
+
+	return resolved;
+}
+
+async function extractArchive(archive, destinationDir) {
+	await rm(destinationDir, { recursive: true, force: true });
+	await mkdir(destinationDir, { recursive: true });
+
+	return withTempFile("source.tar.gz", archive, async (archivePath) => {
+		await execFileAsync(
+			"tar",
+			["-xzf", archivePath, "--strip-components=1", "-C", destinationDir],
+			{
+				maxBuffer: 1024 * 1024 * 32,
+			},
+		);
+	});
+}
+
+async function prepareComposeWorkspace(state, job) {
 	const stackDir = path.join(stacksDir, job.STACK_SLUG);
+	const repoDir = path.join(stackDir, "repo");
 	await mkdir(stackDir, { recursive: true });
+
+	if (job.SOURCE_TYPE === "github") {
+		if (job.OPERATION === "deploy") {
+			const archive = await requestBuffer(
+				`${state.managerUrl || managerUrl}/api/agent/jobs/${encodeURIComponent(job.JOB_ID)}/source`,
+				{
+					headers: {
+						Authorization: `Bearer ${state.agentToken}`,
+					},
+				},
+			);
+			await extractArchive(archive, repoDir);
+		} else {
+			const repoExists = await access(repoDir)
+				.then(() => true)
+				.catch(() => false);
+
+			if (!repoExists) {
+				throw new Error("GitHub destroy requires an existing repository workspace on disk.");
+			}
+		}
+
+		const composePath = resolveWorkspaceFilePath(repoDir, job.COMPOSE_PATH, "compose.yaml");
+		const envPath = resolveWorkspaceFilePath(repoDir, job.ENV_PATH, ".env");
+		await mkdir(path.dirname(composePath), { recursive: true });
+		await mkdir(path.dirname(envPath), { recursive: true });
+		await writeFile(
+			composePath,
+			Buffer.from(job.COMPOSE_B64 || "", "base64").toString("utf8"),
+			"utf8",
+		);
+		await writeFile(envPath, Buffer.from(job.ENV_B64 || "", "base64").toString("utf8"), "utf8");
+
+		return {
+			composePath,
+			envPath,
+			workingDirectory: path.dirname(composePath),
+		};
+	}
 
 	const composePath = path.join(stackDir, "compose.yaml");
 	const envPath = path.join(stackDir, ".env");
@@ -345,36 +426,51 @@ async function runComposeJob(job) {
 	);
 	await writeFile(envPath, Buffer.from(job.ENV_B64 || "", "base64").toString("utf8"), "utf8");
 
-	const args =
-		job.OPERATION === "destroy"
-			? [
-					"compose",
-					"-p",
-					job.STACK_SLUG,
-					"--env-file",
-					envPath,
-					"-f",
-					composePath,
-					"down",
-					"--volumes",
-					"--rmi",
-					"local",
-					"--remove-orphans",
-				]
-			: [
-					"compose",
-					"-p",
-					job.STACK_SLUG,
-					"--env-file",
-					envPath,
-					"-f",
-					composePath,
-					"up",
-					"-d",
-					"--remove-orphans",
-				];
+	return {
+		composePath,
+		envPath,
+		workingDirectory: stackDir,
+	};
+}
 
+async function runComposeJob(state, job) {
 	try {
+		const { composePath, envPath, workingDirectory } = await prepareComposeWorkspace(state, job);
+
+		const args =
+			job.OPERATION === "destroy"
+				? [
+						"compose",
+						"-p",
+						job.STACK_SLUG,
+						"--project-directory",
+						workingDirectory,
+						"--env-file",
+						envPath,
+						"-f",
+						composePath,
+						"down",
+						"--volumes",
+						"--rmi",
+						"local",
+						"--remove-orphans",
+					]
+				: [
+						"compose",
+						"-p",
+						job.STACK_SLUG,
+						"--project-directory",
+						workingDirectory,
+						"--env-file",
+						envPath,
+						"-f",
+						composePath,
+						"up",
+						"-d",
+						"--build",
+						"--remove-orphans",
+					];
+
 		const result = await execFileAsync("docker", args, {
 			maxBuffer: 1024 * 1024 * 16,
 		});
@@ -911,7 +1007,7 @@ async function loop() {
 			const job = await pollJob(state);
 
 			if (job.JOB_ID) {
-				const result = await runComposeJob(job);
+				const result = await runComposeJob(state, job);
 				await reportJobResult(state, job.JOB_ID, result.status, result.log);
 			}
 		} catch (error) {

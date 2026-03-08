@@ -34,11 +34,29 @@ const navItems = [
 	{ href: "/dashboard/shell", label: "Shell", icon: SquareTerminal, group: "runtime" },
 	{ href: "/dashboard/logs", label: "Logs", icon: Logs, group: "runtime" },
 	{ href: "/dashboard/images", label: "Images", icon: Boxes, group: "resources", privileged: true },
-	{ href: "/dashboard/volumes", label: "Volumes", icon: HardDrive, group: "resources", privileged: true },
-	{ href: "/dashboard/networks", label: "Networks", icon: Network, group: "resources", privileged: true },
+	{
+		href: "/dashboard/volumes",
+		label: "Volumes",
+		icon: HardDrive,
+		group: "resources",
+		privileged: true,
+	},
+	{
+		href: "/dashboard/networks",
+		label: "Networks",
+		icon: Network,
+		group: "resources",
+		privileged: true,
+	},
 	{ href: "/dashboard/activity", label: "Activity", icon: Activity, group: "ops" },
 	{ href: "/dashboard/schedules", label: "Schedules", icon: TimerReset, group: "ops" },
-	{ href: "/dashboard/settings", label: "Settings", icon: Settings, group: "admin", privileged: true },
+	{
+		href: "/dashboard/settings",
+		label: "Settings",
+		icon: Settings,
+		group: "admin",
+		privileged: true,
+	},
 ];
 
 interface SidebarProps {
@@ -132,7 +150,9 @@ export function Sidebar({
 				}`}
 			>
 				{/* Logo / Brand */}
-				<div className={`flex h-14 items-center border-b border-default/10 ${collapsed ? "justify-center px-3" : "justify-between px-5"}`}>
+				<div
+					className={`flex h-14 items-center border-b border-default/10 ${collapsed ? "justify-center px-3" : "justify-between px-5"}`}
+				>
 					{!collapsed ? (
 						<Link href="/dashboard" className="flex items-center gap-2.5">
 							<div className="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground text-background">
@@ -141,7 +161,10 @@ export function Sidebar({
 							<span className="text-sm font-semibold tracking-tight">Dockroot</span>
 						</Link>
 					) : (
-						<Link href="/dashboard" className="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground text-background">
+						<Link
+							href="/dashboard"
+							className="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground text-background"
+						>
 							<Layers3 className="h-4 w-4" />
 						</Link>
 					)}
@@ -186,7 +209,15 @@ export function Sidebar({
 						<div key={group} className={index > 0 ? "mt-4 border-t border-default/8 pt-4" : ""}>
 							{!collapsed ? (
 								<p className="mb-1.5 px-2 text-[11px] font-medium uppercase tracking-wider text-muted/60">
-									{group === "main" ? "" : group === "runtime" ? "Runtime" : group === "resources" ? "Resources" : group === "ops" ? "Operations" : "Admin"}
+									{group === "main"
+										? ""
+										: group === "runtime"
+											? "Runtime"
+											: group === "resources"
+												? "Resources"
+												: group === "ops"
+													? "Operations"
+													: "Admin"}
 								</p>
 							) : null}
 							<div className="space-y-0.5">
@@ -195,9 +226,10 @@ export function Sidebar({
 										pathname === item.href ||
 										(item.href !== "/dashboard" && pathname.startsWith(item.href));
 
-									const linkHref = selectedEnvironmentId && item.href !== "/dashboard/environments"
-										? `${item.href}?environment=${selectedEnvironmentId}`
-										: item.href;
+									const linkHref =
+										selectedEnvironmentId && item.href !== "/dashboard/environments"
+											? `${item.href}?environment=${selectedEnvironmentId}`
+											: item.href;
 
 									return (
 										<Link
@@ -212,7 +244,9 @@ export function Sidebar({
 													: "text-muted hover:bg-foreground/[0.04] hover:text-foreground"
 											}`}
 										>
-											<item.icon className={`h-4 w-4 shrink-0 ${isActive ? "text-foreground" : "text-muted group-hover:text-foreground"}`} />
+											<item.icon
+												className={`h-4 w-4 shrink-0 ${isActive ? "text-foreground" : "text-muted group-hover:text-foreground"}`}
+											/>
 											{!collapsed ? <span>{item.label}</span> : null}
 										</Link>
 									);

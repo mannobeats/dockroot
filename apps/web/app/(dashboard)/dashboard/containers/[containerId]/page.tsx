@@ -1,6 +1,7 @@
 import { ArrowLeft, Lock } from "lucide-react";
 import Link from "next/link";
 import { controlContainerAction } from "@/app/(dashboard)/actions";
+import { ContainerDetailTabs } from "@/components/container-detail-tabs";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { StatusBadge } from "@/components/status-badge";
 import { isPrivilegedRole, requireUserSession } from "@/lib/authorization";
@@ -12,7 +13,6 @@ import {
 import { getPrometheusContainerMetrics } from "@/lib/prometheus";
 import { requireAccessibleContainerForUser } from "@/lib/runtime-access";
 import { getProtectedContainerLabel, isProtectedManagerContainer } from "@/lib/runtime-protection";
-import { ContainerDetailTabs } from "@/components/container-detail-tabs";
 
 const sensitiveEnvPattern =
 	/(SECRET|TOKEN|PASSWORD|KEY|PRIVATE|COOKIE|SESSION|AUTH|DATABASE_URL|CONNECTION_STRING)/i;
@@ -145,7 +145,9 @@ export default async function ContainerDetailPage({
 								</span>
 							) : null}
 						</div>
-						<p className="text-sm text-muted">{inspect.Config?.Image} · {environment.name}</p>
+						<p className="text-sm text-muted">
+							{inspect.Config?.Image} · {environment.name}
+						</p>
 					</div>
 				</div>
 				<div className="flex flex-wrap gap-1.5">

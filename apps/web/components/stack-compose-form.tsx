@@ -88,9 +88,7 @@ export function StackComposeForm({
 				</div>
 				<div>
 					<div className="border-b border-default/5 bg-surface px-4 py-2">
-						<p className="text-xs font-medium">
-							{stackName ? `${stackName}.env` : ".env"}
-						</p>
+						<p className="text-xs font-medium">{stackName ? `${stackName}.env` : ".env"}</p>
 					</div>
 					<CodeEditor
 						value={envFileContent}

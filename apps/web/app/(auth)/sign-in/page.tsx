@@ -1,6 +1,6 @@
 "use client";
 
-import { Layers3, LogIn, Mail, Lock } from "lucide-react";
+import { Layers3, Lock, LogIn, Mail } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { signIn } from "@/lib/auth-client";
@@ -96,9 +96,7 @@ export default function SignInPage() {
 				</button>
 			</form>
 			<div className="border-t border-default/10 px-6 py-4 text-center">
-				<p className="text-xs text-muted">
-					Account creation is controlled by the instance owner.
-				</p>
+				<p className="text-xs text-muted">Account creation is controlled by the instance owner.</p>
 			</div>
 		</div>
 	);

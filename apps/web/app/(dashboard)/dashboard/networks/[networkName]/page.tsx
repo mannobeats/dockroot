@@ -43,7 +43,9 @@ export default async function NetworkDetailPage({
 					<ArrowLeft className="h-4 w-4" />
 				</Link>
 				<div>
-					<p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted">Network</p>
+					<p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted">
+						Network
+					</p>
 					<h1 className="text-lg font-semibold">{decodedName}</h1>
 				</div>
 			</div>

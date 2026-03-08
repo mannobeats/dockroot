@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { StackComposeForm } from "@/components/stack-compose-form";
-import { StackGitHubForm } from "@/components/stack-github-form";
+import { type InstallationOption, StackGitHubForm } from "@/components/stack-github-form";
 import { StatusBadge } from "@/components/status-badge";
 
 type Tab = "stacks" | "deploy-github" | "deploy-manual";
@@ -32,6 +32,8 @@ type Project = {
 	stacks: Stack[];
 };
 
+type FormAction = (formData: FormData) => void | Promise<void>;
+
 export function ProjectDetailTabs({
 	project,
 	environments,
@@ -45,19 +47,13 @@ export function ProjectDetailTabs({
 }: {
 	project: Project;
 	environments: Environment[];
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	githubInstallations: any[];
+	githubInstallations: InstallationOption[];
 	appConfigured: boolean;
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	createGitHubStackAction: any;
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	createStackAction: any;
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	deployStackAction: any;
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	destroyStackAction: any;
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	deleteStackAction: any;
+	createGitHubStackAction: FormAction;
+	createStackAction: FormAction;
+	deployStackAction: FormAction;
+	destroyStackAction: FormAction;
+	deleteStackAction: FormAction;
 }) {
 	const [activeTab, setActiveTab] = useState<Tab>("stacks");
 
@@ -117,9 +113,7 @@ export function ProjectDetailTabs({
 													<td className="px-4 py-3">
 														<StatusBadge status={stack.status} />
 													</td>
-													<td className="px-4 py-3 text-xs text-muted">
-														{stack.environment.name}
-													</td>
+													<td className="px-4 py-3 text-xs text-muted">{stack.environment.name}</td>
 													<td className="px-4 py-3 text-xs text-muted">
 														{stack.sourceType === "github" ? "GitHub" : "Manual"}
 													</td>

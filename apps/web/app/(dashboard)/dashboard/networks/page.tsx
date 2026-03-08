@@ -47,7 +47,10 @@ export default async function NetworksPage({
 							placeholder="Search networks..."
 							className="h-9 flex-1 rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
 						/>
-						<button type="submit" className="inline-flex h-9 items-center rounded-lg border border-default/10 px-3 text-sm font-medium">
+						<button
+							type="submit"
+							className="inline-flex h-9 items-center rounded-lg border border-default/10 px-3 text-sm font-medium"
+						>
 							Filter
 						</button>
 					</form>
@@ -70,11 +73,19 @@ export default async function NetworksPage({
 							<option value="macvlan">macvlan</option>
 							<option value="host">host</option>
 						</select>
-						<FormSubmitButton label="Create" pendingLabel="Creating..." className="inline-flex h-9 items-center rounded-lg bg-foreground px-3 text-sm font-medium text-background" />
+						<FormSubmitButton
+							label="Create"
+							pendingLabel="Creating..."
+							className="inline-flex h-9 items-center rounded-lg bg-foreground px-3 text-sm font-medium text-background"
+						/>
 					</form>
 					<form action={pruneNetworksAction}>
 						<input type="hidden" name="environmentId" value={environment.id} />
-						<FormSubmitButton label="Prune" pendingLabel="Pruning..." className="inline-flex h-9 items-center rounded-lg border border-default/10 px-3 text-sm font-medium text-muted transition-colors hover:text-foreground" />
+						<FormSubmitButton
+							label="Prune"
+							pendingLabel="Pruning..."
+							className="inline-flex h-9 items-center rounded-lg border border-default/10 px-3 text-sm font-medium text-muted transition-colors hover:text-foreground"
+						/>
 					</form>
 				</div>
 			</div>
@@ -110,7 +121,10 @@ export default async function NetworksPage({
 						<tbody className="divide-y divide-default/5">
 							{filtered.length ? (
 								filtered.map((network: Record<string, string>) => (
-									<tr key={`${network.ID}-${network.Name}`} className="transition-colors hover:bg-foreground/[0.02]">
+									<tr
+										key={`${network.ID}-${network.Name}`}
+										className="transition-colors hover:bg-foreground/[0.02]"
+									>
 										<td className="px-4 py-3">
 											<Link
 												href={`/dashboard/networks/${encodeURIComponent(network.Name)}?environment=${environment.id}`}

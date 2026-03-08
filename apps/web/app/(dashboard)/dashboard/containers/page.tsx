@@ -56,7 +56,9 @@ export default async function ContainersPage({
 				</div>
 				<div className="rounded-xl border border-default/10 bg-surface p-4">
 					<p className="text-xs text-muted">Running</p>
-					<p className="mt-1 text-2xl font-semibold text-emerald-600 dark:text-emerald-400">{runningCount}</p>
+					<p className="mt-1 text-2xl font-semibold text-emerald-600 dark:text-emerald-400">
+						{runningCount}
+					</p>
 				</div>
 				<div className="rounded-xl border border-default/10 bg-surface p-4">
 					<p className="text-xs text-muted">Published ports</p>
@@ -118,7 +120,10 @@ export default async function ContainersPage({
 										environment.kind === "local" ? getProtectedContainerLabel(container) : "";
 
 									return (
-										<tr key={`${container.ID}-${container.Names}`} className="group transition-colors hover:bg-foreground/[0.02]">
+										<tr
+											key={`${container.ID}-${container.Names}`}
+											className="group transition-colors hover:bg-foreground/[0.02]"
+										>
 											<td className="px-4 py-3">
 												<div className="space-y-0.5">
 													<div className="flex items-center gap-2">
@@ -175,11 +180,7 @@ export default async function ContainersPage({
 																label={action}
 																pendingLabel={`${action}ing...`}
 																disabled={isProtected}
-																title={
-																	isProtected
-																		? "Protected container"
-																		: undefined
-																}
+																title={isProtected ? "Protected container" : undefined}
 																className="inline-flex h-7 items-center rounded-md border border-default/10 bg-background px-2.5 text-xs font-medium text-muted transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
 															/>
 														</form>

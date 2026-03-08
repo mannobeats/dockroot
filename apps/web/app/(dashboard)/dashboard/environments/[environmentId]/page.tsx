@@ -42,7 +42,9 @@ export default async function EnvironmentDetailPage({
 					</Link>
 					<div>
 						<div className="flex items-center gap-2">
-							<p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted">Environment</p>
+							<p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted">
+								Environment
+							</p>
 							<StatusBadge status={environment.status} />
 						</div>
 						<h1 className="text-lg font-semibold">{environment.name}</h1>
@@ -145,7 +147,9 @@ export default async function EnvironmentDetailPage({
 
 				<div className="rounded-xl border border-default/10 bg-surface">
 					<div className="border-b border-default/10 px-4 py-3">
-						<h2 className="text-sm font-semibold">Recent deployments ({environment.deployments.length})</h2>
+						<h2 className="text-sm font-semibold">
+							Recent deployments ({environment.deployments.length})
+						</h2>
 					</div>
 					{environment.deployments.length ? (
 						<div className="divide-y divide-default/5">

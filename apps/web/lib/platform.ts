@@ -13,6 +13,7 @@ import {
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import {
+	downloadRepositoryTarball,
 	fetchRepositoryTextFile,
 	getGitHubInstallation,
 	getRepositoryBranchHeadSha,
@@ -853,6 +854,52 @@ async function materializeGitHubStackSource(input: {
 	};
 }
 
+async function resolveGitHubDeploymentSource(
+	stack: {
+		sourceType: "manual" | "github";
+		githubInstallation: { githubInstallationId: string } | null;
+		githubOwner: string | null;
+		githubRepository: string | null;
+		githubBranch: string | null;
+	},
+	options?: { includeArchive?: boolean },
+) {
+	if (stack.sourceType !== "github") {
+		return {
+			sourceCommitSha: null,
+			sourceArchive: null,
+		};
+	}
+
+	if (
+		!stack.githubInstallation ||
+		!stack.githubOwner ||
+		!stack.githubRepository ||
+		!stack.githubBranch
+	) {
+		throw new Error("GitHub stack is missing repository metadata required for source builds.");
+	}
+
+	const sourceCommitSha = await getRepositoryBranchHeadSha({
+		installationId: stack.githubInstallation.githubInstallationId,
+		owner: stack.githubOwner,
+		repository: stack.githubRepository,
+		branch: stack.githubBranch,
+	});
+
+	return {
+		sourceCommitSha,
+		sourceArchive: options?.includeArchive
+			? await downloadRepositoryTarball({
+					installationId: stack.githubInstallation.githubInstallationId,
+					owner: stack.githubOwner,
+					repository: stack.githubRepository,
+					ref: sourceCommitSha,
+				})
+			: null,
+	};
+}
+
 export async function createGitHubStack({
 	userId,
 	projectId,
@@ -983,6 +1030,12 @@ export async function queueOrRunDeployment({
 	const version = `${createdAt.getUTCFullYear()}.${String(createdAt.getUTCMonth() + 1).padStart(2, "0")}.${String(createdAt.getUTCDate()).padStart(2, "0")}-${createdAt.getTime()}`;
 	const composeSnapshot = stack.composeYaml;
 	const envSnapshot = stack.envFileContent;
+	const gitHubSource =
+		operation === "deploy"
+			? await resolveGitHubDeploymentSource(stack, {
+					includeArchive: stack.environment.kind === "local",
+				})
+			: { sourceCommitSha: null, sourceArchive: null };
 
 	await db.insert(deployments).values({
 		id: deploymentId,
@@ -994,7 +1047,7 @@ export async function queueOrRunDeployment({
 		status: stack.environment.kind === "local" ? "running" : "queued",
 		composeSnapshot,
 		envSnapshot,
-		sourceCommitSha: null,
+		sourceCommitSha: gitHubSource.sourceCommitSha,
 		startedAt: stack.environment.kind === "local" ? createdAt : null,
 		createdAt,
 		updatedAt: createdAt,
@@ -1022,8 +1075,12 @@ export async function queueOrRunDeployment({
 			deploymentId,
 			stackId: stack.id,
 			stackSlug: stack.slug,
+			sourceType: stack.sourceType,
 			composeYaml: composeSnapshot,
 			envFileContent: envSnapshot,
+			sourceArchive: gitHubSource.sourceArchive,
+			composeFilePath: stack.githubPath || undefined,
+			envFilePath: stack.githubEnvPath || undefined,
 			operation,
 		});
 	}
@@ -1246,10 +1303,61 @@ export async function claimNextDeployment(accessToken: string) {
 		id: queued.id,
 		stackSlug: queued.stack.slug,
 		stackName: queued.stack.name,
+		sourceType: queued.stack.sourceType,
 		operation: queued.operation,
 		composeYaml: queued.composeSnapshot,
 		envFileContent: queued.envSnapshot,
+		composePath: queued.stack.githubPath,
+		envPath: queued.stack.githubEnvPath,
+		sourceCommitSha: queued.sourceCommitSha,
 	};
+}
+
+export async function getDeploymentSourceArchive({
+	deploymentId,
+	accessToken,
+}: {
+	deploymentId: string;
+	accessToken: string;
+}) {
+	const agent = await heartbeatAgent(accessToken);
+	const deployment = await db.query.deployments.findFirst({
+		where: and(
+			eq(deployments.id, deploymentId),
+			eq(deployments.environmentId, agent.environmentId),
+		),
+		with: {
+			stack: {
+				with: {
+					githubInstallation: true,
+				},
+			},
+		},
+	});
+
+	if (!deployment) {
+		throw new Error("Deployment not found");
+	}
+
+	if (deployment.stack.sourceType !== "github") {
+		throw new Error("This deployment does not have a GitHub source archive.");
+	}
+
+	if (
+		!deployment.stack.githubInstallation ||
+		!deployment.stack.githubOwner ||
+		!deployment.stack.githubRepository ||
+		!deployment.sourceCommitSha
+	) {
+		throw new Error("GitHub deployment is missing repository metadata.");
+	}
+
+	return downloadRepositoryTarball({
+		installationId: deployment.stack.githubInstallation.githubInstallationId,
+		owner: deployment.stack.githubOwner,
+		repository: deployment.stack.githubRepository,
+		ref: deployment.sourceCommitSha,
+	});
 }
 
 export async function completeDeployment({
@@ -1295,7 +1403,12 @@ export async function completeDeployment({
 	await db
 		.update(stacks)
 		.set({
-			status: status === "succeeded" ? "running" : "failed",
+			status:
+				status === "succeeded"
+					? deployment.operation === "destroy"
+						? "stopped"
+						: "running"
+					: "failed",
 			lastDeployedAt: updatedAt,
 			updatedAt,
 		})

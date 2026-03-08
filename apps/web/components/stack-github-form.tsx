@@ -1,6 +1,6 @@
 "use client";
 
-import { RefreshCw, Search, Sparkles, ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, RefreshCw, Search, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { CodeEditor } from "@/components/code-editor";
@@ -17,7 +17,7 @@ interface InstallationRepository {
 	};
 }
 
-interface InstallationOption {
+export interface InstallationOption {
 	id: string;
 	accountLogin: string;
 	accountType: string | null;
@@ -41,7 +41,7 @@ export function StackGitHubForm({
 	action: (formData: FormData) => void | Promise<void>;
 }) {
 	const [installationOptions, setInstallationOptions] = useState(installations);
-	const [installationState, setInstallationState] = useState<
+	const [_installationState, setInstallationState] = useState<
 		"idle" | "refreshing" | "ready" | "error"
 	>(installations.length ? "ready" : "idle");
 	const [installationStateMessage, setInstallationStateMessage] = useState("");
@@ -325,7 +325,9 @@ export function StackGitHubForm({
 			<div className="rounded-xl border border-default/10 bg-surface p-4">
 				<div className="flex items-center justify-between">
 					<div className="flex items-center gap-2">
-						<span className="flex h-5 w-5 items-center justify-center rounded-full bg-foreground text-[10px] font-bold text-background">1</span>
+						<span className="flex h-5 w-5 items-center justify-center rounded-full bg-foreground text-[10px] font-bold text-background">
+							1
+						</span>
 						<p className="text-sm font-semibold">Select repository</p>
 					</div>
 					<div className="flex items-center gap-2">
@@ -390,7 +392,9 @@ export function StackGitHubForm({
 									className={`flex w-full items-center justify-between border-b border-default/5 px-3 py-2 text-left text-xs last:border-b-0 ${active ? "bg-foreground/[0.06] text-foreground" : "text-muted hover:bg-foreground/[0.03] hover:text-foreground"}`}
 								>
 									<span className="font-medium">{repository.full_name}</span>
-									<span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${repository.private ? "bg-amber-500/10 text-amber-600 dark:text-amber-400" : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"}`}>
+									<span
+										className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${repository.private ? "bg-amber-500/10 text-amber-600 dark:text-amber-400" : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"}`}
+									>
 										{repository.private ? "private" : "public"}
 									</span>
 								</button>
@@ -408,13 +412,18 @@ export function StackGitHubForm({
 			{/* Step 2: Configuration */}
 			<div className="rounded-xl border border-default/10 bg-surface p-4">
 				<div className="flex items-center gap-2">
-					<span className="flex h-5 w-5 items-center justify-center rounded-full bg-foreground text-[10px] font-bold text-background">2</span>
+					<span className="flex h-5 w-5 items-center justify-center rounded-full bg-foreground text-[10px] font-bold text-background">
+						2
+					</span>
 					<p className="text-sm font-semibold">Configure stack</p>
 				</div>
 				<div className="mt-3 grid gap-3 sm:grid-cols-2">
 					<div className="space-y-1">
-						<label className="text-xs text-muted">Stack name</label>
+						<label htmlFor="github-stack-name" className="text-xs text-muted">
+							Stack name
+						</label>
 						<input
+							id="github-stack-name"
 							value={stackName}
 							onChange={(event) => setStackName(event.target.value)}
 							placeholder="my-app"
@@ -422,8 +431,11 @@ export function StackGitHubForm({
 						/>
 					</div>
 					<div className="space-y-1">
-						<label className="text-xs text-muted">Environment</label>
+						<label htmlFor="github-environment-id" className="text-xs text-muted">
+							Environment
+						</label>
 						<select
+							id="github-environment-id"
 							name="environmentId"
 							required
 							className="h-9 w-full rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors focus:border-foreground/20"
@@ -437,8 +449,11 @@ export function StackGitHubForm({
 					</div>
 				</div>
 				<div className="mt-3 space-y-1">
-					<label className="text-xs text-muted">Description</label>
+					<label htmlFor="github-stack-description" className="text-xs text-muted">
+						Description
+					</label>
 					<input
+						id="github-stack-description"
 						value={description}
 						onChange={(event) => setDescription(event.target.value)}
 						placeholder="Frontend + API + worker"
@@ -447,8 +462,11 @@ export function StackGitHubForm({
 				</div>
 				<div className="mt-3 grid gap-3 sm:grid-cols-3">
 					<div className="space-y-1">
-						<label className="text-xs text-muted">Branch</label>
+						<label htmlFor="github-stack-branch" className="text-xs text-muted">
+							Branch
+						</label>
 						<input
+							id="github-stack-branch"
 							value={branch}
 							onChange={(event) => {
 								setBranch(event.target.value);
@@ -458,8 +476,11 @@ export function StackGitHubForm({
 						/>
 					</div>
 					<div className="space-y-1">
-						<label className="text-xs text-muted">Compose file path</label>
+						<label htmlFor="github-compose-path" className="text-xs text-muted">
+							Compose file path
+						</label>
 						<input
+							id="github-compose-path"
 							value={composePath}
 							onChange={(event) => {
 								setComposePath(event.target.value);
@@ -471,8 +492,11 @@ export function StackGitHubForm({
 						/>
 					</div>
 					<div className="space-y-1">
-						<label className="text-xs text-muted">Env file path</label>
+						<label htmlFor="github-env-path" className="text-xs text-muted">
+							Env file path
+						</label>
 						<input
+							id="github-env-path"
 							value={envPath}
 							onChange={(event) => {
 								setEnvPath(event.target.value);
@@ -486,7 +510,9 @@ export function StackGitHubForm({
 				</div>
 				{pathSuggestions.length ? (
 					<div className="mt-3 flex flex-wrap gap-1.5">
-						<span className="text-[10px] text-muted uppercase tracking-wider mr-1 self-center">Detected:</span>
+						<span className="text-[10px] text-muted uppercase tracking-wider mr-1 self-center">
+							Detected:
+						</span>
 						{pathSuggestions.map((path) => (
 							<button
 								key={path}
@@ -520,6 +546,11 @@ export function StackGitHubForm({
 					) : null}
 					{loadError ? <p className="text-xs text-red-500">{loadError}</p> : null}
 				</div>
+				<p className="mt-3 text-xs text-muted">
+					Dockroot deploys the selected commit by materializing the repository on the target host,
+					then running Docker Compose with your reviewed compose and env files. Rebuilds use the
+					pinned commit SHA shown after load.
+				</p>
 			</div>
 
 			{/* Step 3: Review & Create */}
@@ -530,44 +561,50 @@ export function StackGitHubForm({
 					className="flex w-full items-center justify-between px-4 py-3"
 				>
 					<div className="flex items-center gap-2">
-						<span className="flex h-5 w-5 items-center justify-center rounded-full bg-foreground text-[10px] font-bold text-background">3</span>
+						<span className="flex h-5 w-5 items-center justify-center rounded-full bg-foreground text-[10px] font-bold text-background">
+							3
+						</span>
 						<p className="text-sm font-semibold">Review source</p>
 					</div>
-					{showEditor ? <ChevronDown className="h-4 w-4 text-muted" /> : <ChevronRight className="h-4 w-4 text-muted" />}
+					{showEditor ? (
+						<ChevronDown className="h-4 w-4 text-muted" />
+					) : (
+						<ChevronRight className="h-4 w-4 text-muted" />
+					)}
 				</button>
 				{showEditor ? (
-					<>
-						<div className="grid gap-0 border-t border-default/10 xl:grid-cols-[1.4fr_0.6fr]">
-							<div className="border-b border-default/10 xl:border-b-0 xl:border-r">
-								<div className="border-b border-default/5 px-4 py-2">
-									<p className="text-xs font-medium">{composePath || "compose.yaml"}</p>
-								</div>
-								<CodeEditor
-									value={composeYaml}
-									onChange={setComposeYaml}
-									language="yaml"
-									minHeight="360px"
-									placeholder="Load a repository to populate this editor."
-								/>
+					<div className="grid gap-0 border-t border-default/10 xl:grid-cols-[1.4fr_0.6fr]">
+						<div className="border-b border-default/10 xl:border-b-0 xl:border-r">
+							<div className="border-b border-default/5 px-4 py-2">
+								<p className="text-xs font-medium">{composePath || "compose.yaml"}</p>
 							</div>
-							<div>
-								<div className="border-b border-default/5 px-4 py-2">
-									<p className="text-xs font-medium">{envPath || ".env"}</p>
-								</div>
-								<CodeEditor
-									value={envFileContent}
-									onChange={setEnvFileContent}
-									language="env"
-									minHeight="360px"
-									placeholder="Optional env file."
-								/>
-							</div>
+							<CodeEditor
+								value={composeYaml}
+								onChange={setComposeYaml}
+								language="yaml"
+								minHeight="360px"
+								placeholder="Load a repository to populate this editor."
+							/>
 						</div>
-					</>
+						<div>
+							<div className="border-b border-default/5 px-4 py-2">
+								<p className="text-xs font-medium">{envPath || ".env"}</p>
+							</div>
+							<CodeEditor
+								value={envFileContent}
+								onChange={setEnvFileContent}
+								language="env"
+								minHeight="360px"
+								placeholder="Optional env file."
+							/>
+						</div>
+					</div>
 				) : null}
 				<div className="flex items-center justify-between border-t border-default/10 px-4 py-3">
 					<p className="text-xs text-muted">
-						{selectedRepository?.full_name ? `${selectedRepository.full_name}` : "Select a repository above"}
+						{selectedRepository?.full_name
+							? `${selectedRepository.full_name}`
+							: "Select a repository above"}
 					</p>
 					<FormSubmitButton
 						label="Create stack"

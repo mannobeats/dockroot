@@ -37,11 +37,7 @@ export default async function SettingsPage() {
 
 	return (
 		<div className="animate-in space-y-6">
-			<PageHeader
-				kicker="Admin"
-				title="Settings"
-				description="Global manager configuration"
-			/>
+			<PageHeader kicker="Admin" title="Settings" description="Global manager configuration" />
 			<div className="grid gap-4 sm:grid-cols-2">
 				{cards.map((card) => (
 					<div

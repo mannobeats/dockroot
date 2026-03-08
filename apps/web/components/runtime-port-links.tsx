@@ -12,8 +12,6 @@ type PublishedPort = {
 	description: string;
 };
 
-
-
 function normalizeHost(host: string) {
 	const stripped = host.replaceAll("[", "").replaceAll("]", "");
 	if (!stripped || stripped === "0.0.0.0" || stripped === "::") {

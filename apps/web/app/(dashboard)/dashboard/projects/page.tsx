@@ -49,17 +49,12 @@ export default async function ProjectsPage() {
 												{project.description || "No description"}
 											</p>
 										</td>
-										<td className="px-4 py-3 text-xs text-muted">
-											{project.stacks.length}
-										</td>
+										<td className="px-4 py-3 text-xs text-muted">{project.stacks.length}</td>
 										<td className="px-4 py-3">
 											{project.stacks.length > 0 ? (
 												<div className="flex flex-wrap gap-1.5">
 													{project.stacks.slice(0, 3).map((stack) => (
-														<span
-															key={stack.id}
-															className="inline-flex items-center gap-1 text-xs"
-														>
+														<span key={stack.id} className="inline-flex items-center gap-1 text-xs">
 															<span>{stack.name}</span>
 															<StatusBadge status={stack.status} />
 														</span>

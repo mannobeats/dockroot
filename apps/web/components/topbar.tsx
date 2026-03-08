@@ -1,6 +1,6 @@
 "use client";
 
-import { Menu, Search } from "lucide-react";
+import { Menu } from "lucide-react";
 import { ThemeToggle } from "./theme-toggle";
 
 interface TopbarProps {

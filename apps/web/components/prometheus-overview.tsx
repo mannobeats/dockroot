@@ -1,28 +1,33 @@
 "use client";
 
-import {
-	Bar,
-	BarChart,
-	CartesianGrid,
-	Cell,
-	Pie,
-	PieChart,
-	ResponsiveContainer,
-	Tooltip,
-	XAxis,
-	YAxis,
-} from "recharts";
+import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, Tooltip, XAxis, YAxis } from "recharts";
 import { ChartFrame } from "@/components/chart-frame";
 
 const PIE_COLORS = ["#22c55e", "#3b82f6", "#eab308", "#ef4444", "#a855f7"];
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+type ChartTooltipEntry = {
+	name?: string;
+	value?: number;
+	color?: string;
+};
+
+type ChartTooltipProps = {
+	active?: boolean;
+	payload?: ChartTooltipEntry[];
+	label?: string;
+};
+
+const CustomTooltip = ({ active, payload, label }: ChartTooltipProps) => {
 	if (!active || !payload?.length) return null;
 	return (
 		<div className="rounded-lg border border-default/10 bg-surface px-3 py-2 shadow-lg">
 			<p className="text-xs font-medium text-muted">{label}</p>
-			{payload.map((entry: any, index: number) => (
-				<p key={`${entry.name}-${index}`} className="text-sm font-semibold" style={{ color: entry.color }}>
+			{payload.map((entry, index) => (
+				<p
+					key={`${entry.name}-${index}`}
+					className="text-sm font-semibold"
+					style={{ color: entry.color }}
+				>
 					{entry.name}: {entry.value?.toFixed(1)}%
 				</p>
 			))}
@@ -97,8 +102,20 @@ export function PrometheusOverview({
 								tickFormatter={(v) => `${v}%`}
 							/>
 							<Tooltip content={<CustomTooltip />} />
-							<Bar dataKey="cpu" name="CPU" fill="var(--foreground)" radius={[3, 3, 0, 0]} maxBarSize={24} />
-							<Bar dataKey="memory" name="Memory" fill="#22c55e" radius={[3, 3, 0, 0]} maxBarSize={24} />
+							<Bar
+								dataKey="cpu"
+								name="CPU"
+								fill="var(--foreground)"
+								radius={[3, 3, 0, 0]}
+								maxBarSize={24}
+							/>
+							<Bar
+								dataKey="memory"
+								name="Memory"
+								fill="#22c55e"
+								radius={[3, 3, 0, 0]}
+								maxBarSize={24}
+							/>
 						</BarChart>
 					)}
 				</ChartFrame>
@@ -110,9 +127,7 @@ export function PrometheusOverview({
 				<div className="rounded-xl border border-default/10 bg-surface p-5">
 					<div className="flex items-center justify-between">
 						<h3 className="text-sm font-semibold">Deployment status</h3>
-						<p className="text-xs text-muted">
-							{metrics.runningContainers ?? 0} running
-						</p>
+						<p className="text-xs text-muted">{metrics.runningContainers ?? 0} running</p>
 					</div>
 					<ChartFrame className="mt-3 h-44">
 						{({ width, height }) => (

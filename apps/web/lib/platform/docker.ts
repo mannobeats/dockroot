@@ -539,115 +539,273 @@ export async function deployStackLocally({
 	deploymentId,
 	stackId,
 	stackSlug,
+	sourceType,
 	composeYaml,
 	envFileContent,
+	sourceArchive,
+	composeFilePath,
+	envFilePath,
 	operation,
 }: {
 	deploymentId: string;
 	stackId: string;
 	stackSlug: string;
+	sourceType?: "manual" | "github";
 	composeYaml: string;
 	envFileContent?: string | null;
+	sourceArchive?: Buffer | null;
+	composeFilePath?: string;
+	envFilePath?: string;
 	operation: "deploy" | "destroy";
 }) {
-	const stackDir = path.join(getPlatformDataDir(), "stacks", stackSlug);
-	await ensureDirectory(stackDir);
-
-	const composePath = path.join(stackDir, "compose.yaml");
-	await writeFile(composePath, composeYaml, "utf8");
-	const envPath = path.join(stackDir, ".env");
-	await writeFile(envPath, envFileContent || "", "utf8");
-
-	const args =
-		operation === "destroy"
-			? [
-					"compose",
-					"-p",
-					stackSlug,
-					"--env-file",
-					envPath,
-					"-f",
-					composePath,
-					"down",
-					"--remove-orphans",
-				]
-			: [
-					"compose",
-					"-p",
-					stackSlug,
-					"--env-file",
-					envPath,
-					"-f",
-					composePath,
-					"up",
-					"-d",
-					"--remove-orphans",
-				];
-
-	const child = spawn("docker", args, {
-		stdio: ["ignore", "pipe", "pipe"],
-	});
-
 	let output = "";
+	try {
+		const stackDir = path.join(getPlatformDataDir(), "stacks", stackSlug);
+		await ensureDirectory(stackDir);
+		const repoDir = path.join(stackDir, "repo");
+		const { composePath, envPath, workingDirectory } = await prepareStackWorkspace({
+			stackDir,
+			repoDir,
+			sourceType: sourceType || "manual",
+			composeYaml,
+			envFileContent,
+			sourceArchive: sourceArchive || null,
+			composeFilePath,
+			envFilePath,
+			operation,
+		});
 
-	const publishChunk = (chunk: Buffer | string, stream: "stdout" | "stderr") => {
-		const message = chunk.toString();
-		output += message;
-		emitToRoom(`stack:${stackId}`, "stack:log", {
+		const args =
+			operation === "destroy"
+				? [
+						"compose",
+						"-p",
+						stackSlug,
+						"--project-directory",
+						workingDirectory,
+						"--env-file",
+						envPath,
+						"-f",
+						composePath,
+						"down",
+						"--remove-orphans",
+					]
+				: [
+						"compose",
+						"-p",
+						stackSlug,
+						"--project-directory",
+						workingDirectory,
+						"--env-file",
+						envPath,
+						"-f",
+						composePath,
+						"up",
+						"-d",
+						"--build",
+						"--remove-orphans",
+					];
+
+		const child = spawn("docker", args, {
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+
+		const publishChunk = (chunk: Buffer | string, stream: "stdout" | "stderr") => {
+			const message = chunk.toString();
+			output += message;
+			emitToRoom(`stack:${stackId}`, "stack:log", {
+				stackId,
+				deploymentId,
+				stream,
+				message,
+				at: Date.now(),
+			});
+		};
+
+		child.stdout.on("data", (chunk) => publishChunk(chunk, "stdout"));
+		child.stderr.on("data", (chunk) => publishChunk(chunk, "stderr"));
+
+		const exitCode = await new Promise<number>((resolve, reject) => {
+			child.on("error", reject);
+			child.on("close", (code) => resolve(code ?? 1));
+		});
+
+		const updatedAt = new Date();
+		const succeeded = exitCode === 0;
+
+		await db
+			.update(deployments)
+			.set({
+				status: succeeded ? "succeeded" : "failed",
+				log: output,
+				summary: succeeded
+					? "Deployment completed on the manager host."
+					: "Docker Compose reported an error.",
+				finishedAt: updatedAt,
+				updatedAt,
+			})
+			.where(eq(deployments.id, deploymentId));
+
+		await db
+			.update(stacks)
+			.set({
+				status: succeeded ? (operation === "destroy" ? "stopped" : "running") : "failed",
+				lastDeployedAt: updatedAt,
+				updatedAt,
+			})
+			.where(eq(stacks.id, stackId));
+
+		emitToRoom(`stack:${stackId}`, "deployment:complete", {
 			stackId,
 			deploymentId,
-			stream,
-			message,
+			status: succeeded ? "succeeded" : "failed",
 			at: Date.now(),
 		});
+	} catch (error) {
+		output += error instanceof Error ? error.message : "Unable to prepare deployment workspace.";
+		const updatedAt = new Date();
+		await db
+			.update(deployments)
+			.set({
+				status: "failed",
+				log: output,
+				summary: "Deployment failed before Docker Compose could start.",
+				finishedAt: updatedAt,
+				updatedAt,
+			})
+			.where(eq(deployments.id, deploymentId));
+		await db
+			.update(stacks)
+			.set({
+				status: "failed",
+				updatedAt,
+			})
+			.where(eq(stacks.id, stackId));
+		emitToRoom(`stack:${stackId}`, "deployment:complete", {
+			stackId,
+			deploymentId,
+			status: "failed",
+			at: Date.now(),
+		});
+	}
+}
+
+type StackWorkspaceInput = {
+	stackDir: string;
+	repoDir: string;
+	sourceType: "manual" | "github";
+	composeYaml: string;
+	envFileContent?: string | null;
+	sourceArchive: Buffer | null;
+	composeFilePath?: string;
+	envFilePath?: string;
+	operation: "deploy" | "destroy";
+};
+
+function resolveWorkspaceFilePath(
+	rootDir: string,
+	relativePath: string | undefined,
+	fallback: string,
+) {
+	const candidate = (relativePath || fallback).trim() || fallback;
+	const resolved = path.resolve(rootDir, candidate);
+	const relative = path.relative(rootDir, resolved);
+
+	if (
+		!relative ||
+		relative === ".." ||
+		relative.startsWith(`..${path.sep}`) ||
+		path.isAbsolute(relative)
+	) {
+		throw new Error("GitHub stack paths must stay within the repository workspace.");
+	}
+
+	return resolved;
+}
+
+async function extractRepositoryArchive(archive: Buffer, destinationDir: string) {
+	await rm(destinationDir, { recursive: true, force: true });
+	await ensureDirectory(destinationDir);
+
+	await withTempFile("source.tar.gz", archive, async (archivePath) => {
+		await execFileAsync(
+			"tar",
+			["-xzf", archivePath, "--strip-components=1", "-C", destinationDir],
+			{
+				maxBuffer: 1024 * 1024 * 32,
+			},
+		);
+	});
+}
+
+async function prepareStackWorkspace(input: StackWorkspaceInput) {
+	if (input.sourceType === "github") {
+		if (input.operation === "deploy") {
+			if (!input.sourceArchive) {
+				throw new Error("GitHub deployments require a repository archive.");
+			}
+			await extractRepositoryArchive(input.sourceArchive, input.repoDir);
+		} else {
+			const repoExists = await access(input.repoDir)
+				.then(() => true)
+				.catch(() => false);
+
+			if (!repoExists) {
+				throw new Error("GitHub destroy requires an existing repository workspace on disk.");
+			}
+		}
+
+		const composePath = resolveWorkspaceFilePath(
+			input.repoDir,
+			input.composeFilePath,
+			"compose.yaml",
+		);
+		const envPath = resolveWorkspaceFilePath(input.repoDir, input.envFilePath, ".env");
+		await ensureDirectory(path.dirname(composePath));
+		await ensureDirectory(path.dirname(envPath));
+		await writeFile(composePath, input.composeYaml, "utf8");
+		await writeFile(envPath, input.envFileContent || "", "utf8");
+
+		return {
+			composePath,
+			envPath,
+			workingDirectory: path.dirname(composePath),
+		};
+	}
+
+	const composePath = path.join(input.stackDir, "compose.yaml");
+	const envPath = path.join(input.stackDir, ".env");
+	await writeFile(composePath, input.composeYaml, "utf8");
+	await writeFile(envPath, input.envFileContent || "", "utf8");
+
+	return {
+		composePath,
+		envPath,
+		workingDirectory: input.stackDir,
 	};
-
-	child.stdout.on("data", (chunk) => publishChunk(chunk, "stdout"));
-	child.stderr.on("data", (chunk) => publishChunk(chunk, "stderr"));
-
-	const exitCode = await new Promise<number>((resolve, reject) => {
-		child.on("error", reject);
-		child.on("close", (code) => resolve(code ?? 1));
-	});
-
-	const updatedAt = new Date();
-	const succeeded = exitCode === 0;
-
-	await db
-		.update(deployments)
-		.set({
-			status: succeeded ? "succeeded" : "failed",
-			log: output,
-			summary: succeeded
-				? "Deployment completed on the manager host."
-				: "Docker Compose reported an error.",
-			finishedAt: updatedAt,
-			updatedAt,
-		})
-		.where(eq(deployments.id, deploymentId));
-
-	await db
-		.update(stacks)
-		.set({
-			status: succeeded ? (operation === "destroy" ? "stopped" : "running") : "failed",
-			lastDeployedAt: updatedAt,
-			updatedAt,
-		})
-		.where(eq(stacks.id, stackId));
-
-	emitToRoom(`stack:${stackId}`, "deployment:complete", {
-		stackId,
-		deploymentId,
-		status: succeeded ? "succeeded" : "failed",
-		at: Date.now(),
-	});
 }
 
 export async function deleteLocalStackResources(stackSlug: string) {
 	const stackDir = path.join(getPlatformDataDir(), "stacks", stackSlug);
-	const composePath = path.join(stackDir, "compose.yaml");
-	const envPath = path.join(stackDir, ".env");
+	const stack = await db.query.stacks.findFirst({
+		where: eq(stacks.slug, stackSlug),
+		columns: {
+			sourceType: true,
+			githubPath: true,
+			githubEnvPath: true,
+		},
+	});
 
+	const repoDir = path.join(stackDir, "repo");
+	const composePath =
+		stack?.sourceType === "github"
+			? resolveWorkspaceFilePath(repoDir, stack.githubPath || undefined, "compose.yaml")
+			: path.join(stackDir, "compose.yaml");
+	const envPath =
+		stack?.sourceType === "github"
+			? resolveWorkspaceFilePath(repoDir, stack.githubEnvPath || undefined, ".env")
+			: path.join(stackDir, ".env");
+	const workingDirectory = stack?.sourceType === "github" ? path.dirname(composePath) : stackDir;
 	const composeFileExists = await access(composePath)
 		.then(() => true)
 		.catch(() => false);
@@ -657,6 +815,8 @@ export async function deleteLocalStackResources(stackSlug: string) {
 			"compose",
 			"-p",
 			stackSlug,
+			"--project-directory",
+			workingDirectory,
 			"--env-file",
 			envPath,
 			"-f",

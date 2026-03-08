@@ -54,7 +54,9 @@ export default async function ProjectDetailPage({
 						<ArrowLeft className="h-4 w-4" />
 					</Link>
 					<div>
-						<p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted">Project</p>
+						<p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted">
+							Project
+						</p>
 						<h1 className="text-lg font-semibold">{project.name}</h1>
 					</div>
 				</div>

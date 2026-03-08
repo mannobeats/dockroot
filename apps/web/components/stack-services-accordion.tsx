@@ -13,6 +13,8 @@ interface ContainerDetails {
 	logs: string;
 }
 
+type FormAction = (formData: FormData) => void | Promise<void>;
+
 export function StackServicesAccordion({
 	containers,
 	containerDetailsMap,
@@ -20,8 +22,7 @@ export function StackServicesAccordion({
 }: {
 	containers: Container[];
 	containerDetailsMap: Record<string, ContainerDetails>;
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	controlContainerAction: any;
+	controlContainerAction: FormAction;
 }) {
 	const [openIds, setOpenIds] = useState<Set<string>>(new Set());
 
@@ -85,9 +86,7 @@ export function StackServicesAccordion({
 								<StatusBadge status={(container.State || "offline").toLowerCase()} />
 							</div>
 							<div className="flex items-center gap-3">
-								{container.Ports ? (
-									<RuntimePortLinks ports={container.Ports} compact />
-								) : null}
+								{container.Ports ? <RuntimePortLinks ports={container.Ports} compact /> : null}
 							</div>
 						</button>
 

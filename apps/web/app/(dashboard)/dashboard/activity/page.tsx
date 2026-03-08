@@ -38,7 +38,9 @@ export default async function ActivityPage() {
 									</p>
 									<p className="mt-1 font-mono text-xs text-muted">{deployment.version}</p>
 								</div>
-								<p className="shrink-0 text-xs text-muted">{deployment.createdAt.toLocaleString()}</p>
+								<p className="shrink-0 text-xs text-muted">
+									{deployment.createdAt.toLocaleString()}
+								</p>
 							</div>
 							<p className="mt-3 text-sm text-muted">
 								{deployment.summary || "Awaiting result..."}

@@ -27,9 +27,11 @@ export default async function ShellPage({
 			<PageHeader
 				kicker="Runtime"
 				title="Shell"
-				description={allowHostShell
-					? "Open a host shell or attach to a running container."
-					: "Attach to a container in your workspace."}
+				description={
+					allowHostShell
+						? "Open a host shell or attach to a running container."
+						: "Attach to a container in your workspace."
+				}
 			/>
 
 			<div className="rounded-xl border border-default/10 bg-surface p-4">

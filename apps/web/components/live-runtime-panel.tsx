@@ -30,13 +30,29 @@ interface RuntimePayload {
 	}>;
 }
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+type ChartTooltipEntry = {
+	name?: string;
+	value?: number | string;
+	color?: string;
+};
+
+type ChartTooltipProps = {
+	active?: boolean;
+	payload?: ChartTooltipEntry[];
+	label?: string;
+};
+
+const CustomTooltip = ({ active, payload, label }: ChartTooltipProps) => {
 	if (!active || !payload?.length) return null;
 	return (
 		<div className="rounded-lg border border-default/10 bg-surface px-3 py-2 shadow-lg">
 			<p className="text-xs font-medium text-muted">{label}</p>
-			{payload.map((entry: any, index: number) => (
-				<p key={`${entry.name}-${index}`} className="text-sm font-semibold" style={{ color: entry.color }}>
+			{payload.map((entry, index) => (
+				<p
+					key={`${entry.name}-${index}`}
+					className="text-sm font-semibold"
+					style={{ color: entry.color }}
+				>
 					{entry.name}: {entry.value}%
 				</p>
 			))}
@@ -118,12 +134,24 @@ export function LiveRuntimePanel() {
 									tick={{ fontSize: 11, fill: "var(--muted)" }}
 									axisLine={false}
 									tickLine={false}
-									domain={[0, 'auto']}
+									domain={[0, "auto"]}
 									tickFormatter={(v) => `${v}%`}
 								/>
 								<Tooltip content={<CustomTooltip />} />
-								<Bar dataKey="cpu" name="CPU" fill="var(--foreground)" radius={[3, 3, 0, 0]} maxBarSize={24} />
-								<Bar dataKey="memory" name="Memory" fill="#22c55e" radius={[3, 3, 0, 0]} maxBarSize={24} />
+								<Bar
+									dataKey="cpu"
+									name="CPU"
+									fill="var(--foreground)"
+									radius={[3, 3, 0, 0]}
+									maxBarSize={24}
+								/>
+								<Bar
+									dataKey="memory"
+									name="Memory"
+									fill="#22c55e"
+									radius={[3, 3, 0, 0]}
+									maxBarSize={24}
+								/>
 							</BarChart>
 						)
 					: () => null}
