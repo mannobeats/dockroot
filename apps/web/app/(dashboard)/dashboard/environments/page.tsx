@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { createEnvironmentAction } from "@/app/(dashboard)/actions";
+import { createEnvironmentAction, deleteEnvironmentAction } from "@/app/(dashboard)/actions";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
@@ -77,6 +77,16 @@ export default async function EnvironmentsPage() {
 												>
 													Details
 												</Link>
+												{environment.isDefaultLocal ? null : (
+													<form action={deleteEnvironmentAction}>
+														<input type="hidden" name="environmentId" value={environment.id} />
+														<FormSubmitButton
+															label="Delete"
+															pendingLabel="Deleting..."
+															className="inline-flex h-7 items-center rounded-md border border-default/10 px-2.5 text-xs font-medium text-muted transition-colors hover:text-red-600"
+														/>
+													</form>
+												)}
 											</div>
 										</td>
 									</tr>

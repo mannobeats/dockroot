@@ -1155,6 +1155,47 @@ export async function deleteProject({ projectId, userId }: { projectId: string; 
 	revalidatePath("/dashboard/logs");
 }
 
+export async function deleteEnvironment({
+	environmentId,
+	userId,
+}: {
+	environmentId: string;
+	userId: string;
+}) {
+	const environment = await db.query.environments.findFirst({
+		where: and(eq(environments.id, environmentId), eq(environments.createdByUserId, userId)),
+		with: {
+			stacks: {
+				with: {
+					environment: true,
+				},
+			},
+		},
+	});
+
+	if (!environment) {
+		throw new Error("Environment not found");
+	}
+
+	if (environment.isDefaultLocal) {
+		throw new Error("The built-in local environment cannot be deleted.");
+	}
+
+	for (const stack of environment.stacks) {
+		await deleteOwnedStackById(stack.id, userId);
+	}
+
+	await db.delete(environments).where(eq(environments.id, environment.id));
+
+	revalidatePath("/dashboard");
+	revalidatePath("/dashboard/environments");
+	revalidatePath(`/dashboard/environments/${environment.id}`);
+	revalidatePath("/dashboard/projects");
+	revalidatePath("/dashboard/stacks");
+	revalidatePath("/dashboard/containers");
+	revalidatePath("/dashboard/logs");
+}
+
 export async function getAgentInstallContext(registrationToken: string) {
 	const allAgents = await db.query.agents.findMany({
 		with: {

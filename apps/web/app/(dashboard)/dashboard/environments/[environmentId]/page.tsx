@@ -1,6 +1,9 @@
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
-import { rotateAgentRegistrationTokenAction } from "@/app/(dashboard)/actions";
+import {
+	deleteEnvironmentAction,
+	rotateAgentRegistrationTokenAction,
+} from "@/app/(dashboard)/actions";
 import { CopyButton } from "@/components/copy-button";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { StatusBadge } from "@/components/status-badge";
@@ -56,6 +59,16 @@ export default async function EnvironmentDetailPage({
 				>
 					Open workspace
 				</Link>
+				{environment.isDefaultLocal ? null : (
+					<form action={deleteEnvironmentAction}>
+						<input type="hidden" name="environmentId" value={environment.id} />
+						<FormSubmitButton
+							label="Delete environment"
+							pendingLabel="Deleting..."
+							className="inline-flex h-8 items-center rounded-md border border-default/10 px-3 text-xs font-medium text-muted transition-colors hover:text-red-600"
+						/>
+					</form>
+				)}
 			</div>
 
 			{/* Connection details */}

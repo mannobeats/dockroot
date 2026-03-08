@@ -22,6 +22,7 @@ import {
 	createGitHubStack,
 	createProject,
 	createStack,
+	deleteEnvironment,
 	deleteProject,
 	deleteStack,
 	queueOrRunDeployment,
@@ -109,6 +110,22 @@ export async function rotateAgentRegistrationTokenAction(formData: FormData) {
 	});
 
 	redirect(`/dashboard/environments/${environmentId}`);
+}
+
+export async function deleteEnvironmentAction(formData: FormData) {
+	const { userId } = await requireUserSession();
+	const environmentId = getValue(formData, "environmentId");
+
+	if (!environmentId) {
+		throw new Error("Environment is required");
+	}
+
+	await deleteEnvironment({
+		environmentId,
+		userId,
+	});
+
+	redirect("/dashboard/environments");
 }
 
 export async function createStackAction(formData: FormData) {
