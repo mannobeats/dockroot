@@ -1,3 +1,4 @@
+import Link from "next/link";
 import {
 	createVolumeAction,
 	pruneVolumesAction,
@@ -88,12 +89,12 @@ export default async function VolumesPage({
 									filtered.map((volume) => (
 										<tr key={`${volume.Name}-${volume.Driver}`}>
 											<td className="px-4 py-3 font-medium">
-												<a
-													href={`/dashboard/volumes?volume=${encodeURIComponent(volume.Name)}`}
+												<Link
+													href={`/dashboard/volumes/${encodeURIComponent(volume.Name)}`}
 													className="transition-colors hover:text-accent"
 												>
 													{volume.Name}
-												</a>
+												</Link>
 											</td>
 											<td className="px-4 py-3 text-muted">{volume.Driver}</td>
 											<td className="px-4 py-3 text-muted">

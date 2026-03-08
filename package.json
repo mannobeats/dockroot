@@ -18,6 +18,7 @@
 	},
 	"dependencies": {
 		"next": "16.1.6",
+		"node-pty": "^1.1.0",
 		"socket.io": "^4.8.1"
 	},
 	"devDependencies": {
@@ -33,6 +34,13 @@
 		"unrs-resolver"
 	],
 	"pnpm": {
+		"onlyBuiltDependencies": [
+			"@prisma/engines",
+			"esbuild",
+			"node-pty",
+			"prisma",
+			"sharp"
+		],
 		"overrides": {
 			"@hono/node-server": "^1.19.11",
 			"hono": "^4.12.5",

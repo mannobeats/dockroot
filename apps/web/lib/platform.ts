@@ -21,6 +21,7 @@ import {
 import { incrementDeploymentEvent } from "@/lib/monitoring";
 import {
 	deployStackLocally,
+	exportComposeProjectConfig,
 	getLocalDockerSnapshot,
 	listComposeProjects,
 	listContainers,
@@ -579,6 +580,74 @@ export async function createStack({
 	revalidatePath("/dashboard");
 	revalidatePath("/dashboard/projects");
 	revalidatePath(`/dashboard/projects/${projectId}`);
+}
+
+export async function adoptComposeProject({
+	userId,
+	projectName,
+	configFiles,
+}: {
+	userId: string;
+	projectName: string;
+	configFiles: string[];
+}) {
+	if (!projectName || !configFiles.length) {
+		throw new Error("Compose project name and config files are required.");
+	}
+
+	const existingStack = await db.query.stacks.findFirst({
+		where: and(eq(stacks.createdByUserId, userId), eq(stacks.slug, projectName)),
+	});
+
+	if (existingStack) {
+		return existingStack.id;
+	}
+
+	const environment = await ensureDefaultLocalEnvironment(userId);
+	if (!environment) {
+		throw new Error("Default local environment could not be prepared.");
+	}
+	const exported = await exportComposeProjectConfig(projectName, configFiles);
+	const createdAt = now();
+	const projectId = crypto.randomUUID();
+	const projectSlug = await ensureUniqueProjectSlug(projectName);
+	const humanName = projectName
+		.split("-")
+		.map((part) => (part ? part[0].toUpperCase() + part.slice(1) : part))
+		.join(" ");
+
+	await db.insert(projects).values({
+		id: projectId,
+		name: humanName,
+		slug: projectSlug,
+		description: `Adopted from external compose project ${projectName}.`,
+		createdByUserId: userId,
+		createdAt,
+		updatedAt: createdAt,
+	});
+
+	const stackId = crypto.randomUUID();
+	await db.insert(stacks).values({
+		id: stackId,
+		projectId,
+		environmentId: environment.id,
+		name: humanName,
+		slug: projectName,
+		description: `Imported from ${configFiles.join(", ")}`,
+		sourceType: "manual",
+		status: "stopped",
+		composeYaml: exported.composeYaml,
+		composeFileName: configFiles[0].split("/").at(-1) || "compose.yaml",
+		envFileContent: exported.envFileContent,
+		envFileName: ".env",
+		createdByUserId: userId,
+		createdAt,
+		updatedAt: createdAt,
+	});
+
+	revalidatePath("/dashboard/projects");
+	revalidatePath("/dashboard/stacks");
+	return stackId;
 }
 
 export async function syncGitHubInstallation({

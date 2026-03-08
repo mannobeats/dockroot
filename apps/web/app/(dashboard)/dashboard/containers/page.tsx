@@ -110,6 +110,12 @@ export default async function ContainersPage({
 													</form>
 												))}
 												<Link
+													href={`/dashboard/shell?target=container&containerId=${container.ID}`}
+													className="inline-flex h-8 items-center justify-center rounded-lg border border-default/20 bg-background px-3 text-xs font-medium text-muted transition-colors hover:text-foreground"
+												>
+													shell
+												</Link>
+												<Link
 													href={`/dashboard/logs?mode=single&container=${container.ID}`}
 													className="inline-flex h-8 items-center justify-center rounded-lg border border-default/20 bg-background px-3 text-xs font-medium text-muted transition-colors hover:text-foreground"
 												>

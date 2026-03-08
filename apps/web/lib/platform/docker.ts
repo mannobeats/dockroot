@@ -1,7 +1,7 @@
 import "server-only";
 
 import { execFile, spawn } from "node:child_process";
-import { writeFile } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -33,6 +33,13 @@ type ComposeProjectSummary = {
 	containers: Array<Record<string, string>>;
 	containerCount: number;
 	runningCount: number;
+};
+
+type ComposeProjectExport = {
+	projectName: string;
+	composeYaml: string;
+	envFileContent: string | null;
+	configFiles: string[];
 };
 
 async function runDockerCommand(args: string[]) {
@@ -293,6 +300,104 @@ export async function controlComposeProject(
 	return {
 		ok: result.ok,
 		output: stripAnsi([result.stdout, result.stderr].filter(Boolean).join("\n")),
+	};
+}
+
+async function withTempFile<T>(
+	fileName: string,
+	content: Buffer | string,
+	run: (filePath: string) => Promise<T>,
+) {
+	const tempDir = await mkdtemp(path.join(os.tmpdir(), "dockroot-"));
+	const tempFile = path.join(tempDir, fileName);
+
+	try {
+		await writeFile(tempFile, content);
+		return await run(tempFile);
+	} finally {
+		await rm(tempDir, { recursive: true, force: true });
+	}
+}
+
+export async function writeContainerFile(containerId: string, targetPath: string, content: string) {
+	const fileName = path.basename(targetPath) || "file.txt";
+	return withTempFile(fileName, content, async (tempFile) => {
+		const parentPath = path.posix.dirname(targetPath);
+		await runDockerCommand([
+			"exec",
+			containerId,
+			"sh",
+			"-lc",
+			`mkdir -p "${parentPath.replaceAll('"', '\\"')}"`,
+		]);
+		return runDockerCommand(["cp", tempFile, `${containerId}:${targetPath}`]);
+	});
+}
+
+export async function uploadContainerFile(
+	containerId: string,
+	targetDirectory: string,
+	fileName: string,
+	content: Buffer,
+) {
+	return withTempFile(fileName, content, async (tempFile) => {
+		await runDockerCommand([
+			"exec",
+			containerId,
+			"sh",
+			"-lc",
+			`mkdir -p "${targetDirectory.replaceAll('"', '\\"')}"`,
+		]);
+		return runDockerCommand([
+			"cp",
+			tempFile,
+			`${containerId}:${targetDirectory.replace(/\/$/, "")}/${fileName}`,
+		]);
+	});
+}
+
+export async function deleteContainerPath(containerId: string, targetPath: string) {
+	return runDockerCommand([
+		"exec",
+		containerId,
+		"sh",
+		"-lc",
+		`rm -rf "${targetPath.replaceAll('"', '\\"')}"`,
+	]);
+}
+
+export async function exportComposeProjectConfig(
+	projectName: string,
+	configFiles: string[],
+): Promise<ComposeProjectExport> {
+	const args = [
+		"compose",
+		"-p",
+		projectName,
+		...configFiles.flatMap((configFile) => ["-f", configFile]),
+		"config",
+	];
+	const result = await runDockerCommand(args);
+
+	if (!result.ok || !result.stdout.trim()) {
+		throw new Error(result.stderr || "Unable to export compose project config.");
+	}
+
+	const envPath = path.join(path.dirname(configFiles[0]), ".env");
+	let envFileContent: string | null = null;
+
+	try {
+		await access(envPath);
+		envFileContent = await readFile(envPath, "utf8");
+	} catch {
+		envFileContent = null;
+	}
+
+	return {
+		projectName,
+		composeYaml: result.stdout,
+		envFileContent,
+		configFiles,
 	};
 }
 

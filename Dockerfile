@@ -6,11 +6,12 @@ RUN corepack enable && corepack prepare pnpm@10.30.3 --activate
 
 # Install dependencies
 FROM base AS deps
+RUN apk add --no-cache make g++ python3
 COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml ./
 COPY apps/web/package.json apps/web/package.json
 COPY packages/auth/package.json packages/auth/package.json
 COPY packages/db/package.json packages/db/package.json
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --ignore-scripts=false && pnpm rebuild node-pty
 
 # Build the application
 FROM base AS builder

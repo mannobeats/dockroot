@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { pruneImagesAction, pullImageAction, removeImageAction } from "@/app/(dashboard)/actions";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { PageHeader } from "@/components/page-header";
@@ -94,12 +95,12 @@ export default async function ImagesPage({
 										return (
 											<tr key={`${image.ID}-${imageRef}`} className={active ? "bg-accent/5" : ""}>
 												<td className="px-4 py-3 font-medium">
-													<a
-														href={`/dashboard/images?image=${encodeURIComponent(imageRef)}`}
+													<Link
+														href={`/dashboard/images/${encodeURIComponent(imageRef)}`}
 														className="transition-colors hover:text-accent"
 													>
 														{image.Repository}
-													</a>
+													</Link>
 												</td>
 												<td className="px-4 py-3 text-muted">{image.Tag}</td>
 												<td className="px-4 py-3 text-muted">{image.Size}</td>

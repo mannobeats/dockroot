@@ -2,6 +2,7 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { controlContainerAction } from "@/app/(dashboard)/actions";
 import { CodeEditor } from "@/components/code-editor";
+import { ContainerFileBrowser } from "@/components/container-file-browser";
 import { ContainerMetricsPanel } from "@/components/container-metrics-panel";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { PageHeader } from "@/components/page-header";
@@ -93,6 +94,12 @@ export default async function ContainerDetailPage({
 								/>
 							</form>
 						))}
+						<Link
+							href={`/dashboard/shell?target=container&containerId=${containerId}`}
+							className="inline-flex h-11 items-center justify-center rounded-xl border border-default/20 bg-surface px-4 text-sm font-medium text-muted transition-colors hover:text-foreground"
+						>
+							Shell
+						</Link>
 					</>
 				}
 			/>
@@ -198,74 +205,17 @@ export default async function ContainerDetailPage({
 			</div>
 
 			<div className="grid gap-5 xl:grid-cols-[0.88fr_1.12fr]">
-				<section className="rounded-2xl border border-default/15 bg-surface p-5">
-					<div className="flex items-center justify-between">
-						<h2 className="text-lg font-semibold tracking-tight">Container files</h2>
-						<form className="flex gap-2">
-							<input
-								type="text"
-								name="path"
-								defaultValue={targetPath}
-								placeholder="/"
-								className="h-10 rounded-xl border border-default/15 bg-background px-3 text-sm outline-none transition-colors focus:border-accent"
-							/>
-							<button
-								type="submit"
-								className="inline-flex h-10 items-center justify-center rounded-xl bg-accent px-4 text-sm font-medium text-white"
-							>
-								Browse
-							</button>
-						</form>
-					</div>
-					<div className="mt-4 rounded-xl border border-default/15 bg-background/60 p-4">
-						<p className="text-xs text-muted">Path</p>
-						<p className="mt-2 font-mono text-sm">{browser.path}</p>
-					</div>
-					{browser.kind === "directory" ? (
-						<div className="mt-4 space-y-2">
-							{browser.path !== "/" ? (
-								<Link
-									href={`/dashboard/containers/${containerId}?path=${encodeURIComponent(browser.path.split("/").slice(0, -1).join("/") || "/")}`}
-									className="block rounded-xl border border-default/15 bg-background/60 px-4 py-3 text-sm font-medium"
-								>
-									..
-								</Link>
-							) : null}
-							{browser.entries?.map((entry) => {
-								const nextPath =
-									browser.path === "/"
-										? `/${entry.name}`
-										: `${browser.path.replace(/\/$/, "")}/${entry.name}`;
-								return (
-									<Link
-										key={`${entry.kind}-${entry.name}`}
-										href={`/dashboard/containers/${containerId}?path=${encodeURIComponent(nextPath)}`}
-										className="block rounded-xl border border-default/15 bg-background/60 px-4 py-3 text-sm transition-colors hover:border-accent/30"
-									>
-										<p className="font-medium">{entry.name}</p>
-										<p className="mt-1 text-xs text-muted">{entry.kind}</p>
-									</Link>
-								);
-							})}
-						</div>
-					) : browser.kind === "file" ? (
-						<div className="mt-4 overflow-hidden rounded-xl border border-default/15">
-							<div className="border-b border-default/10 px-4 py-3">
-								<p className="text-sm font-semibold">{browser.path}</p>
-							</div>
-							<CodeEditor
-								value={browser.content || ""}
-								language={browser.path.match(/\.(ya?ml)$/) ? "yaml" : "env"}
-								readOnly
-								minHeight="420px"
-							/>
-						</div>
-					) : (
-						<div className="mt-4 rounded-xl border border-dashed border-default/20 bg-background/60 p-6 text-sm text-muted">
-							The selected path does not exist inside the container or could not be inspected.
-						</div>
-					)}
-				</section>
+				<ContainerFileBrowser
+					containerId={containerId}
+					path={targetPath}
+					browser={
+						browser.kind === "directory"
+							? { kind: "directory", path: browser.path, entries: browser.entries || [] }
+							: browser.kind === "file"
+								? { kind: "file", path: browser.path, content: browser.content || "" }
+								: { kind: "missing", path: browser.path }
+					}
+				/>
 
 				<section className="rounded-2xl border border-default/15 bg-surface p-5">
 					<h2 className="text-lg font-semibold tracking-tight">Environment and labels</h2>

@@ -1,19 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { io, type Socket } from "socket.io-client";
-
-let socket: Socket | null = null;
-
-function getSocket() {
-	if (!socket) {
-		socket = io({
-			path: "/socket.io",
-		});
-	}
-
-	return socket;
-}
+import { getSocket } from "@/lib/socket-client";
 
 interface StackEvent {
 	deploymentId: string;

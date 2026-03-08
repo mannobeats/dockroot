@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
+	adoptComposeProject,
 	createEnvironment,
 	createGitHubStack,
 	createProject,
@@ -54,6 +55,25 @@ export async function createProjectAction(formData: FormData) {
 	});
 
 	redirect("/dashboard/projects");
+}
+
+export async function adoptComposeProjectAction(formData: FormData) {
+	const userId = await requireUserId();
+	const projectName = getValue(formData, "projectName");
+	const configFiles = formData
+		.getAll("configFiles")
+		.map((value) => String(value).trim())
+		.filter(Boolean);
+
+	const stackId = await adoptComposeProject({
+		userId,
+		projectName,
+		configFiles,
+	});
+
+	revalidatePath("/dashboard/projects");
+	revalidatePath("/dashboard/stacks");
+	redirect(`/dashboard/stacks?adopted=${stackId}`);
 }
 
 export async function createEnvironmentAction(formData: FormData) {

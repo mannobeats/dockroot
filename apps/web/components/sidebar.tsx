@@ -15,6 +15,7 @@ import {
 	Network,
 	Server,
 	Settings,
+	SquareTerminal,
 	TimerReset,
 } from "lucide-react";
 import Link from "next/link";
@@ -36,6 +37,7 @@ const navGroups = [
 		label: "Resources",
 		items: [
 			{ href: "/dashboard/containers", label: "Containers", icon: Cpu },
+			{ href: "/dashboard/shell", label: "Shell", icon: SquareTerminal },
 			{ href: "/dashboard/logs", label: "Logs", icon: Logs },
 			{ href: "/dashboard/images", label: "Images", icon: Boxes },
 			{ href: "/dashboard/volumes", label: "Volumes", icon: CopyPlus },

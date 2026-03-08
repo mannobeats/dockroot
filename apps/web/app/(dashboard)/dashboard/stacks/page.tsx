@@ -1,5 +1,6 @@
 import Link from "next/link";
 import {
+	adoptComposeProjectAction,
 	controlComposeProjectAction,
 	deployStackAction,
 	destroyStackAction,
@@ -171,6 +172,24 @@ export default async function StacksPage({
 														</form>
 													))
 												)}
+												{stack.type === "untracked" ? (
+													<form action={adoptComposeProjectAction}>
+														<input type="hidden" name="projectName" value={stack.slug} />
+														{stack.configFiles.map((configFile) => (
+															<input
+																key={`adopt-${configFile}`}
+																type="hidden"
+																name="configFiles"
+																value={configFile}
+															/>
+														))}
+														<FormSubmitButton
+															label="Adopt"
+															pendingLabel="Adopting..."
+															className="inline-flex h-9 items-center justify-center rounded-lg bg-accent px-3 text-sm font-medium text-white"
+														/>
+													</form>
+												) : null}
 											</div>
 										</td>
 									</tr>

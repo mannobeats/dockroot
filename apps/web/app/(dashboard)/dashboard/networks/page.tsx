@@ -1,3 +1,4 @@
+import Link from "next/link";
 import {
 	createNetworkAction,
 	pruneNetworksAction,
@@ -91,12 +92,12 @@ export default async function NetworksPage({
 									filtered.map((network) => (
 										<tr key={`${network.ID}-${network.Name}`}>
 											<td className="px-4 py-3 font-medium">
-												<a
-													href={`/dashboard/networks?network=${encodeURIComponent(network.Name)}`}
+												<Link
+													href={`/dashboard/networks/${encodeURIComponent(network.Name)}`}
 													className="transition-colors hover:text-accent"
 												>
 													{network.Name}
-												</a>
+												</Link>
 											</td>
 											<td className="px-4 py-3 text-muted">{network.Driver}</td>
 											<td className="px-4 py-3 text-muted">{network.Scope || "local"}</td>

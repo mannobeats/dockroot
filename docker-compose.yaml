@@ -20,6 +20,7 @@ services:
         condition: service_started
     volumes:
       - ./.dockroot:${PWD}/.dockroot
+      - /Users/mannobeats/Documents/Software Development:/Users/mannobeats/Documents/Software Development:ro
       - /var/run/docker.sock:/var/run/docker.sock
 
   postgres:
