@@ -1,16 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import {
-	Area,
-	AreaChart,
-	CartesianGrid,
-	ResponsiveContainer,
-	Tooltip,
-	XAxis,
-	YAxis,
-} from "recharts";
+import { Area, AreaChart, CartesianGrid, Tooltip, XAxis, YAxis } from "recharts";
 import { io, type Socket } from "socket.io-client";
+import { ChartFrame } from "@/components/chart-frame";
 
 let socket: Socket | null = null;
 
@@ -91,50 +84,50 @@ export function LiveRuntimePanel() {
 					</p>
 				</div>
 			</div>
-			<div className="mt-5 h-56">
-				{mounted ? (
-					<ResponsiveContainer width="100%" height="100%">
-						<AreaChart data={history}>
-							<defs>
-								<linearGradient id="cpuFill" x1="0" y1="0" x2="0" y2="1">
-									<stop offset="0%" stopColor="var(--accent)" stopOpacity={0.22} />
-									<stop offset="100%" stopColor="var(--accent)" stopOpacity={0} />
-								</linearGradient>
-								<linearGradient id="memoryFill" x1="0" y1="0" x2="0" y2="1">
-									<stop offset="0%" stopColor="#10b981" stopOpacity={0.18} />
-									<stop offset="100%" stopColor="#10b981" stopOpacity={0} />
-								</linearGradient>
-							</defs>
-							<CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-							<XAxis
-								dataKey="time"
-								tick={{ fontSize: 11, fill: "var(--muted)" }}
-								axisLine={false}
-							/>
-							<YAxis
-								tick={{ fontSize: 11, fill: "var(--muted)" }}
-								axisLine={false}
-								tickLine={false}
-							/>
-							<Tooltip />
-							<Area
-								type="monotone"
-								dataKey="cpu"
-								stroke="var(--accent)"
-								fill="url(#cpuFill)"
-								strokeWidth={2}
-							/>
-							<Area
-								type="monotone"
-								dataKey="memory"
-								stroke="#10b981"
-								fill="url(#memoryFill)"
-								strokeWidth={2}
-							/>
-						</AreaChart>
-					</ResponsiveContainer>
-				) : null}
-			</div>
+			<ChartFrame className="mt-5 h-56">
+				{mounted
+					? ({ width, height }) => (
+							<AreaChart width={width} height={height} data={history}>
+								<defs>
+									<linearGradient id="cpuFill" x1="0" y1="0" x2="0" y2="1">
+										<stop offset="0%" stopColor="var(--accent)" stopOpacity={0.22} />
+										<stop offset="100%" stopColor="var(--accent)" stopOpacity={0} />
+									</linearGradient>
+									<linearGradient id="memoryFill" x1="0" y1="0" x2="0" y2="1">
+										<stop offset="0%" stopColor="#10b981" stopOpacity={0.18} />
+										<stop offset="100%" stopColor="#10b981" stopOpacity={0} />
+									</linearGradient>
+								</defs>
+								<CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+								<XAxis
+									dataKey="time"
+									tick={{ fontSize: 11, fill: "var(--muted)" }}
+									axisLine={false}
+								/>
+								<YAxis
+									tick={{ fontSize: 11, fill: "var(--muted)" }}
+									axisLine={false}
+									tickLine={false}
+								/>
+								<Tooltip />
+								<Area
+									type="monotone"
+									dataKey="cpu"
+									stroke="var(--accent)"
+									fill="url(#cpuFill)"
+									strokeWidth={2}
+								/>
+								<Area
+									type="monotone"
+									dataKey="memory"
+									stroke="#10b981"
+									fill="url(#memoryFill)"
+									strokeWidth={2}
+								/>
+							</AreaChart>
+						)
+					: () => null}
+			</ChartFrame>
 		</div>
 	);
 }

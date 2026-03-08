@@ -1,10 +1,12 @@
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { controlContainerAction } from "@/app/(dashboard)/actions";
+import { ContainerMetricsPanel } from "@/components/container-metrics-panel";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
 import { getContainerDetails } from "@/lib/platform/docker";
+import { getPrometheusContainerMetrics } from "@/lib/prometheus";
 
 export default async function ContainerDetailPage({
 	params,
@@ -12,7 +14,10 @@ export default async function ContainerDetailPage({
 	params: Promise<{ containerId: string }>;
 }) {
 	const { containerId } = await params;
-	const details = await getContainerDetails(containerId);
+	const [details, metrics] = await Promise.all([
+		getContainerDetails(containerId),
+		getPrometheusContainerMetrics(containerId),
+	]);
 	const inspect = details.inspect;
 
 	if (!inspect) {
@@ -48,6 +53,8 @@ export default async function ContainerDetailPage({
 					</>
 				}
 			/>
+
+			<ContainerMetricsPanel metrics={metrics} />
 
 			<div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
 				<section className="rounded-2xl border border-default/15 bg-surface p-5">

@@ -7,11 +7,11 @@ import {
 	Cell,
 	Pie,
 	PieChart,
-	ResponsiveContainer,
 	Tooltip,
 	XAxis,
 	YAxis,
 } from "recharts";
+import { ChartFrame } from "@/components/chart-frame";
 
 const PIE_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#a855f7"];
 
@@ -53,9 +53,11 @@ export function PrometheusOverview({
 						{metrics.memoryPercent?.toFixed(1) ?? "—"}%
 					</p>
 				</div>
-				<div className="mt-5 h-64">
-					<ResponsiveContainer width="100%" height="100%">
+				<ChartFrame className="mt-5 h-64">
+					{({ width, height }) => (
 						<AreaChart
+							width={width}
+							height={height}
 							data={metrics.cpuSeries.map((point, index) => ({
 								time: point.time,
 								cpu: point.value,
@@ -99,8 +101,8 @@ export function PrometheusOverview({
 								strokeWidth={2}
 							/>
 						</AreaChart>
-					</ResponsiveContainer>
-				</div>
+					)}
+				</ChartFrame>
 			</div>
 
 			<div className="grid gap-5">
@@ -116,9 +118,9 @@ export function PrometheusOverview({
 							{metrics.runningContainers ?? 0} running containers
 						</p>
 					</div>
-					<div className="mt-4 h-52">
-						<ResponsiveContainer width="100%" height="100%">
-							<PieChart>
+					<ChartFrame className="mt-4 h-52">
+						{({ width, height }) => (
+							<PieChart width={width} height={height}>
 								<Pie
 									data={metrics.deploymentStatus}
 									dataKey="value"
@@ -136,8 +138,8 @@ export function PrometheusOverview({
 								</Pie>
 								<Tooltip />
 							</PieChart>
-						</ResponsiveContainer>
-					</div>
+						)}
+					</ChartFrame>
 				</div>
 				<div className="rounded-2xl border border-default/15 bg-surface p-5">
 					<p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted">

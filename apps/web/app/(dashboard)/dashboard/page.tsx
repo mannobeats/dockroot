@@ -1,12 +1,13 @@
 import { Boxes, FolderKanban, PlayCircle, Server } from "lucide-react";
 import Link from "next/link";
 import { LiveRuntimePanel } from "@/components/live-runtime-panel";
+import { MonitoringHealthGrid } from "@/components/monitoring-health-grid";
 import { PageHeader } from "@/components/page-header";
 import { PrometheusOverview } from "@/components/prometheus-overview";
 import { StatCard } from "@/components/stat-card";
 import { StatusBadge } from "@/components/status-badge";
 import { getDashboardData } from "@/lib/platform";
-import { getPrometheusDashboardMetrics } from "@/lib/prometheus";
+import { getPrometheusDashboardMetrics, getPrometheusTargetHealth } from "@/lib/prometheus";
 import { getServerSession } from "@/lib/session";
 
 export default async function DashboardPage() {
@@ -16,9 +17,10 @@ export default async function DashboardPage() {
 		return null;
 	}
 
-	const [data, metrics] = await Promise.all([
+	const [data, metrics, targets] = await Promise.all([
 		getDashboardData(session.user.id),
 		getPrometheusDashboardMetrics(),
+		getPrometheusTargetHealth(),
 	]);
 	const memoryUsed = (data.runtime.host.totalMemoryGb - data.runtime.host.freeMemoryGb).toFixed(1);
 
@@ -142,6 +144,8 @@ export default async function DashboardPage() {
 			</div>
 
 			<PrometheusOverview metrics={metrics} />
+
+			<MonitoringHealthGrid targets={targets} />
 
 			<LiveRuntimePanel />
 

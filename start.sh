@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-echo "⏳ Running database migrations..."
-node /app/migrate.mjs
+echo "⏳ Syncing database schema..."
+pnpm exec drizzle-kit push --config /app/drizzle.config.ts
 echo "✅ Starting application..."
 exec node /app/server.mjs
