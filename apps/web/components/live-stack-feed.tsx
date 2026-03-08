@@ -69,7 +69,7 @@ export function LiveStackFeed({
 					Live
 				</div>
 			</div>
-			<pre className="mt-4 max-h-[480px] overflow-auto whitespace-pre-wrap text-xs leading-6 text-white/80">
+			<pre className="log-viewport mt-4 max-h-[480px] text-xs leading-6 text-white/80">
 				{feed || "No logs yet."}
 			</pre>
 		</div>

@@ -136,6 +136,50 @@ body {
 	-webkit-overflow-scrolling: touch;
 }
 
+/* Log viewport — strict boundaries for long output */
+.log-viewport {
+	overflow: auto;
+	white-space: pre-wrap;
+	word-break: break-all;
+	max-width: 100%;
+}
+
+/* Code block contained */
+.code-block {
+	overflow: auto;
+	max-width: 100%;
+}
+
+/* Tabbed navigation */
+.tab-nav {
+	display: flex;
+	gap: 0;
+	border-bottom: 1px solid var(--border);
+}
+.tab-nav button,
+.tab-nav a {
+	padding: 0.5rem 1rem;
+	font-size: 0.8125rem;
+	font-weight: 500;
+	color: var(--muted);
+	border-bottom: 2px solid transparent;
+	transition: all 0.2s;
+	cursor: pointer;
+	background: none;
+	border-top: none;
+	border-left: none;
+	border-right: none;
+}
+.tab-nav button:hover,
+.tab-nav a:hover {
+	color: var(--foreground);
+}
+.tab-nav button[data-active="true"],
+.tab-nav a[data-active="true"] {
+	color: var(--foreground);
+	border-bottom-color: var(--foreground);
+}
+
 /* Focus ring */
 *:focus-visible {
 	outline: 2px solid var(--accent);

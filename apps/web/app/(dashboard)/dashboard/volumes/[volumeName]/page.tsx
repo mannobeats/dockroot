@@ -68,7 +68,7 @@ export default async function VolumeDetailPage({
 
 				<section className="rounded-2xl border border-default/15 bg-surface p-5">
 					<h2 className="text-lg font-semibold tracking-tight">Inspect payload</h2>
-					<pre className="mt-4 max-h-[720px] overflow-auto rounded-xl bg-[#050914] p-4 text-xs leading-6 text-white/85">
+					<pre className="log-viewport mt-4 max-h-[720px] rounded-xl bg-[#050914] p-4 text-xs leading-6 text-white/85">
 						{JSON.stringify(volume, null, 2)}
 					</pre>
 				</section>

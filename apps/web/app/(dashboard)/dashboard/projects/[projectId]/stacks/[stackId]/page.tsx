@@ -183,7 +183,7 @@ export default async function StackWorkspacePage({
 										<p className="mt-2 text-sm font-medium">{details.inspect.Created}</p>
 									</div>
 								</div>
-								<pre className="max-h-[260px] overflow-auto rounded-xl bg-[#050914] p-4 text-xs leading-6 text-white/80">
+								<pre className="log-viewport max-h-[260px] rounded-xl bg-[#0a0a0a] p-4 text-xs leading-6 text-white/80">
 									{details.logs || "No container logs yet."}
 								</pre>
 							</div>
