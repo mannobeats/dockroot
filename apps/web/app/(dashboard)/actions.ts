@@ -101,6 +101,8 @@ export async function createGitHubStackAction(formData: FormData) {
 	const branch = getValue(formData, "branch");
 	const composePath = getValue(formData, "composePath");
 	const envPath = getValue(formData, "envPath");
+	const composeYaml = getValue(formData, "composeYaml");
+	const envFileContent = getValue(formData, "envFileContent");
 	const name = getValue(formData, "name") || repository;
 	const description = getValue(formData, "description");
 
@@ -129,6 +131,8 @@ export async function createGitHubStackAction(formData: FormData) {
 		branch,
 		composePath,
 		envPath: envPath || undefined,
+		composeYaml,
+		envFileContent,
 		name,
 		description,
 	});

@@ -585,6 +585,8 @@ export async function createGitHubStack({
 	branch,
 	composePath,
 	envPath,
+	composeYaml,
+	envFileContent,
 }: {
 	userId: string;
 	projectId: string;
@@ -598,6 +600,8 @@ export async function createGitHubStack({
 	branch: string;
 	composePath: string;
 	envPath?: string;
+	composeYaml?: string;
+	envFileContent?: string;
 }) {
 	const installation = await db.query.githubInstallations.findFirst({
 		where: and(
@@ -610,14 +614,25 @@ export async function createGitHubStack({
 		throw new Error("GitHub installation not found");
 	}
 
-	const source = await materializeGitHubStackSource({
-		githubInstallationId: installation.githubInstallationId,
-		owner,
-		repository,
-		branch,
-		composePath,
-		envPath,
-	});
+	const source = composeYaml?.trim()
+		? {
+				composeYaml: composeYaml.trim(),
+				envFileContent: envFileContent?.trim() || null,
+				sourceCommitSha: await getRepositoryBranchHeadSha({
+					installationId: installation.githubInstallationId,
+					owner,
+					repository,
+					branch,
+				}),
+			}
+		: await materializeGitHubStackSource({
+				githubInstallationId: installation.githubInstallationId,
+				owner,
+				repository,
+				branch,
+				composePath,
+				envPath,
+			});
 	const createdAt = now();
 	const slug = await ensureUniqueStackSlug(name);
 
@@ -680,24 +695,8 @@ export async function queueOrRunDeployment({
 	const createdAt = now();
 	const deploymentId = crypto.randomUUID();
 	const version = `${createdAt.getUTCFullYear()}.${String(createdAt.getUTCMonth() + 1).padStart(2, "0")}.${String(createdAt.getUTCDate()).padStart(2, "0")}-${createdAt.getTime()}`;
-	const githubSource =
-		stack.sourceType === "github" &&
-		stack.githubInstallation &&
-		stack.githubOwner &&
-		stack.githubRepository &&
-		stack.githubBranch &&
-		stack.githubPath
-			? await materializeGitHubStackSource({
-					githubInstallationId: stack.githubInstallation.githubInstallationId,
-					owner: stack.githubOwner,
-					repository: stack.githubRepository,
-					branch: stack.githubBranch,
-					composePath: stack.githubPath,
-					envPath: stack.githubEnvPath || undefined,
-				})
-			: null;
-	const composeSnapshot = githubSource?.composeYaml ?? stack.composeYaml;
-	const envSnapshot = githubSource?.envFileContent ?? stack.envFileContent;
+	const composeSnapshot = stack.composeYaml;
+	const envSnapshot = stack.envFileContent;
 
 	await db.insert(deployments).values({
 		id: deploymentId,
@@ -709,7 +708,7 @@ export async function queueOrRunDeployment({
 		status: stack.environment.kind === "local" ? "running" : "queued",
 		composeSnapshot,
 		envSnapshot,
-		sourceCommitSha: githubSource?.sourceCommitSha ?? null,
+		sourceCommitSha: null,
 		startedAt: stack.environment.kind === "local" ? createdAt : null,
 		createdAt,
 		updatedAt: createdAt,
@@ -718,8 +717,6 @@ export async function queueOrRunDeployment({
 	await db
 		.update(stacks)
 		.set({
-			composeYaml: composeSnapshot,
-			envFileContent: envSnapshot,
 			status: stack.environment.kind === "local" ? "deploying" : "queued",
 			updatedAt: createdAt,
 		})
@@ -1041,6 +1038,39 @@ export async function triggerGitHubPushDeploy(input: {
 	});
 
 	for (const stack of matchingStacks) {
+		const fullStack = await db.query.stacks.findFirst({
+			where: eq(stacks.id, stack.id),
+			with: {
+				githubInstallation: true,
+			},
+		});
+
+		if (
+			fullStack?.githubInstallation &&
+			fullStack.githubOwner &&
+			fullStack.githubRepository &&
+			fullStack.githubBranch &&
+			fullStack.githubPath
+		) {
+			const source = await materializeGitHubStackSource({
+				githubInstallationId: fullStack.githubInstallation.githubInstallationId,
+				owner: fullStack.githubOwner,
+				repository: fullStack.githubRepository,
+				branch: fullStack.githubBranch,
+				composePath: fullStack.githubPath,
+				envPath: fullStack.githubEnvPath || undefined,
+			});
+
+			await db
+				.update(stacks)
+				.set({
+					composeYaml: source.composeYaml,
+					envFileContent: source.envFileContent,
+					updatedAt: now(),
+				})
+				.where(eq(stacks.id, fullStack.id));
+		}
+
 		await queueOrRunDeployment({
 			stackId: stack.id,
 			userId: stack.createdByUserId,

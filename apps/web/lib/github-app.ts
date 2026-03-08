@@ -240,6 +240,28 @@ export async function getRepositoryBranchHeadSha(input: {
 	return response.commit.sha;
 }
 
+export async function listRepositoryTreePaths(input: {
+	installationId: string;
+	owner: string;
+	repository: string;
+	branch: string;
+}) {
+	const token = await createInstallationAccessToken(input.installationId);
+	const response = await githubRequest<{
+		tree: Array<{
+			path: string;
+			type: string;
+		}>;
+	}>(
+		`/repos/${input.owner}/${input.repository}/git/trees/${encodeURIComponent(input.branch)}?recursive=1`,
+		{
+			token: token.token,
+		},
+	);
+
+	return response.tree;
+}
+
 export function verifyGitHubWebhookSignature(rawBody: string, signatureHeader: string | null) {
 	const secret = process.env.GITHUB_APP_WEBHOOK_SECRET;
 	if (!secret) {

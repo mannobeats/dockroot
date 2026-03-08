@@ -5,6 +5,7 @@ import {
 	deployStackAction,
 	destroyStackAction,
 } from "@/app/(dashboard)/actions";
+import { CodeEditor } from "@/components/code-editor";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { LiveStackFeed } from "@/components/live-stack-feed";
 import { PageHeader } from "@/components/page-header";
@@ -97,17 +98,18 @@ export default async function StackWorkspacePage({
 								<div className="border-b border-default/10 px-4 py-3">
 									<p className="text-sm font-semibold">{stack.composeFileName}</p>
 								</div>
-								<pre className="max-h-[420px] overflow-auto bg-[#050914] px-4 py-4 text-xs leading-6 text-white/80">
-									{stack.composeYaml}
-								</pre>
+								<CodeEditor value={stack.composeYaml} language="yaml" readOnly minHeight="420px" />
 							</div>
 							<div className="overflow-hidden rounded-xl border border-default/15">
 								<div className="border-b border-default/10 px-4 py-3">
 									<p className="text-sm font-semibold">{stack.envFileName || ".env"}</p>
 								</div>
-								<pre className="max-h-[420px] overflow-auto bg-background px-4 py-4 text-xs leading-6">
-									{stack.envFileContent || "# No env file configured"}
-								</pre>
+								<CodeEditor
+									value={stack.envFileContent || "# No env file configured"}
+									language="env"
+									readOnly
+									minHeight="420px"
+								/>
 							</div>
 						</div>
 					</div>

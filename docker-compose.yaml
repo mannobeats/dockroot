@@ -11,7 +11,7 @@ services:
       - .env.local
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/lab_starter
-      DOCKROOT_DATA_DIR: /app/.dockroot
+      DOCKROOT_DATA_DIR: ${PWD}/.dockroot
       PROMETHEUS_URL: http://prometheus:9090
     depends_on:
       postgres:
@@ -19,7 +19,7 @@ services:
       prometheus:
         condition: service_started
     volumes:
-      - dockroot_data:/app/.dockroot
+      - ./.dockroot:${PWD}/.dockroot
       - /var/run/docker.sock:/var/run/docker.sock
 
   postgres:
@@ -85,5 +85,4 @@ services:
 
 volumes:
   postgres_data:
-  dockroot_data:
   prometheus_data:

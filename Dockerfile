@@ -31,7 +31,7 @@ FROM base AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN apk add --no-cache docker-cli
+RUN apk add --no-cache docker-cli docker-cli-compose
 
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps ./apps

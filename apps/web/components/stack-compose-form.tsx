@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { CodeEditor } from "@/components/code-editor";
 import { FormSubmitButton } from "@/components/form-submit-button";
 
 export function StackComposeForm({
@@ -13,6 +14,10 @@ export function StackComposeForm({
 	action: (formData: FormData) => void | Promise<void>;
 }) {
 	const [stackName, setStackName] = useState("");
+	const [composeYaml, setComposeYaml] = useState(
+		`services:\n  app:\n    image: nginx:alpine\n    ports:\n      - "8080:80"\n    restart: unless-stopped\n`,
+	);
+	const [envFileContent, setEnvFileContent] = useState("");
 
 	return (
 		<form
@@ -20,6 +25,8 @@ export function StackComposeForm({
 			className="overflow-hidden rounded-2xl border border-default/15 bg-surface"
 		>
 			<input type="hidden" name="projectId" value={projectId} />
+			<input type="hidden" name="composeYaml" value={composeYaml} />
+			<input type="hidden" name="envFileContent" value={envFileContent} />
 			<div className="border-b border-default/15 px-5 py-4">
 				<div className="flex flex-col gap-4 xl:flex-row xl:items-end">
 					<div className="flex-1 space-y-1.5">
@@ -76,13 +83,12 @@ export function StackComposeForm({
 							</p>
 						</div>
 					</div>
-					<textarea
-						id="composeYaml"
-						name="composeYaml"
-						required
-						rows={22}
-						defaultValue={`services:\n  app:\n    image: nginx:alpine\n    ports:\n      - "8080:80"\n    restart: unless-stopped\n`}
-						className="min-h-[520px] w-full resize-none bg-[#050914] px-4 py-4 font-mono text-xs leading-6 text-white outline-none"
+					<CodeEditor
+						value={composeYaml}
+						onChange={setComposeYaml}
+						language="yaml"
+						minHeight="520px"
+						placeholder="services:\n  app:\n    image: nginx:alpine"
 					/>
 				</div>
 				<div>
@@ -94,12 +100,12 @@ export function StackComposeForm({
 							</p>
 						</div>
 					</div>
-					<textarea
-						id="envFileContent"
-						name="envFileContent"
-						rows={22}
-						placeholder={`APP_ENV=production\nAPP_PORT=8080`}
-						className="min-h-[520px] w-full resize-none bg-background px-4 py-4 font-mono text-xs leading-6 outline-none"
+					<CodeEditor
+						value={envFileContent}
+						onChange={setEnvFileContent}
+						language="env"
+						minHeight="520px"
+						placeholder={"APP_ENV=production\nAPP_PORT=8080"}
 					/>
 				</div>
 			</div>
