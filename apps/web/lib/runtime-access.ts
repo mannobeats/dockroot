@@ -1,10 +1,10 @@
 import "server-only";
 
 import { db, stacks } from "@dockroot/db";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { AppRole } from "@/lib/authorization";
 import { isPrivilegedRole } from "@/lib/authorization";
-import { listContainers } from "@/lib/platform/docker";
+import { listContainersForEnvironment } from "@/lib/environment-runtime";
 
 function getComposeProjectSlug(labels?: string | null) {
 	return labels
@@ -16,15 +16,21 @@ function getComposeProjectSlug(labels?: string | null) {
 		.trim();
 }
 
-export async function listAccessibleContainersForUser(userId: string, role: AppRole) {
-	const containers = await listContainers();
+export async function listAccessibleContainersForUser(
+	userId: string,
+	role: AppRole,
+	environmentId?: string,
+) {
+	const { containers } = await listContainersForEnvironment(userId, environmentId);
 
 	if (isPrivilegedRole(role)) {
 		return containers;
 	}
 
 	const ownedStacks = await db.query.stacks.findMany({
-		where: eq(stacks.createdByUserId, userId),
+		where: environmentId
+			? and(eq(stacks.createdByUserId, userId), eq(stacks.environmentId, environmentId))
+			: eq(stacks.createdByUserId, userId),
 		columns: {
 			slug: true,
 		},
@@ -41,8 +47,13 @@ export async function requireAccessibleContainerForUser(input: {
 	containerId: string;
 	userId: string;
 	role: AppRole;
+	environmentId?: string;
 }) {
-	const containers = await listAccessibleContainersForUser(input.userId, input.role);
+	const containers = await listAccessibleContainersForUser(
+		input.userId,
+		input.role,
+		input.environmentId,
+	);
 	const container = containers.find((candidate) => candidate.ID === input.containerId);
 
 	if (!container) {

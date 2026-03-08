@@ -7,17 +7,18 @@ import {
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { PageHeader } from "@/components/page-header";
 import { requirePrivilegedPageSession } from "@/lib/authorization";
-import { listNetworks } from "@/lib/platform/docker";
+import { listNetworksForEnvironment, resolveRuntimeEnvironment } from "@/lib/environment-runtime";
 
 export default async function NetworksPage({
 	searchParams,
 }: {
-	searchParams: Promise<{ q?: string; network?: string }>;
+	searchParams: Promise<{ q?: string; network?: string; environment?: string }>;
 }) {
-	await requirePrivilegedPageSession();
+	const session = await requirePrivilegedPageSession();
 	const params = await searchParams;
+	const environment = await resolveRuntimeEnvironment(session.user.id, params.environment);
 	const query = (params.q || "").toLowerCase();
-	const networks = await listNetworks();
+	const { networks } = await listNetworksForEnvironment(session.user.id, environment.id);
 	const filtered = networks.filter((network) =>
 		!query
 			? true
@@ -30,7 +31,7 @@ export default async function NetworksPage({
 			<PageHeader
 				kicker="Runtime"
 				title="Networks"
-				description="Create, inspect, and remove Docker networks on the manager host."
+				description={`Create, inspect, and remove Docker networks on ${environment.name}.`}
 			/>
 
 			<section className="rounded-2xl border border-default/15 bg-surface p-5">
@@ -51,6 +52,7 @@ export default async function NetworksPage({
 						</button>
 					</form>
 					<form action={createNetworkAction} className="grid gap-3 md:grid-cols-[1fr_160px_auto]">
+						<input type="hidden" name="environmentId" value={environment.id} />
 						<input
 							type="text"
 							name="name"
@@ -71,6 +73,7 @@ export default async function NetworksPage({
 						<FormSubmitButton label="Create" pendingLabel="Creating..." />
 					</form>
 					<form action={pruneNetworksAction}>
+						<input type="hidden" name="environmentId" value={environment.id} />
 						<FormSubmitButton label="Prune unused" pendingLabel="Pruning..." />
 					</form>
 				</div>
@@ -117,7 +120,7 @@ export default async function NetworksPage({
 									<tr key={`${network.ID}-${network.Name}`}>
 										<td className="px-4 py-3 font-medium">
 											<Link
-												href={`/dashboard/networks/${encodeURIComponent(network.Name)}`}
+												href={`/dashboard/networks/${encodeURIComponent(network.Name)}?environment=${environment.id}`}
 												className="transition-colors hover:text-accent"
 											>
 												{network.Name}
@@ -128,13 +131,14 @@ export default async function NetworksPage({
 										<td className="px-4 py-3">
 											<div className="flex flex-wrap gap-2">
 												<Link
-													href={`/dashboard/networks/${encodeURIComponent(network.Name)}`}
+													href={`/dashboard/networks/${encodeURIComponent(network.Name)}?environment=${environment.id}`}
 													className="inline-flex h-8 items-center justify-center rounded-lg border border-default/20 bg-background px-3 text-xs font-medium text-muted transition-colors hover:text-foreground"
 												>
 													Details
 												</Link>
 												<form action={removeNetworkAction}>
 													<input type="hidden" name="name" value={network.Name} />
+													<input type="hidden" name="environmentId" value={environment.id} />
 													<FormSubmitButton
 														label="Delete"
 														pendingLabel="Deleting..."

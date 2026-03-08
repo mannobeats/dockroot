@@ -7,20 +7,22 @@ import { PageHeader } from "@/components/page-header";
 import { RuntimePortLinks } from "@/components/runtime-port-links";
 import { StatusBadge } from "@/components/status-badge";
 import { isPrivilegedRole, requireUserSession } from "@/lib/authorization";
+import { resolveRuntimeEnvironment } from "@/lib/environment-runtime";
 import { listAccessibleContainersForUser } from "@/lib/runtime-access";
 import { getProtectedContainerLabel, isProtectedManagerContainer } from "@/lib/runtime-protection";
 
 export default async function ContainersPage({
 	searchParams,
 }: {
-	searchParams: Promise<{ q?: string; status?: string }>;
+	searchParams: Promise<{ q?: string; status?: string; environment?: string }>;
 }) {
 	const { userId, role } = await requireUserSession();
 	const params = await searchParams;
+	const environment = await resolveRuntimeEnvironment(userId, params.environment);
 	const query = (params.q || "").toLowerCase();
 	const status = (params.status || "all").toLowerCase();
-	const containers = await listAccessibleContainersForUser(userId, role);
-	const includeRuntime = isPrivilegedRole(role);
+	const containers = await listAccessibleContainersForUser(userId, role, environment.id);
+	const includeRuntime = isPrivilegedRole(role) && environment.kind === "local";
 	const filtered = containers.filter((container) => {
 		const matchesQuery =
 			!query ||
@@ -39,8 +41,8 @@ export default async function ContainersPage({
 				title="Containers"
 				description={
 					includeRuntime
-						? "Inspect, control, remove, and jump into logs for every runtime container on the manager host."
-						: "Inspect and operate runtime containers that belong to your workspace."
+						? `Inspect, control, remove, and jump into logs for every runtime container on ${environment.name}.`
+						: `Inspect and operate runtime containers that belong to your workspace in ${environment.name}.`
 				}
 			/>
 
@@ -50,7 +52,7 @@ export default async function ContainersPage({
 				<div className="rounded-2xl border border-default/15 bg-surface p-5">
 					<p className="text-xs uppercase tracking-[0.18em] text-muted">Visible containers</p>
 					<p className="mt-3 text-3xl font-semibold tracking-tight">{filtered.length}</p>
-					<p className="mt-2 text-sm text-muted">Filtered runtime scope for this host.</p>
+					<p className="mt-2 text-sm text-muted">Filtered runtime scope for this environment.</p>
 				</div>
 				<div className="rounded-2xl border border-default/15 bg-surface p-5">
 					<p className="text-xs uppercase tracking-[0.18em] text-muted">Running now</p>
@@ -123,7 +125,7 @@ export default async function ContainersPage({
 												<div className="space-y-1">
 													<div className="flex items-center gap-2">
 														<Link
-															href={`/dashboard/containers/${container.ID}`}
+															href={`/dashboard/containers/${container.ID}?environment=${environment.id}`}
 															className="transition-colors hover:text-accent"
 														>
 															{container.Names}
@@ -171,6 +173,7 @@ export default async function ContainersPage({
 														<form key={action} action={controlContainerAction}>
 															<input type="hidden" name="containerId" value={container.ID} />
 															<input type="hidden" name="action" value={action} />
+															<input type="hidden" name="environmentId" value={environment.id} />
 															<FormSubmitButton
 																label={action}
 																pendingLabel={`${action}ing...`}
@@ -184,14 +187,16 @@ export default async function ContainersPage({
 															/>
 														</form>
 													))}
+													{environment.kind === "local" ? (
+														<Link
+															href={`/dashboard/shell?target=container&containerId=${container.ID}&environment=${environment.id}`}
+															className="inline-flex h-8 items-center justify-center rounded-lg border border-default/20 bg-background px-3 text-xs font-medium text-muted transition-colors hover:text-foreground"
+														>
+															shell
+														</Link>
+													) : null}
 													<Link
-														href={`/dashboard/shell?target=container&containerId=${container.ID}`}
-														className="inline-flex h-8 items-center justify-center rounded-lg border border-default/20 bg-background px-3 text-xs font-medium text-muted transition-colors hover:text-foreground"
-													>
-														shell
-													</Link>
-													<Link
-														href={`/dashboard/logs?mode=single&container=${container.ID}`}
+														href={`/dashboard/logs?mode=single&container=${container.ID}&environment=${environment.id}`}
 														className="inline-flex h-8 items-center justify-center rounded-lg border border-default/20 bg-background px-3 text-xs font-medium text-muted transition-colors hover:text-foreground"
 													>
 														logs

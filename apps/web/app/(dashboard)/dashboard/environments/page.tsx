@@ -56,12 +56,20 @@ export default async function EnvironmentsPage() {
 												{environment.description || "No environment description yet."}
 											</p>
 										</div>
-										<Link
-											href={`/dashboard/environments/${environment.id}`}
-											className="inline-flex h-10 items-center justify-center rounded-xl border border-default/15 bg-surface px-4 text-sm font-medium transition-colors hover:border-accent/30 hover:text-accent"
-										>
-											Open
-										</Link>
+										<div className="flex flex-wrap gap-2">
+											<Link
+												href={`/dashboard?environment=${environment.id}`}
+												className="inline-flex h-10 items-center justify-center rounded-xl bg-accent px-4 text-sm font-medium text-white transition-opacity hover:opacity-90"
+											>
+												Open workspace
+											</Link>
+											<Link
+												href={`/dashboard/environments/${environment.id}`}
+												className="inline-flex h-10 items-center justify-center rounded-xl border border-default/15 bg-surface px-4 text-sm font-medium transition-colors hover:border-accent/30 hover:text-accent"
+											>
+												Details
+											</Link>
+										</div>
 									</div>
 
 									<div className="mt-4 grid gap-4 lg:grid-cols-3">
@@ -83,15 +91,6 @@ export default async function EnvironmentsPage() {
 
 									{environment.kind === "agent" && commands ? (
 										<div className="mt-4 space-y-4">
-											<div className="rounded-2xl border border-default/15 bg-[#050914] p-4">
-												<div className="flex items-center justify-between gap-3">
-													<p className="text-sm font-semibold text-white">Agent env</p>
-													<CopyButton value={commands.envContent} />
-												</div>
-												<pre className="mt-3 overflow-auto text-xs leading-6 text-white/80">
-													{commands.envContent}
-												</pre>
-											</div>
 											<div className="grid gap-4 xl:grid-cols-2">
 												<div className="rounded-2xl border border-default/15 bg-[#050914] p-4">
 													<div className="flex items-center justify-between gap-3">
@@ -153,15 +152,18 @@ export default async function EnvironmentsPage() {
 							/>
 						</div>
 						<div className="space-y-1.5">
-							<label htmlFor="manager-url" className="text-sm font-medium">
-								Public manager URL
+							<label htmlFor="agent-url" className="text-sm font-medium">
+								Agent URL
 							</label>
 							<input
-								id="manager-url"
-								name="managerUrl"
-								placeholder="https://dockroot.example.com"
+								id="agent-url"
+								name="agentUrl"
+								placeholder="http://agent.example.com:9095"
 								className="h-11 w-full rounded-2xl border border-default/15 bg-background px-4 text-sm outline-none transition-colors focus:border-accent"
 							/>
+							<p className="text-xs text-muted">
+								The address the manager should use to reach this environment&apos;s agent.
+							</p>
 						</div>
 						<FormSubmitButton label="Create environment" pendingLabel="Creating environment..." />
 					</form>

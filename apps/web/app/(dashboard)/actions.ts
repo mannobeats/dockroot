@@ -4,6 +4,19 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePrivilegedSession, requireUserSession } from "@/lib/authorization";
 import {
+	controlContainerForEnvironment,
+	createNetworkForEnvironment,
+	createVolumeForEnvironment,
+	pruneImagesForEnvironment,
+	pruneNetworksForEnvironment,
+	pruneVolumesForEnvironment,
+	pullImageForEnvironment,
+	removeImageForEnvironment,
+	removeNetworkForEnvironment,
+	removeVolumeForEnvironment,
+	resolveRuntimeEnvironment,
+} from "@/lib/environment-runtime";
+import {
 	adoptComposeProject,
 	createEnvironment,
 	createGitHubStack,
@@ -12,22 +25,13 @@ import {
 	deleteProject,
 	deleteStack,
 	queueOrRunDeployment,
+	rotateAgentRegistrationToken,
 } from "@/lib/platform";
+import { controlComposeProject, listContainers } from "@/lib/platform/docker";
 import {
-	controlComposeProject,
-	controlContainer,
-	createNetwork,
-	createVolume,
-	listContainers,
-	pruneImages,
-	pruneNetworks,
-	pruneVolumes,
-	pullImage,
-	removeImage,
-	removeNetwork,
-	removeVolume,
-} from "@/lib/platform/docker";
-import { requireAccessibleContainerForUser } from "@/lib/runtime-access";
+	listAccessibleContainersForUser,
+	requireAccessibleContainerForUser,
+} from "@/lib/runtime-access";
 import { isProtectedManagerContainer, isProtectedManagerImage } from "@/lib/runtime-protection";
 
 function getValue(formData: FormData, key: string) {
@@ -75,7 +79,7 @@ export async function createEnvironmentAction(formData: FormData) {
 	const { userId } = await requireUserSession();
 	const name = getValue(formData, "name");
 	const description = getValue(formData, "description");
-	const managerUrl = getValue(formData, "managerUrl");
+	const agentUrl = getValue(formData, "agentUrl");
 
 	if (!name) {
 		throw new Error("Environment name is required");
@@ -85,10 +89,26 @@ export async function createEnvironmentAction(formData: FormData) {
 		userId,
 		name,
 		description,
-		managerUrl,
+		agentUrl,
 	});
 
 	redirect("/dashboard/environments");
+}
+
+export async function rotateAgentRegistrationTokenAction(formData: FormData) {
+	const { userId } = await requireUserSession();
+	const environmentId = getValue(formData, "environmentId");
+
+	if (!environmentId) {
+		throw new Error("Environment is required");
+	}
+
+	await rotateAgentRegistrationToken({
+		environmentId,
+		userId,
+	});
+
+	redirect(`/dashboard/environments/${environmentId}`);
 }
 
 export async function createStackAction(formData: FormData) {
@@ -234,6 +254,7 @@ export async function controlContainerAction(formData: FormData) {
 	const auth = await requireUserSession();
 	const containerId = getValue(formData, "containerId");
 	const action = getValue(formData, "action");
+	const environmentId = getValue(formData, "environmentId") || undefined;
 
 	if (!containerId || !["start", "stop", "restart", "remove"].includes(action)) {
 		throw new Error("Container and action are required");
@@ -243,15 +264,25 @@ export async function controlContainerAction(formData: FormData) {
 		containerId,
 		userId: auth.userId,
 		role: auth.role,
+		environmentId,
 	});
-	const containers = await listContainers();
+	const environment = await resolveRuntimeEnvironment(auth.userId, environmentId);
+	const containers =
+		environment.kind === "local"
+			? await listContainers()
+			: await listAccessibleContainersForUser(auth.userId, auth.role, environment.id);
 	const container = containers.find((entry) => entry.ID === containerId);
 
-	if (container && isProtectedManagerContainer(container)) {
+	if (environment.kind === "local" && container && isProtectedManagerContainer(container)) {
 		throw new Error("Dockroot protected containers cannot be modified from the runtime dashboard.");
 	}
 
-	await controlContainer(containerId, action as "start" | "stop" | "restart" | "remove");
+	await controlContainerForEnvironment({
+		userId: auth.userId,
+		environmentId,
+		containerId,
+		action: action as "start" | "stop" | "restart" | "remove",
+	});
 	revalidatePath("/dashboard/containers");
 }
 
@@ -277,100 +308,110 @@ export async function controlComposeProjectAction(formData: FormData) {
 }
 
 export async function pullImageAction(formData: FormData) {
-	await requirePrivilegedSession();
+	const auth = await requirePrivilegedSession();
 	const imageRef = getValue(formData, "imageRef");
+	const environmentId = getValue(formData, "environmentId") || undefined;
 
 	if (!imageRef) {
 		throw new Error("Image reference is required");
 	}
 
-	await pullImage(imageRef);
+	await pullImageForEnvironment(auth.userId, imageRef, environmentId);
 	revalidatePath("/dashboard/images");
 }
 
 export async function removeImageAction(formData: FormData) {
-	await requirePrivilegedSession();
+	const auth = await requirePrivilegedSession();
 	const imageRef = getValue(formData, "imageRef");
+	const environmentId = getValue(formData, "environmentId") || undefined;
 
 	if (!imageRef) {
 		throw new Error("Image reference is required");
 	}
 
-	const containers = await listContainers();
+	const environment = await resolveRuntimeEnvironment(auth.userId, environmentId);
+	const containers = environment.kind === "local" ? await listContainers() : [];
 
-	if (isProtectedManagerImage(imageRef, containers)) {
+	if (environment.kind === "local" && isProtectedManagerImage(imageRef, containers)) {
 		throw new Error("Dockroot protected images cannot be deleted from the runtime dashboard.");
 	}
 
-	await removeImage(imageRef);
+	await removeImageForEnvironment(auth.userId, imageRef, environmentId);
 	revalidatePath("/dashboard/images");
 }
 
 export async function pruneImagesAction(formData: FormData) {
-	await requirePrivilegedSession();
+	const auth = await requirePrivilegedSession();
 	const mode = getValue(formData, "mode");
-	await pruneImages({ all: mode === "all" });
+	const environmentId = getValue(formData, "environmentId") || undefined;
+	await pruneImagesForEnvironment(auth.userId, environmentId, { all: mode === "all" });
 	revalidatePath("/dashboard/images");
 }
 
 export async function createVolumeAction(formData: FormData) {
-	await requirePrivilegedSession();
+	const auth = await requirePrivilegedSession();
 	const name = getValue(formData, "name");
 	const driver = getValue(formData, "driver") || "local";
+	const environmentId = getValue(formData, "environmentId") || undefined;
 
 	if (!name) {
 		throw new Error("Volume name is required");
 	}
 
-	await createVolume(name, driver);
+	await createVolumeForEnvironment(auth.userId, name, driver, environmentId);
 	revalidatePath("/dashboard/volumes");
 }
 
 export async function removeVolumeAction(formData: FormData) {
-	await requirePrivilegedSession();
+	const auth = await requirePrivilegedSession();
 	const name = getValue(formData, "name");
+	const environmentId = getValue(formData, "environmentId") || undefined;
 
 	if (!name) {
 		throw new Error("Volume name is required");
 	}
 
-	await removeVolume(name);
+	await removeVolumeForEnvironment(auth.userId, name, environmentId);
 	revalidatePath("/dashboard/volumes");
 }
 
-export async function pruneVolumesAction() {
-	await requirePrivilegedSession();
-	await pruneVolumes();
+export async function pruneVolumesAction(formData: FormData) {
+	const auth = await requirePrivilegedSession();
+	const environmentId = getValue(formData, "environmentId") || undefined;
+	await pruneVolumesForEnvironment(auth.userId, environmentId);
 	revalidatePath("/dashboard/volumes");
 }
 
 export async function createNetworkAction(formData: FormData) {
-	await requirePrivilegedSession();
+	const auth = await requirePrivilegedSession();
 	const name = getValue(formData, "name");
 	const driver = getValue(formData, "driver") || "bridge";
+	const environmentId = getValue(formData, "environmentId") || undefined;
 
 	if (!name) {
 		throw new Error("Network name is required");
 	}
 
-	await createNetwork(name, driver);
+	await createNetworkForEnvironment(auth.userId, name, driver, environmentId);
 	revalidatePath("/dashboard/networks");
 }
 
 export async function removeNetworkAction(formData: FormData) {
-	await requirePrivilegedSession();
+	const auth = await requirePrivilegedSession();
 	const name = getValue(formData, "name");
+	const environmentId = getValue(formData, "environmentId") || undefined;
 
 	if (!name) {
 		throw new Error("Network name is required");
 	}
 
-	await removeNetwork(name);
+	await removeNetworkForEnvironment(auth.userId, name, environmentId);
 	revalidatePath("/dashboard/networks");
 }
 
-export async function pruneNetworksAction() {
-	await requirePrivilegedSession();
-	await pruneNetworks();
+export async function pruneNetworksAction(formData: FormData) {
+	const auth = await requirePrivilegedSession();
+	const environmentId = getValue(formData, "environmentId") || undefined;
+	await pruneNetworksForEnvironment(auth.userId, environmentId);
 	revalidatePath("/dashboard/networks");
 }

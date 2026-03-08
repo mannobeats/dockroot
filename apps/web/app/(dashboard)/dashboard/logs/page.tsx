@@ -1,17 +1,26 @@
 import { LiveLogsWorkspace } from "@/components/live-logs-workspace";
 import { PageHeader } from "@/components/page-header";
 import { requireUserSession } from "@/lib/authorization";
-import { getContainerLogs } from "@/lib/platform/docker";
+import {
+	getContainerLogsForEnvironment,
+	resolveRuntimeEnvironment,
+} from "@/lib/environment-runtime";
 import { listAccessibleContainersForUser } from "@/lib/runtime-access";
 
 export default async function LogsPage({
 	searchParams,
 }: {
-	searchParams: Promise<{ mode?: string; container?: string; containers?: string }>;
+	searchParams: Promise<{
+		mode?: string;
+		container?: string;
+		containers?: string;
+		environment?: string;
+	}>;
 }) {
 	const { userId, role } = await requireUserSession();
 	const params = await searchParams;
-	const containers = await listAccessibleContainersForUser(userId, role);
+	const environment = await resolveRuntimeEnvironment(userId, params.environment);
+	const containers = await listAccessibleContainersForUser(userId, role, environment.id);
 	const initialMode = params.mode === "grouped" ? "grouped" : "single";
 	const requestedIds =
 		initialMode === "grouped"
@@ -35,7 +44,11 @@ export default async function LogsPage({
 		await Promise.all(
 			selectedContainers.map(async (container) => [
 				container.ID,
-				await getContainerLogs(container.ID, { tail: 150 }),
+				(
+					await getContainerLogsForEnvironment(userId, container.ID, environment.id, {
+						tail: 150,
+					})
+				).logs,
 			]),
 		),
 	);
@@ -45,7 +58,7 @@ export default async function LogsPage({
 			<PageHeader
 				kicker="Runtime"
 				title="Logs"
-				description="Single-container and grouped live logs with container-aware selection."
+				description={`Single-container and grouped logs for ${environment.name}.`}
 			/>
 
 			<LiveLogsWorkspace
@@ -58,6 +71,8 @@ export default async function LogsPage({
 				initialLogs={initialLogs}
 				initialMode={initialMode}
 				initialSelectedIds={initialSelectedIds}
+				transport={environment.kind === "local" ? "local" : "remote"}
+				environmentId={environment.id}
 			/>
 		</div>
 	);

@@ -16,11 +16,15 @@ export function LiveLogsWorkspace({
 	initialLogs,
 	initialMode,
 	initialSelectedIds,
+	transport = "local",
+	environmentId,
 }: {
 	containers: LogContainer[];
 	initialLogs: Record<string, string>;
 	initialMode: "single" | "grouped";
 	initialSelectedIds: string[];
+	transport?: "local" | "remote";
+	environmentId?: string;
 }) {
 	const [query, setQuery] = useState("");
 	const [mode, setMode] = useState<"single" | "grouped">(initialMode);
@@ -64,6 +68,10 @@ export function LiveLogsWorkspace({
 	);
 
 	useEffect(() => {
+		if (transport !== "local") {
+			return;
+		}
+
 		if (!selectedIds.length) {
 			return;
 		}
@@ -107,7 +115,53 @@ export function LiveLogsWorkspace({
 			}
 			socket.off("logs:data", onData);
 		};
-	}, [selectedIds]);
+	}, [selectedIds, transport]);
+
+	useEffect(() => {
+		if (transport !== "remote" || !environmentId || !selectedIds.length) {
+			return;
+		}
+
+		let cancelled = false;
+
+		const refreshLogs = async () => {
+			if (paused) {
+				return;
+			}
+
+			const entries = await Promise.all(
+				selectedIds.map(async (containerId) => {
+					const params = new URLSearchParams({
+						environmentId,
+						containerId,
+						tail: "150",
+					});
+					const response = await fetch(`/api/runtime/logs?${params.toString()}`, {
+						cache: "no-store",
+					});
+					const text = await response.text();
+					return [containerId, text] as const;
+				}),
+			);
+
+			if (!cancelled) {
+				setLogsByContainer((current) => ({
+					...current,
+					...Object.fromEntries(entries),
+				}));
+			}
+		};
+
+		void refreshLogs();
+		const interval = window.setInterval(() => {
+			void refreshLogs();
+		}, 2000);
+
+		return () => {
+			cancelled = true;
+			window.clearInterval(interval);
+		};
+	}, [environmentId, paused, selectedIds, transport]);
 
 	const combinedLogs = selectedIds
 		.map((containerId) => {

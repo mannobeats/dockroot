@@ -7,21 +7,32 @@ import { PrometheusOverview } from "@/components/prometheus-overview";
 import { StatCard } from "@/components/stat-card";
 import { StatusBadge } from "@/components/status-badge";
 import { isPrivilegedRole, requireUserSession } from "@/lib/authorization";
+import {
+	getRuntimeSnapshotForEnvironment,
+	resolveRuntimeEnvironment,
+} from "@/lib/environment-runtime";
 import { getDashboardData } from "@/lib/platform";
 import { getPrometheusDashboardMetrics, getPrometheusTargetHealth } from "@/lib/prometheus";
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+	searchParams,
+}: {
+	searchParams: Promise<{ environment?: string }>;
+}) {
 	const { session, userId, role } = await requireUserSession();
+	const params = await searchParams;
 	const includeRuntime = isPrivilegedRole(role);
+	const environment = await resolveRuntimeEnvironment(userId, params.environment);
 
-	const [data, metrics, targets] = await Promise.all([
+	const [data, runtime, metrics, targets] = await Promise.all([
 		getDashboardData(userId, { includeRuntime }),
-		includeRuntime ? getPrometheusDashboardMetrics() : null,
-		includeRuntime ? getPrometheusTargetHealth() : null,
+		includeRuntime ? getRuntimeSnapshotForEnvironment(userId, environment.id) : null,
+		includeRuntime && environment.kind === "local" ? getPrometheusDashboardMetrics() : null,
+		includeRuntime && environment.kind === "local" ? getPrometheusTargetHealth() : null,
 	]);
 	const memoryUsed =
-		includeRuntime && data.runtime
-			? (data.runtime.host.totalMemoryGb - data.runtime.host.freeMemoryGb).toFixed(1)
+		includeRuntime && runtime
+			? (runtime.snapshot.host.totalMemoryGb - runtime.snapshot.host.freeMemoryGb).toFixed(1)
 			: null;
 
 	return (
@@ -29,7 +40,7 @@ export default async function DashboardPage() {
 			<PageHeader
 				kicker="Overview"
 				title={`Good evening, ${session.user.name}`}
-				description="Operate local and remote Docker Compose stacks from one control plane. Manual stacks are live today; GitHub App and remote agents are wired into the V1 architecture."
+				description={`Operate local and remote Docker Compose stacks from one control plane. Current runtime scope: ${environment.name}.`}
 				actions={
 					<>
 						<Link
@@ -69,10 +80,10 @@ export default async function DashboardPage() {
 				/>
 				<StatCard
 					label="Runtime Assets"
-					value={includeRuntime && data.runtime ? String(data.runtime.counts.containers) : "Scoped"}
+					value={includeRuntime && runtime ? String(runtime.snapshot.counts.containers) : "Scoped"}
 					detail={
-						includeRuntime && data.runtime
-							? `${data.runtime.counts.images} images on ${data.runtime.host.hostname}`
+						includeRuntime && runtime
+							? `${runtime.snapshot.counts.images} images on ${runtime.snapshot.host.hostname}`
 							: "Tenant runtime visibility is limited to owned workloads"
 					}
 					icon={Boxes}
@@ -80,7 +91,7 @@ export default async function DashboardPage() {
 			</div>
 
 			<div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
-				{includeRuntime && data.runtime ? (
+				{includeRuntime && runtime ? (
 					<section className="rounded-[28px] border border-default/15 bg-surface/80 p-5">
 						<div className="flex items-center justify-between">
 							<div>
@@ -88,22 +99,25 @@ export default async function DashboardPage() {
 									Host overview
 								</p>
 								<h2 className="mt-2 text-xl font-semibold tracking-tight">
-									{data.runtime.host.hostname}
+									{runtime.snapshot.host.hostname}
 								</h2>
+								<p className="mt-1 text-sm text-muted">{environment.name}</p>
 							</div>
 							<StatusBadge status="healthy" />
 						</div>
 						<div className="mt-6 grid gap-4 md:grid-cols-3">
 							<div className="rounded-2xl border border-default/15 bg-background/70 p-4">
 								<p className="text-xs font-medium text-muted">Platform</p>
-								<p className="mt-2 text-lg font-semibold">{data.runtime.host.platform}</p>
-								<p className="mt-1 text-sm text-muted">{data.runtime.host.architecture}</p>
+								<p className="mt-2 text-lg font-semibold">{runtime.snapshot.host.platform}</p>
+								<p className="mt-1 text-sm text-muted">{runtime.snapshot.host.architecture}</p>
 							</div>
 							<div className="rounded-2xl border border-default/15 bg-background/70 p-4">
 								<p className="text-xs font-medium text-muted">Resources</p>
-								<p className="mt-2 text-lg font-semibold">{data.runtime.host.cpus} CPU threads</p>
+								<p className="mt-2 text-lg font-semibold">
+									{runtime.snapshot.host.cpus} CPU threads
+								</p>
 								<p className="mt-1 text-sm text-muted">
-									{memoryUsed} GB used of {data.runtime.host.totalMemoryGb} GB RAM
+									{memoryUsed} GB used of {runtime.snapshot.host.totalMemoryGb} GB RAM
 								</p>
 							</div>
 							<div className="rounded-2xl border border-default/15 bg-background/70 p-4">
@@ -165,7 +179,7 @@ export default async function DashboardPage() {
 
 			{includeRuntime && targets ? <MonitoringHealthGrid targets={targets} /> : null}
 
-			{includeRuntime ? <LiveRuntimePanel /> : null}
+			{includeRuntime && environment.kind === "local" ? <LiveRuntimePanel /> : null}
 
 			<section className="rounded-[28px] border border-default/15 bg-surface/80 p-5">
 				<div className="flex items-center justify-between">

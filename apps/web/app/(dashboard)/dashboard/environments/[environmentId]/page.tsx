@@ -1,4 +1,7 @@
+import Link from "next/link";
+import { rotateAgentRegistrationTokenAction } from "@/app/(dashboard)/actions";
 import { CopyButton } from "@/components/copy-button";
+import { FormSubmitButton } from "@/components/form-submit-button";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
 import { getEnvironmentById, getInstallCommand } from "@/lib/platform";
@@ -32,6 +35,14 @@ export default async function EnvironmentDetailPage({
 				kicker="Environment"
 				title={environment.name}
 				description={environment.description || "Remote server and agent state."}
+				actions={
+					<Link
+						href={`/dashboard?environment=${environment.id}`}
+						className="inline-flex h-11 items-center justify-center rounded-xl bg-accent px-4 text-sm font-medium text-white transition-opacity hover:opacity-90"
+					>
+						Open workspace
+					</Link>
+				}
 			/>
 
 			<div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
@@ -46,8 +57,10 @@ export default async function EnvironmentDetailPage({
 							<p className="mt-2 text-sm font-semibold capitalize">{environment.kind}</p>
 						</div>
 						<div className="rounded-2xl border border-default/15 bg-background/60 p-4">
-							<p className="text-xs text-muted">Manager URL</p>
-							<p className="mt-2 break-all text-sm font-semibold">{environment.managerUrl}</p>
+							<p className="text-xs text-muted">Agent URL</p>
+							<p className="mt-2 break-all text-sm font-semibold">
+								{environment.managerUrl || "Not configured"}
+							</p>
 						</div>
 						<div className="rounded-2xl border border-default/15 bg-background/60 p-4">
 							<p className="text-xs text-muted">Hostname</p>
@@ -63,14 +76,19 @@ export default async function EnvironmentDetailPage({
 
 					{installCommands ? (
 						<div className="mt-5 space-y-4">
-							<div className="rounded-2xl border border-default/15 bg-[#050914] p-4">
-								<div className="flex items-center justify-between gap-3">
-									<p className="text-sm font-semibold text-white">Agent env</p>
-									<CopyButton value={installCommands.envContent} />
+							<div className="flex items-center justify-between rounded-2xl border border-default/15 bg-background/60 px-4 py-3">
+								<div>
+									<p className="text-sm font-semibold">Registration token</p>
+									<p className="mt-1 text-xs text-muted">Stable until you rotate it manually.</p>
 								</div>
-								<pre className="mt-3 overflow-auto text-xs leading-6 text-white/80">
-									{installCommands.envContent}
-								</pre>
+								<form action={rotateAgentRegistrationTokenAction}>
+									<input type="hidden" name="environmentId" value={environment.id} />
+									<FormSubmitButton
+										label="Rotate token"
+										pendingLabel="Rotating..."
+										className="inline-flex h-10 items-center justify-center rounded-xl border border-default/20 bg-surface px-4 text-sm font-medium"
+									/>
+								</form>
 							</div>
 							<div className="grid gap-4 xl:grid-cols-2">
 								<div className="rounded-2xl border border-default/15 bg-[#050914] p-4">

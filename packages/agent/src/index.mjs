@@ -29,6 +29,36 @@ const metrics = {
 	jobsFailed: 0,
 };
 
+function parseJsonLines(content) {
+	return content
+		.split("\n")
+		.map((line) => line.trim())
+		.filter(Boolean)
+		.flatMap((line) => {
+			try {
+				return [JSON.parse(line)];
+			} catch {
+				return [];
+			}
+		});
+}
+
+function parseJsonValue(content) {
+	try {
+		return JSON.parse(content);
+	} catch {
+		return null;
+	}
+}
+
+function stripAnsi(content) {
+	const esc = String.fromCharCode(27);
+	const bell = String.fromCharCode(7);
+	return content
+		.replaceAll(new RegExp(`${esc}\\[[0-9;]*[A-Za-z]`, "g"), "")
+		.replaceAll(new RegExp(`${esc}\\][^${bell}]*${bell}`, "g"), "");
+}
+
 async function ensureDirectories() {
 	await mkdir(stacksDir, { recursive: true });
 }
@@ -81,6 +111,25 @@ async function detectDockerVersion() {
 		return stdout.trim() || "unknown";
 	} catch {
 		return "unknown";
+	}
+}
+
+async function runDocker(args) {
+	try {
+		const result = await execFileAsync("docker", args, {
+			maxBuffer: 1024 * 1024 * 16,
+		});
+		return {
+			ok: true,
+			stdout: result.stdout,
+			stderr: result.stderr,
+		};
+	} catch (error) {
+		return {
+			ok: false,
+			stdout: "",
+			stderr: error instanceof Error ? error.message : "Docker command failed",
+		};
 	}
 }
 
@@ -272,6 +321,83 @@ async function readHealthSnapshot() {
 	};
 }
 
+async function requireAgentAuth(request) {
+	const state = await loadState();
+	const header = request.headers.authorization || "";
+	if (!state.agentToken || header !== `Bearer ${state.agentToken}`) {
+		return null;
+	}
+
+	return state;
+}
+
+function sendJson(response, status, payload) {
+	response.writeHead(status, { "content-type": "application/json; charset=utf-8" });
+	response.end(JSON.stringify(payload));
+}
+
+async function readRequestJson(request) {
+	const chunks = [];
+	for await (const chunk of request) {
+		chunks.push(chunk);
+	}
+
+	if (!chunks.length) {
+		return {};
+	}
+
+	return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+}
+
+async function getSnapshot() {
+	const [containers, images, volumes, networks] = await Promise.all([
+		runDocker(["ps", "-a", "--size", "--format", "{{json .}}"]),
+		runDocker(["images", "--digests", "--format", "{{json .}}"]),
+		runDocker(["volume", "ls", "--format", "{{json .}}"]),
+		runDocker(["network", "ls", "--format", "{{json .}}"]),
+	]);
+	const containerRows = parseJsonLines(containers.stdout);
+	const imageRows = parseJsonLines(images.stdout);
+	const volumeRows = parseJsonLines(volumes.stdout);
+	const networkRows = parseJsonLines(networks.stdout);
+
+	return {
+		host: {
+			hostname: os.hostname(),
+			platform: `${os.platform()} ${os.release()}`,
+			architecture: os.arch(),
+			cpus: os.cpus().length,
+			totalMemoryGb: Number((os.totalmem() / 1024 / 1024 / 1024).toFixed(1)),
+			freeMemoryGb: Number((os.freemem() / 1024 / 1024 / 1024).toFixed(1)),
+		},
+		containers: containerRows,
+		images: imageRows,
+		volumes: volumeRows,
+		networks: networkRows,
+		counts: {
+			containers: containerRows.length,
+			runningContainers: containerRows.filter((row) => row.State === "running").length,
+			images: imageRows.length,
+			volumes: volumeRows.length,
+			networks: networkRows.length,
+		},
+	};
+}
+
+async function getContainerDetails(containerId) {
+	const [inspectResult, logsResult, statsResult] = await Promise.all([
+		runDocker(["inspect", containerId]),
+		runDocker(["logs", "--tail", "200", containerId]),
+		runDocker(["stats", "--no-stream", "--format", "{{json .}}", containerId]),
+	]);
+
+	return {
+		inspect: parseJsonValue(inspectResult.stdout)?.[0] ?? null,
+		logs: stripAnsi([logsResult.stdout, logsResult.stderr].filter(Boolean).join("\n")),
+		stats: parseJsonLines(statsResult.stdout)[0] ?? null,
+	};
+}
+
 function startHttpServer() {
 	const server = createServer(async (request, response) => {
 		if (!request.url) {
@@ -279,16 +405,188 @@ function startHttpServer() {
 			return;
 		}
 
-		if (request.url === "/healthz") {
+		const url = new URL(request.url, `http://127.0.0.1:${listenPort}`);
+		const pathName = url.pathname;
+
+		if (pathName === "/healthz") {
 			const body = JSON.stringify(await readHealthSnapshot());
 			response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
 			response.end(body);
 			return;
 		}
 
-		if (request.url === "/metrics") {
+		if (pathName === "/metrics") {
 			response.writeHead(200, { "content-type": "text/plain; version=0.0.4; charset=utf-8" });
 			response.end(renderMetrics());
+			return;
+		}
+
+		const authedState = await requireAgentAuth(request);
+		if (!authedState) {
+			response.writeHead(401, { "content-type": "text/plain; charset=utf-8" });
+			response.end("Unauthorized");
+			return;
+		}
+
+		if (request.method === "GET" && pathName === "/snapshot") {
+			sendJson(response, 200, await getSnapshot());
+			return;
+		}
+
+		if (request.method === "GET" && pathName === "/containers") {
+			sendJson(response, 200, (await getSnapshot()).containers);
+			return;
+		}
+
+		const containerMatch = pathName.match(/^\/containers\/([^/]+)$/);
+		if (request.method === "GET" && containerMatch) {
+			sendJson(response, 200, await getContainerDetails(decodeURIComponent(containerMatch[1])));
+			return;
+		}
+
+		const containerLogsMatch = pathName.match(/^\/containers\/([^/]+)\/logs$/);
+		if (request.method === "GET" && containerLogsMatch) {
+			const tail = url.searchParams.get("tail") || "150";
+			const result = await runDocker([
+				"logs",
+				"--timestamps",
+				"--tail",
+				tail,
+				decodeURIComponent(containerLogsMatch[1]),
+			]);
+			response.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
+			response.end(stripAnsi([result.stdout, result.stderr].filter(Boolean).join("\n")));
+			return;
+		}
+
+		const containerActionsMatch = pathName.match(/^\/containers\/([^/]+)\/actions$/);
+		if (request.method === "POST" && containerActionsMatch) {
+			const { action } = await readRequestJson(request);
+			const containerId = decodeURIComponent(containerActionsMatch[1]);
+			const args = action === "remove" ? ["rm", "-f", containerId] : [String(action), containerId];
+			const result = await runDocker(args);
+			sendJson(response, result.ok ? 200 : 400, result);
+			return;
+		}
+
+		if (request.method === "GET" && pathName === "/images") {
+			sendJson(
+				response,
+				200,
+				parseJsonLines((await runDocker(["images", "--digests", "--format", "{{json .}}"])).stdout),
+			);
+			return;
+		}
+
+		const imageMatch = pathName.match(/^\/images\/(.+)$/);
+		if (request.method === "GET" && imageMatch) {
+			const result = await runDocker(["image", "inspect", decodeURIComponent(imageMatch[1])]);
+			sendJson(response, 200, parseJsonValue(result.stdout)?.[0] ?? null);
+			return;
+		}
+
+		if (request.method === "POST" && pathName === "/images/pull") {
+			const { imageRef } = await readRequestJson(request);
+			const result = await runDocker(["pull", String(imageRef)]);
+			sendJson(response, result.ok ? 200 : 400, result);
+			return;
+		}
+
+		if (request.method === "POST" && pathName === "/images/remove") {
+			const { imageRef } = await readRequestJson(request);
+			const result = await runDocker(["image", "rm", "-f", String(imageRef)]);
+			sendJson(response, result.ok ? 200 : 400, result);
+			return;
+		}
+
+		if (request.method === "POST" && pathName === "/images/prune") {
+			const { all } = await readRequestJson(request);
+			const result = await runDocker(["image", "prune", "-f", ...(all ? ["-a"] : [])]);
+			sendJson(response, result.ok ? 200 : 400, result);
+			return;
+		}
+
+		if (request.method === "GET" && pathName === "/volumes") {
+			sendJson(
+				response,
+				200,
+				parseJsonLines((await runDocker(["volume", "ls", "--format", "{{json .}}"])).stdout),
+			);
+			return;
+		}
+
+		const volumeMatch = pathName.match(/^\/volumes\/(.+)$/);
+		if (request.method === "GET" && volumeMatch) {
+			const result = await runDocker(["volume", "inspect", decodeURIComponent(volumeMatch[1])]);
+			sendJson(response, 200, parseJsonValue(result.stdout)?.[0] ?? null);
+			return;
+		}
+
+		if (request.method === "POST" && pathName === "/volumes/create") {
+			const { name, driver } = await readRequestJson(request);
+			const result = await runDocker([
+				"volume",
+				"create",
+				"--driver",
+				String(driver || "local"),
+				String(name),
+			]);
+			sendJson(response, result.ok ? 200 : 400, result);
+			return;
+		}
+
+		if (request.method === "POST" && pathName === "/volumes/remove") {
+			const { name } = await readRequestJson(request);
+			const result = await runDocker(["volume", "rm", "-f", String(name)]);
+			sendJson(response, result.ok ? 200 : 400, result);
+			return;
+		}
+
+		if (request.method === "POST" && pathName === "/volumes/prune") {
+			const result = await runDocker(["volume", "prune", "-f"]);
+			sendJson(response, result.ok ? 200 : 400, result);
+			return;
+		}
+
+		if (request.method === "GET" && pathName === "/networks") {
+			sendJson(
+				response,
+				200,
+				parseJsonLines((await runDocker(["network", "ls", "--format", "{{json .}}"])).stdout),
+			);
+			return;
+		}
+
+		const networkMatch = pathName.match(/^\/networks\/(.+)$/);
+		if (request.method === "GET" && networkMatch) {
+			const result = await runDocker(["network", "inspect", decodeURIComponent(networkMatch[1])]);
+			sendJson(response, 200, parseJsonValue(result.stdout)?.[0] ?? null);
+			return;
+		}
+
+		if (request.method === "POST" && pathName === "/networks/create") {
+			const { name, driver } = await readRequestJson(request);
+			const result = await runDocker([
+				"network",
+				"create",
+				"--driver",
+				String(driver || "bridge"),
+				String(name),
+			]);
+			sendJson(response, result.ok ? 200 : 400, result);
+			return;
+		}
+
+		if (request.method === "POST" && pathName === "/networks/remove") {
+			const { name } = await readRequestJson(request);
+			const result = await runDocker(["network", "rm", String(name)]);
+			sendJson(response, result.ok ? 200 : 400, result);
+			return;
+		}
+
+		if (request.method === "POST" && pathName === "/networks/prune") {
+			const result = await runDocker(["network", "prune", "-f"]);
+			sendJson(response, result.ok ? 200 : 400, result);
 			return;
 		}
 

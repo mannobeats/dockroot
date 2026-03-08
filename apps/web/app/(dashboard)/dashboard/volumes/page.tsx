@@ -7,17 +7,18 @@ import {
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { PageHeader } from "@/components/page-header";
 import { requirePrivilegedPageSession } from "@/lib/authorization";
-import { listVolumes } from "@/lib/platform/docker";
+import { listVolumesForEnvironment, resolveRuntimeEnvironment } from "@/lib/environment-runtime";
 
 export default async function VolumesPage({
 	searchParams,
 }: {
-	searchParams: Promise<{ q?: string; volume?: string }>;
+	searchParams: Promise<{ q?: string; volume?: string; environment?: string }>;
 }) {
-	await requirePrivilegedPageSession();
+	const session = await requirePrivilegedPageSession();
 	const params = await searchParams;
+	const environment = await resolveRuntimeEnvironment(session.user.id, params.environment);
 	const query = (params.q || "").toLowerCase();
-	const volumes = await listVolumes();
+	const { volumes } = await listVolumesForEnvironment(session.user.id, environment.id);
 	const filtered = volumes.filter((volume) =>
 		!query
 			? true
@@ -30,7 +31,7 @@ export default async function VolumesPage({
 			<PageHeader
 				kicker="Runtime"
 				title="Volumes"
-				description="Create, inspect, and remove persistent Docker volumes on the manager host."
+				description={`Create, inspect, and remove persistent Docker volumes on ${environment.name}.`}
 			/>
 
 			<section className="rounded-2xl border border-default/15 bg-surface p-5">
@@ -51,6 +52,7 @@ export default async function VolumesPage({
 						</button>
 					</form>
 					<form action={createVolumeAction} className="grid gap-3 md:grid-cols-[1fr_160px_auto]">
+						<input type="hidden" name="environmentId" value={environment.id} />
 						<input
 							type="text"
 							name="name"
@@ -68,6 +70,7 @@ export default async function VolumesPage({
 						<FormSubmitButton label="Create" pendingLabel="Creating..." />
 					</form>
 					<form action={pruneVolumesAction}>
+						<input type="hidden" name="environmentId" value={environment.id} />
 						<FormSubmitButton label="Prune unused" pendingLabel="Pruning..." />
 					</form>
 				</div>
@@ -114,7 +117,7 @@ export default async function VolumesPage({
 									<tr key={`${volume.Name}-${volume.Driver}`}>
 										<td className="px-4 py-3 font-medium">
 											<Link
-												href={`/dashboard/volumes/${encodeURIComponent(volume.Name)}`}
+												href={`/dashboard/volumes/${encodeURIComponent(volume.Name)}?environment=${environment.id}`}
 												className="transition-colors hover:text-accent"
 											>
 												{volume.Name}
@@ -127,13 +130,14 @@ export default async function VolumesPage({
 										<td className="px-4 py-3">
 											<div className="flex flex-wrap gap-2">
 												<Link
-													href={`/dashboard/volumes/${encodeURIComponent(volume.Name)}`}
+													href={`/dashboard/volumes/${encodeURIComponent(volume.Name)}?environment=${environment.id}`}
 													className="inline-flex h-8 items-center justify-center rounded-lg border border-default/20 bg-background px-3 text-xs font-medium text-muted transition-colors hover:text-foreground"
 												>
 													Details
 												</Link>
 												<form action={removeVolumeAction}>
 													<input type="hidden" name="name" value={volume.Name} />
+													<input type="hidden" name="environmentId" value={environment.id} />
 													<FormSubmitButton
 														label="Delete"
 														pendingLabel="Deleting..."

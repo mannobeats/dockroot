@@ -9,7 +9,11 @@ import { PageHeader } from "@/components/page-header";
 import { RuntimePortLinks } from "@/components/runtime-port-links";
 import { StatusBadge } from "@/components/status-badge";
 import { isPrivilegedRole, requireUserSession } from "@/lib/authorization";
-import { browseContainerPath, getContainerDetails } from "@/lib/platform/docker";
+import {
+	getContainerDetailsForEnvironment,
+	resolveRuntimeEnvironment,
+} from "@/lib/environment-runtime";
+import { browseContainerPath } from "@/lib/platform/docker";
 import { getPrometheusContainerMetrics } from "@/lib/prometheus";
 import { requireAccessibleContainerForUser } from "@/lib/runtime-access";
 import { getProtectedContainerLabel, isProtectedManagerContainer } from "@/lib/runtime-protection";
@@ -46,28 +50,35 @@ export default async function ContainerDetailPage({
 	searchParams,
 }: {
 	params: Promise<{ containerId: string }>;
-	searchParams: Promise<{ path?: string }>;
+	searchParams: Promise<{ path?: string; environment?: string }>;
 }) {
 	const auth = await requireUserSession();
 	const { containerId } = await params;
 	const query = await searchParams;
+	const environment = await resolveRuntimeEnvironment(auth.userId, query.environment);
 	await requireAccessibleContainerForUser({
 		containerId,
 		userId: auth.userId,
 		role: auth.role,
+		environmentId: environment.id,
 	});
 	const targetPath = query.path || "/";
 	const [details, metrics] = await Promise.all([
-		getContainerDetails(containerId),
-		getPrometheusContainerMetrics(containerId),
+		getContainerDetailsForEnvironment(auth.userId, containerId, environment.id),
+		environment.kind === "local"
+			? getPrometheusContainerMetrics(containerId)
+			: Promise.resolve(null),
 	]);
-	const inspect = details.inspect;
+	const inspect = details.details?.inspect;
 
 	if (!inspect) {
 		return <div className="text-sm text-muted">Container not found.</div>;
 	}
 
-	const browser = await browseContainerPath(containerId, targetPath);
+	const browser =
+		environment.kind === "local"
+			? await browseContainerPath(containerId, targetPath)
+			: { kind: "missing" as const, path: targetPath };
 	const canOpenRuntimeTopology = isPrivilegedRole(auth.role);
 	const mounts = Array.isArray(inspect.Mounts) ? inspect.Mounts : [];
 	const envVars = redactEnvVars(inspect.Config?.Env || []);
@@ -104,19 +115,22 @@ export default async function ContainerDetailPage({
 		Names: inspect.Name?.replace(/^\//, ""),
 		Labels: serializedLabels,
 	};
-	const isProtected = isProtectedManagerContainer(protectedContainer);
-	const protectedLabel = getProtectedContainerLabel(protectedContainer);
+	const isProtected =
+		environment.kind === "local" && isProtectedManagerContainer(protectedContainer);
+	const protectedLabel =
+		environment.kind === "local" ? getProtectedContainerLabel(protectedContainer) : "";
+	const canUseLocalRuntimeTools = environment.kind === "local";
 
 	return (
 		<div className="space-y-6">
 			<PageHeader
 				kicker="Runtime"
 				title={inspect.Name?.replace(/^\//, "") || containerId}
-				description={inspect.Config?.Image || "Container details"}
+				description={`${inspect.Config?.Image || "Container details"} · ${environment.name}`}
 				actions={
 					<>
 						<Link
-							href="/dashboard/containers"
+							href={`/dashboard/containers?environment=${environment.id}`}
 							className="inline-flex h-11 items-center justify-center rounded-xl border border-default/20 bg-surface px-4 text-sm font-medium transition-colors hover:border-accent/30 hover:text-accent"
 						>
 							<ArrowLeft className="mr-2 h-4 w-4" />
@@ -126,6 +140,7 @@ export default async function ContainerDetailPage({
 							<form key={action} action={controlContainerAction}>
 								<input type="hidden" name="containerId" value={containerId} />
 								<input type="hidden" name="action" value={action} />
+								<input type="hidden" name="environmentId" value={environment.id} />
 								<FormSubmitButton
 									label={action}
 									pendingLabel={`${action}ing...`}
@@ -139,17 +154,19 @@ export default async function ContainerDetailPage({
 								/>
 							</form>
 						))}
-						<Link
-							href={`/dashboard/shell?target=container&containerId=${containerId}`}
-							className="inline-flex h-11 items-center justify-center rounded-xl border border-default/20 bg-surface px-4 text-sm font-medium text-muted transition-colors hover:text-foreground"
-						>
-							Shell
-						</Link>
+						{canUseLocalRuntimeTools ? (
+							<Link
+								href={`/dashboard/shell?target=container&containerId=${containerId}&environment=${environment.id}`}
+								className="inline-flex h-11 items-center justify-center rounded-xl border border-default/20 bg-surface px-4 text-sm font-medium text-muted transition-colors hover:text-foreground"
+							>
+								Shell
+							</Link>
+						) : null}
 					</>
 				}
 			/>
 
-			<ContainerMetricsPanel metrics={metrics} />
+			{metrics ? <ContainerMetricsPanel metrics={metrics} /> : null}
 
 			<div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
 				<section className="rounded-2xl border border-default/15 bg-surface p-5">
@@ -193,13 +210,13 @@ export default async function ContainerDetailPage({
 						</div>
 						<div className="rounded-xl border border-default/15 bg-background/60 p-4">
 							<p className="text-xs text-muted">Writable layer size</p>
-							<p className="mt-2 text-sm font-medium">{details.stats?.Size || "—"}</p>
+							<p className="mt-2 text-sm font-medium">{details.details?.stats?.Size || "—"}</p>
 						</div>
 						<div className="rounded-xl border border-default/15 bg-background/60 p-4">
 							<p className="text-xs text-muted">Memory / CPU</p>
 							<p className="mt-2 text-sm font-medium">
-								{details.stats
-									? `${details.stats.MemUsage || "—"} · ${details.stats.CPUPerc || "—"}`
+								{details.details?.stats
+									? `${details.details.stats.MemUsage || "—"} · ${details.details.stats.CPUPerc || "—"}`
 									: "—"}
 							</p>
 						</div>
@@ -235,7 +252,7 @@ export default async function ContainerDetailPage({
 											canOpenRuntimeTopology ? (
 												<Link
 													key={name}
-													href={`/dashboard/networks/${encodeURIComponent(name)}`}
+													href={`/dashboard/networks/${encodeURIComponent(name)}?environment=${environment.id}`}
 													className="block rounded-lg bg-surface px-3 py-2 transition-colors hover:text-foreground"
 												>
 													<p>{name}</p>
@@ -264,30 +281,40 @@ export default async function ContainerDetailPage({
 					<div className="flex items-center justify-between">
 						<h2 className="text-lg font-semibold tracking-tight">Logs</h2>
 						<Link
-							href={`/dashboard/logs?mode=single&container=${containerId}`}
+							href={`/dashboard/logs?mode=single&container=${containerId}&environment=${environment.id}`}
 							className="text-sm font-medium text-accent"
 						>
 							Open full log workspace
 						</Link>
 					</div>
 					<pre className="mt-4 max-h-[520px] overflow-auto rounded-xl bg-[#050914] p-4 text-xs leading-6 text-white/80">
-						{details.logs || "No logs available."}
+						{details.details?.logs || "No logs available."}
 					</pre>
 				</section>
 			</div>
 
 			<div className="grid gap-5 xl:grid-cols-[0.88fr_1.12fr]">
-				<ContainerFileBrowser
-					containerId={containerId}
-					path={targetPath}
-					browser={
-						browser.kind === "directory"
-							? { kind: "directory", path: browser.path, entries: browser.entries || [] }
-							: browser.kind === "file"
-								? { kind: "file", path: browser.path, content: browser.content || "" }
-								: { kind: "missing", path: browser.path }
-					}
-				/>
+				{canUseLocalRuntimeTools ? (
+					<ContainerFileBrowser
+						containerId={containerId}
+						path={targetPath}
+						browser={
+							browser.kind === "directory"
+								? { kind: "directory", path: browser.path, entries: browser.entries || [] }
+								: browser.kind === "file"
+									? { kind: "file", path: browser.path, content: browser.content || "" }
+									: { kind: "missing", path: browser.path }
+						}
+					/>
+				) : (
+					<section className="rounded-2xl border border-default/15 bg-surface p-5">
+						<h2 className="text-lg font-semibold tracking-tight">Container filesystem</h2>
+						<p className="mt-4 text-sm text-muted">
+							File browsing is currently available only for the local manager environment. Remote
+							agents already support runtime inspection, logs, images, volumes, and networks.
+						</p>
+					</section>
+				)}
 
 				<section className="rounded-2xl border border-default/15 bg-surface p-5">
 					<h2 className="text-lg font-semibold tracking-tight">Environment and labels</h2>

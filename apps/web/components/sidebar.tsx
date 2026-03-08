@@ -19,8 +19,9 @@ import {
 	TimerReset,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { EnvironmentSwitcher } from "@/components/environment-switcher";
 import { signOut, useSession } from "@/lib/auth-client";
 
 const navGroups = [
@@ -58,18 +59,27 @@ const navGroups = [
 ];
 
 interface SidebarProps {
+	environments: Array<{ id: string; name: string; kind: string }>;
+	defaultEnvironmentId?: string;
 	mobileOpen?: boolean;
 	onMobileClose?: () => void;
 }
 
-export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
+export function Sidebar({
+	environments,
+	defaultEnvironmentId,
+	mobileOpen = false,
+	onMobileClose,
+}: SidebarProps) {
 	const pathname = usePathname();
 	const router = useRouter();
+	const searchParams = useSearchParams();
 	const { data: session } = useSession();
 	const role = session?.user && "role" in session.user ? session.user.role : undefined;
 	const isPrivileged = role === "owner" || role === "admin";
 	const [expanded, setExpanded] = useState(true);
 	const [mounted, setMounted] = useState(false);
+	const selectedEnvironmentId = searchParams.get("environment") || defaultEnvironmentId || "";
 
 	useEffect(() => {
 		const saved = localStorage.getItem("dockroot-sidebar-expanded");
@@ -167,6 +177,11 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
 							</p>
 						</div>
 
+						<EnvironmentSwitcher
+							environments={environments}
+							defaultEnvironmentId={defaultEnvironmentId}
+						/>
+
 						<div className="mt-6 flex-1 overflow-y-auto">
 							{navGroups.map((group) => {
 								const visibleItems = group.items.filter(
@@ -191,7 +206,11 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
 												return (
 													<Link
 														key={item.href}
-														href={item.href}
+														href={
+															selectedEnvironmentId && item.href !== "/dashboard/environments"
+																? `${item.href}?environment=${selectedEnvironmentId}`
+																: item.href
+														}
 														className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all ${
 															isActive
 																? "bg-accent/10 text-foreground"

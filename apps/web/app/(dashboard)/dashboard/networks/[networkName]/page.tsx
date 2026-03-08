@@ -2,17 +2,28 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { requirePrivilegedPageSession } from "@/lib/authorization";
-import { getNetworkDetails } from "@/lib/platform/docker";
+import {
+	getNetworkDetailsForEnvironment,
+	resolveRuntimeEnvironment,
+} from "@/lib/environment-runtime";
 
 export default async function NetworkDetailPage({
 	params,
+	searchParams,
 }: {
 	params: Promise<{ networkName: string }>;
+	searchParams: Promise<{ environment?: string }>;
 }) {
-	await requirePrivilegedPageSession();
+	const session = await requirePrivilegedPageSession();
 	const { networkName } = await params;
+	const query = await searchParams;
 	const decodedName = decodeURIComponent(networkName);
-	const network = await getNetworkDetails(decodedName);
+	const environment = await resolveRuntimeEnvironment(session.user.id, query.environment);
+	const { network } = await getNetworkDetailsForEnvironment(
+		session.user.id,
+		decodedName,
+		environment.id,
+	);
 
 	if (!network) {
 		return <div className="text-sm text-muted">Network not found.</div>;
@@ -27,10 +38,10 @@ export default async function NetworkDetailPage({
 			<PageHeader
 				kicker="Runtime"
 				title={decodedName}
-				description="Inspect network topology, attached containers, and docker metadata."
+				description={`Inspect network topology, attached containers, and docker metadata on ${environment.name}.`}
 				actions={
 					<Link
-						href="/dashboard/networks"
+						href={`/dashboard/networks?environment=${environment.id}`}
 						className="inline-flex h-11 items-center justify-center rounded-xl border border-default/20 bg-surface px-4 text-sm font-medium transition-colors hover:border-accent/30 hover:text-accent"
 					>
 						<ArrowLeft className="mr-2 h-4 w-4" />
@@ -58,7 +69,7 @@ export default async function NetworkDetailPage({
 								containers.map(([containerId, container]) => (
 									<Link
 										key={containerId}
-										href={`/dashboard/containers/${containerId}`}
+										href={`/dashboard/containers/${containerId}?environment=${environment.id}`}
 										className="block rounded-lg bg-surface px-3 py-2 transition-colors hover:text-foreground"
 									>
 										<p className="font-medium">{container.Name || containerId}</p>

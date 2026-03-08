@@ -74,7 +74,7 @@ async function issueRegistrationToken(agentId: string) {
 	await db
 		.update(agents)
 		.set({
-			registrationToken: hashToken(token),
+			registrationToken: token,
 			updatedAt: now(),
 		})
 		.where(eq(agents.id, agentId));
@@ -590,16 +590,17 @@ export async function createEnvironment({
 	userId,
 	name,
 	description,
-	managerUrl,
+	agentUrl,
 }: {
 	userId: string;
 	name: string;
 	description?: string;
-	managerUrl?: string;
+	agentUrl?: string;
 }) {
 	const createdAt = now();
 	const environmentId = crypto.randomUUID();
 	const slug = await ensureUniqueEnvironmentSlug(name);
+	const registrationToken = randomToken(48);
 
 	await db.insert(environments).values({
 		id: environmentId,
@@ -608,7 +609,7 @@ export async function createEnvironment({
 		description: description?.trim() || null,
 		kind: "agent",
 		status: "provisioning",
-		managerUrl: managerUrl?.trim() || publicEnv.appUrl,
+		managerUrl: agentUrl?.trim() || null,
 		createdByUserId: userId,
 		createdAt,
 		updatedAt: createdAt,
@@ -618,7 +619,7 @@ export async function createEnvironment({
 		id: crypto.randomUUID(),
 		environmentId,
 		status: "provisioning",
-		registrationToken: hashToken(randomToken(48)),
+		registrationToken,
 		createdAt,
 		updatedAt: createdAt,
 	});
@@ -1117,7 +1118,7 @@ export async function registerAgent({
 			architecture: architecture || agent.architecture,
 			dockerVersion: dockerVersion || agent.dockerVersion,
 			status: "healthy",
-			accessToken: hashToken(accessToken),
+			accessToken,
 			lastSeenAt: updatedAt,
 			installedAt: agent.installedAt ?? updatedAt,
 			updatedAt,
@@ -1136,7 +1137,7 @@ export async function registerAgent({
 		agentId: agent.id,
 		environmentId: agent.environmentId,
 		accessToken,
-		managerUrl: agent.environment.managerUrl || publicEnv.appUrl,
+		managerUrl: publicEnv.appUrl,
 	};
 }
 
@@ -1302,14 +1303,10 @@ export async function getInstallCommand(environmentId: string, userId: string) {
 		throw new Error("Environment not found");
 	}
 
-	const registrationToken = await issueRegistrationToken(environment.agent[0].id);
-	const managerUrl = (environment.managerUrl || publicEnv.appUrl).replace(/\/$/, "");
-	const envContent = [
-		`DOCKROOT_MANAGER_URL=${managerUrl}`,
-		`DOCKROOT_AGENT_REGISTRATION_TOKEN=${registrationToken}`,
-		`DOCKROOT_AGENT_DATA_DIR=/var/lib/dockroot-agent`,
-		`DOCKROOT_AGENT_PORT=${AGENT_PORT}`,
-	].join("\n");
+	const registrationToken =
+		environment.agent[0].registrationToken ||
+		(await issueRegistrationToken(environment.agent[0].id));
+	const managerUrl = publicEnv.appUrl.replace(/\/$/, "");
 	const dockerRun = [
 		"docker run -d \\",
 		`  --name dockroot-agent-${environment.slug} \\`,
@@ -1344,13 +1341,34 @@ export async function getInstallCommand(environmentId: string, userId: string) {
 	].join("\n");
 
 	return {
-		managerUrl,
 		registrationToken,
-		envContent,
 		dockerRun,
 		dockerCompose,
 		legacyInstallScript: `${publicEnv.appUrl.replace(/\/$/, "")}/api/agent/install/${registrationToken}`,
 	};
+}
+
+export async function rotateAgentRegistrationToken({
+	environmentId,
+	userId,
+}: {
+	environmentId: string;
+	userId: string;
+}) {
+	const environment = await db.query.environments.findFirst({
+		where: and(eq(environments.id, environmentId), eq(environments.createdByUserId, userId)),
+		with: {
+			agent: true,
+		},
+	});
+
+	if (!environment?.agent[0]) {
+		throw new Error("Environment not found");
+	}
+
+	await issueRegistrationToken(environment.agent[0].id);
+	revalidatePath("/dashboard/environments");
+	revalidatePath(`/dashboard/environments/${environment.id}`);
 }
 
 export async function listRuntimeResources() {

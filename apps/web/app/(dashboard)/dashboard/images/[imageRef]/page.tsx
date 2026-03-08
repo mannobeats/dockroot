@@ -3,18 +3,29 @@ import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
 import { requirePrivilegedPageSession } from "@/lib/authorization";
-import { getImageDetails, listContainers } from "@/lib/platform/docker";
+import {
+	getImageDetailsForEnvironment,
+	listContainersForEnvironment,
+	resolveRuntimeEnvironment,
+} from "@/lib/environment-runtime";
 import { isProtectedManagerImage } from "@/lib/runtime-protection";
 
 export default async function ImageDetailPage({
 	params,
+	searchParams,
 }: {
 	params: Promise<{ imageRef: string }>;
+	searchParams: Promise<{ environment?: string }>;
 }) {
-	await requirePrivilegedPageSession();
+	const session = await requirePrivilegedPageSession();
 	const { imageRef } = await params;
+	const query = await searchParams;
 	const decodedRef = decodeURIComponent(imageRef);
-	const [image, containers] = await Promise.all([getImageDetails(decodedRef), listContainers()]);
+	const environment = await resolveRuntimeEnvironment(session.user.id, query.environment);
+	const [{ image }, { containers }] = await Promise.all([
+		getImageDetailsForEnvironment(session.user.id, decodedRef, environment.id),
+		listContainersForEnvironment(session.user.id, environment.id),
+	]);
 
 	if (!image) {
 		return <div className="text-sm text-muted">Image not found.</div>;
@@ -25,17 +36,18 @@ export default async function ImageDetailPage({
 			`${container.Image}` === decodedRef ||
 			`${container.Image}:${container.Tag || ""}` === decodedRef,
 	);
-	const isProtected = isProtectedManagerImage(decodedRef, containers);
+	const isProtected =
+		environment.kind === "local" && isProtectedManagerImage(decodedRef, containers);
 
 	return (
 		<div className="space-y-6">
 			<PageHeader
 				kicker="Runtime"
 				title={decodedRef}
-				description="Image metadata, layer information, and runtime usage."
+				description={`Image metadata, layer information, and runtime usage on ${environment.name}.`}
 				actions={
 					<Link
-						href="/dashboard/images"
+						href={`/dashboard/images?environment=${environment.id}`}
 						className="inline-flex h-11 items-center justify-center rounded-xl border border-default/20 bg-surface px-4 text-sm font-medium transition-colors hover:border-accent/30 hover:text-accent"
 					>
 						<ArrowLeft className="mr-2 h-4 w-4" />
@@ -86,7 +98,7 @@ export default async function ImageDetailPage({
 								attachedContainers.map((container) => (
 									<Link
 										key={container.ID}
-										href={`/dashboard/containers/${container.ID}`}
+										href={`/dashboard/containers/${container.ID}?environment=${environment.id}`}
 										className="block rounded-lg bg-surface px-3 py-2 transition-colors hover:text-foreground"
 									>
 										<p className="font-medium">{container.Names}</p>

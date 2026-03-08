@@ -4,26 +4,32 @@ import { pruneImagesAction, pullImageAction, removeImageAction } from "@/app/(da
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { PageHeader } from "@/components/page-header";
 import { requirePrivilegedPageSession } from "@/lib/authorization";
-import { listContainers, listImages } from "@/lib/platform/docker";
+import {
+	listContainersForEnvironment,
+	listImagesForEnvironment,
+	resolveRuntimeEnvironment,
+} from "@/lib/environment-runtime";
 import { getProtectedImageRefs } from "@/lib/runtime-protection";
 
 export default async function ImagesPage({
 	searchParams,
 }: {
-	searchParams: Promise<{ q?: string; image?: string }>;
+	searchParams: Promise<{ q?: string; image?: string; environment?: string }>;
 }) {
-	await requirePrivilegedPageSession();
+	const session = await requirePrivilegedPageSession();
 	const params = await searchParams;
+	const environment = await resolveRuntimeEnvironment(session.user.id, params.environment);
 	const query = (params.q || "").toLowerCase();
-	const images = await listImages();
+	const { images } = await listImagesForEnvironment(session.user.id, environment.id);
 	const filtered = images.filter((image) =>
 		!query
 			? true
 			: `${image.Repository}:${image.Tag}`.toLowerCase().includes(query) ||
 				(image.ID || "").toLowerCase().includes(query),
 	);
-	const containers = await listContainers();
-	const protectedImageRefs = getProtectedImageRefs(containers);
+	const { containers } = await listContainersForEnvironment(session.user.id, environment.id);
+	const protectedImageRefs =
+		environment.kind === "local" ? getProtectedImageRefs(containers) : new Set<string>();
 	const taggedCount = filtered.filter((image) => image.Tag && image.Tag !== "<none>").length;
 	const inUseCount = filtered.filter((image) =>
 		containers.some((container) => container.Image === `${image.Repository}:${image.Tag}`),
@@ -34,7 +40,7 @@ export default async function ImagesPage({
 			<PageHeader
 				kicker="Runtime"
 				title="Images"
-				description="Pull, inspect, delete, and prune images on the local Docker engine."
+				description={`Pull, inspect, delete, and prune images on ${environment.name}.`}
 			/>
 
 			<section className="rounded-2xl border border-default/15 bg-surface p-5">
@@ -55,6 +61,7 @@ export default async function ImagesPage({
 						</button>
 					</form>
 					<form action={pullImageAction} className="grid gap-3 md:grid-cols-[1fr_auto]">
+						<input type="hidden" name="environmentId" value={environment.id} />
 						<input
 							type="text"
 							name="imageRef"
@@ -66,9 +73,11 @@ export default async function ImagesPage({
 					</form>
 					<div className="flex flex-wrap gap-2">
 						<form action={pruneImagesAction}>
+							<input type="hidden" name="environmentId" value={environment.id} />
 							<FormSubmitButton label="Prune dangling" pendingLabel="Pruning..." />
 						</form>
 						<form action={pruneImagesAction}>
+							<input type="hidden" name="environmentId" value={environment.id} />
 							<input type="hidden" name="mode" value="all" />
 							<FormSubmitButton
 								label="Prune unused"
@@ -122,7 +131,7 @@ export default async function ImagesPage({
 											<td className="px-4 py-3 font-medium">
 												<div className="flex items-center gap-2">
 													<Link
-														href={`/dashboard/images/${encodeURIComponent(imageRef)}`}
+														href={`/dashboard/images/${encodeURIComponent(imageRef)}?environment=${environment.id}`}
 														className="transition-colors hover:text-accent"
 													>
 														{image.Repository}
@@ -144,13 +153,14 @@ export default async function ImagesPage({
 											<td className="px-4 py-3">
 												<div className="flex flex-wrap gap-2">
 													<Link
-														href={`/dashboard/images/${encodeURIComponent(imageRef)}`}
+														href={`/dashboard/images/${encodeURIComponent(imageRef)}?environment=${environment.id}`}
 														className="inline-flex h-8 items-center justify-center rounded-lg border border-default/20 bg-background px-3 text-xs font-medium text-muted transition-colors hover:text-foreground"
 													>
 														Details
 													</Link>
 													<form action={removeImageAction}>
 														<input type="hidden" name="imageRef" value={imageRef} />
+														<input type="hidden" name="environmentId" value={environment.id} />
 														<FormSubmitButton
 															label="Delete"
 															pendingLabel="Deleting..."

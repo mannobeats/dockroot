@@ -11,11 +11,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
 		return new NextResponse("Unknown registration token", { status: 404 });
 	}
 
-	const managerUrl = (
-		context.environment.managerUrl ||
-		process.env.NEXT_PUBLIC_APP_URL ||
-		""
-	).replace(/\/$/, "");
+	const managerUrl = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
 
 	const script = `#!/usr/bin/env bash
 set -euo pipefail

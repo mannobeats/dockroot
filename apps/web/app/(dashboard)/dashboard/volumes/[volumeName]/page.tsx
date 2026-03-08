@@ -2,17 +2,28 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { requirePrivilegedPageSession } from "@/lib/authorization";
-import { getVolumeDetails } from "@/lib/platform/docker";
+import {
+	getVolumeDetailsForEnvironment,
+	resolveRuntimeEnvironment,
+} from "@/lib/environment-runtime";
 
 export default async function VolumeDetailPage({
 	params,
+	searchParams,
 }: {
 	params: Promise<{ volumeName: string }>;
+	searchParams: Promise<{ environment?: string }>;
 }) {
-	await requirePrivilegedPageSession();
+	const session = await requirePrivilegedPageSession();
 	const { volumeName } = await params;
+	const query = await searchParams;
 	const decodedName = decodeURIComponent(volumeName);
-	const volume = await getVolumeDetails(decodedName);
+	const environment = await resolveRuntimeEnvironment(session.user.id, query.environment);
+	const { volume } = await getVolumeDetailsForEnvironment(
+		session.user.id,
+		decodedName,
+		environment.id,
+	);
 
 	if (!volume) {
 		return <div className="text-sm text-muted">Volume not found.</div>;
@@ -23,10 +34,10 @@ export default async function VolumeDetailPage({
 			<PageHeader
 				kicker="Runtime"
 				title={decodedName}
-				description="Inspect volume mount data and low-level Docker metadata."
+				description={`Inspect volume mount data and low-level Docker metadata on ${environment.name}.`}
 				actions={
 					<Link
-						href="/dashboard/volumes"
+						href={`/dashboard/volumes?environment=${environment.id}`}
 						className="inline-flex h-11 items-center justify-center rounded-xl border border-default/20 bg-surface px-4 text-sm font-medium transition-colors hover:border-accent/30 hover:text-accent"
 					>
 						<ArrowLeft className="mr-2 h-4 w-4" />
