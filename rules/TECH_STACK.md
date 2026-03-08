@@ -88,8 +88,12 @@ make prod-logs          # Tail the Docker deployment logs
 ## Environment Variables
 
 ```
-DATABASE_URL          # PostgreSQL connection string
-POSTGRES_PASSWORD     # Compose deployment database password
+DATABASE_URL          # Optional explicit PostgreSQL connection string
+POSTGRES_HOST         # PostgreSQL host when DATABASE_URL is not set
+POSTGRES_PORT         # PostgreSQL port when DATABASE_URL is not set
+POSTGRES_DB           # PostgreSQL database name when DATABASE_URL is not set
+POSTGRES_USER         # PostgreSQL username when DATABASE_URL is not set
+POSTGRES_PASSWORD     # PostgreSQL password when DATABASE_URL is not set
 BETTER_AUTH_SECRET    # Auth encryption secret (change in production!)
 BETTER_AUTH_URL       # Auth base URL
 BETTER_AUTH_TRUSTED_ORIGINS # Optional comma-separated extra trusted origins

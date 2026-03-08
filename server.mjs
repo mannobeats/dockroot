@@ -7,7 +7,8 @@ import postgres from "postgres";
 import * as pty from "node-pty";
 import next from "next";
 import { Server as SocketIOServer } from "socket.io";
-import { validateRuntimeEnv } from "./runtime-env.mjs";
+import { getDatabaseUrl } from "./scripts/database-url.mjs";
+import { validateRuntimeEnv } from "./scripts/runtime-env.mjs";
 
 const { errors: envErrors, warnings: envWarnings } = validateRuntimeEnv();
 if (envWarnings.length > 0) {
@@ -28,7 +29,7 @@ const handle = app.getRequestHandler();
 const execFileAsync = promisify(execFile);
 const terminalSessions = new Map();
 const logSessions = new Map();
-const sql = postgres(process.env.DATABASE_URL, { max: 5 });
+const sql = postgres(getDatabaseUrl(), { max: 5 });
 const dockerBinary = resolveExecutable(process.env.DOCKER_BIN, [
 	"/usr/local/bin/docker",
 	"/opt/homebrew/bin/docker",

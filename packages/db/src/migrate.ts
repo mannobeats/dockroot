@@ -1,14 +1,7 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
-
-function getDatabaseUrl() {
-	const databaseUrl = process.env.DATABASE_URL;
-	if (!databaseUrl) {
-		throw new Error("Missing required environment variable: DATABASE_URL");
-	}
-	return databaseUrl;
-}
+import { getDatabaseUrl } from "../../../scripts/database-url.mjs";
 
 const client = postgres(getDatabaseUrl(), { max: 1 });
 const db = drizzle(client);

@@ -50,10 +50,10 @@ env-compose:
 	@if [ ! -f "$(COMPOSE_ENV_FILE)" ]; then cp "$(COMPOSE_ENV_EXAMPLE)" "$(COMPOSE_ENV_FILE)"; fi
 
 env-check-local: env-local
-	$(DOTENV) -e $(LOCAL_ENV_FILE) -- node runtime-env.mjs
+	$(DOTENV) -e $(LOCAL_ENV_FILE) -- node scripts/runtime-env.mjs
 
 env-check-compose: env-compose
-	$(DOTENV) -e $(COMPOSE_ENV_FILE) -- node runtime-env.mjs --production --compose
+	$(DOTENV) -e $(COMPOSE_ENV_FILE) -- node scripts/runtime-env.mjs --production --compose
 
 dev-prepare:
 	rm -f $(NEXT_DEV_LOCK)

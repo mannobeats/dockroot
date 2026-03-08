@@ -1,12 +1,5 @@
 import { defineConfig } from "drizzle-kit";
-
-function getDatabaseUrl() {
-	const databaseUrl = process.env.DATABASE_URL;
-	if (!databaseUrl) {
-		throw new Error("Missing required environment variable: DATABASE_URL");
-	}
-	return databaseUrl;
-}
+import { getDatabaseUrl } from "./scripts/database-url.mjs";
 
 export default defineConfig({
 	dialect: "postgresql",

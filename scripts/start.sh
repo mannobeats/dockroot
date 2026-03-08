@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-node /app/runtime-env.mjs --production
+node /app/scripts/runtime-env.mjs --production
 
 echo "⏳ Running database migrations..."
 node /app/migrate.mjs

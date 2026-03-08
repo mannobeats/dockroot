@@ -204,57 +204,77 @@ async function ensureUniqueStackSlug(baseValue: string) {
 }
 
 export async function ensureDefaultLocalEnvironment(userId: string) {
-	const existing = await db.query.environments.findFirst({
-		where: and(eq(environments.createdByUserId, userId), eq(environments.isDefaultLocal, true)),
-		with: {
-			agent: true,
-		},
-	});
+	const slug = `local-docker-${userId.slice(0, 8)}`;
+	const loadDefaultEnvironment = () =>
+		db.query.environments.findFirst({
+			where: and(eq(environments.createdByUserId, userId), eq(environments.slug, slug)),
+			with: {
+				agent: true,
+			},
+		});
 
-	if (existing) {
+	const existing = await loadDefaultEnvironment();
+	if (existing?.agent) {
 		return existing;
 	}
 
-	const environmentId = crypto.randomUUID();
-	const agentId = crypto.randomUUID();
 	const createdAt = now();
 
-	await db.insert(environments).values({
-		id: environmentId,
-		name: "Local Docker",
-		slug: `local-docker-${userId.slice(0, 8)}`,
-		description: "Built-in manager host for instant compose deployments.",
-		kind: "local",
-		status: "healthy",
-		isDefaultLocal: true,
-		managerUrl: publicEnv.appUrl,
-		createdByUserId: userId,
-		createdAt,
-		updatedAt: createdAt,
-	});
+	if (!existing) {
+		await db
+			.insert(environments)
+			.values({
+				id: crypto.randomUUID(),
+				name: "Local Docker",
+				slug,
+				description: "Built-in manager host for instant compose deployments.",
+				kind: "local",
+				status: "healthy",
+				isDefaultLocal: true,
+				managerUrl: publicEnv.appUrl,
+				createdByUserId: userId,
+				createdAt,
+				updatedAt: createdAt,
+			})
+			.onConflictDoNothing({
+				target: environments.slug,
+			});
+	}
 
-	await db.insert(agents).values({
-		id: agentId,
-		environmentId,
-		hostname: "manager-host",
-		operatingSystem: process.platform,
-		architecture: process.arch,
-		dockerVersion: "manager-local",
-		status: "healthy",
-		registrationToken: hashToken(randomToken(40)),
-		accessToken: hashToken(randomToken(48)),
-		lastSeenAt: createdAt,
-		installedAt: createdAt,
-		createdAt,
-		updatedAt: createdAt,
-	});
+	const environment = await loadDefaultEnvironment();
+	if (!environment) {
+		throw new Error("Failed to provision the default local environment.");
+	}
 
-	return db.query.environments.findFirst({
-		where: eq(environments.id, environmentId),
-		with: {
-			agent: true,
-		},
-	});
+	if (!environment.agent) {
+		await db
+			.insert(agents)
+			.values({
+				id: crypto.randomUUID(),
+				environmentId: environment.id,
+				hostname: "manager-host",
+				operatingSystem: process.platform,
+				architecture: process.arch,
+				dockerVersion: "manager-local",
+				status: "healthy",
+				registrationToken: hashToken(randomToken(40)),
+				accessToken: hashToken(randomToken(48)),
+				lastSeenAt: createdAt,
+				installedAt: createdAt,
+				createdAt,
+				updatedAt: createdAt,
+			})
+			.onConflictDoNothing({
+				target: agents.environmentId,
+			});
+	}
+
+	const hydrated = await loadDefaultEnvironment();
+	if (!hydrated) {
+		throw new Error("Failed to load the default local environment.");
+	}
+
+	return hydrated;
 }
 
 export async function getDashboardData(userId: string, options?: { includeRuntime?: boolean }) {

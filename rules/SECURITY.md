@@ -39,4 +39,4 @@ Configured in `apps/web/next.config.ts` for all routes:
 
 - PostgreSQL runs in Docker — never expose port 5432 publicly in production
 - Use parameterized queries via Drizzle ORM — never concatenate SQL strings
-- DB credentials live in `DATABASE_URL` env var only
+- DB credentials may come from `DATABASE_URL` or derived `POSTGRES_*` settings

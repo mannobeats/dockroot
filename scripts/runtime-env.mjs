@@ -4,6 +4,7 @@ const PLACEHOLDER_PATTERNS = [
 	/example\.com/i,
 	/your-[a-z0-9-]+/i,
 ];
+import { buildDatabaseUrlFromParts } from "./database-url.mjs";
 
 function readEnv(name) {
 	const value = process.env[name]?.trim();
@@ -43,7 +44,7 @@ export function validateRuntimeEnv({
 	const errors = [];
 	const warnings = [];
 
-	const databaseUrl = readEnv("DATABASE_URL");
+	const databaseUrl = readEnv("DATABASE_URL") || buildDatabaseUrlFromParts(process.env);
 	const betterAuthSecret = readEnv("BETTER_AUTH_SECRET");
 	const betterAuthUrl = readEnv("BETTER_AUTH_URL");
 	const appUrl = readEnv("NEXT_PUBLIC_APP_URL");
@@ -58,8 +59,10 @@ export function validateRuntimeEnv({
 		["METRICS_BEARER_TOKEN", metricsToken],
 	];
 
-	if (!compose) {
-		requiredPairs.unshift(["DATABASE_URL", databaseUrl]);
+	if (!compose && !databaseUrl) {
+		errors.push(
+			"Missing database configuration. Set DATABASE_URL or provide POSTGRES_PASSWORD with optional POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DB, and POSTGRES_USER.",
+		);
 	}
 
 	for (const [name, value] of requiredPairs) {

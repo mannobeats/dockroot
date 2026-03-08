@@ -44,13 +44,12 @@ COPY --from=builder /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
 COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
 COPY --from=builder /app/packages/db/drizzle ./packages/db/drizzle
 COPY --from=builder /app/migrate.mjs ./migrate.mjs
-COPY --from=builder /app/runtime-env.mjs ./runtime-env.mjs
-COPY --from=builder /app/start.sh ./start.sh
+COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/server.mjs ./server.mjs
-RUN chmod +x ./start.sh
+RUN chmod +x ./scripts/start.sh
 
 EXPOSE 3080
 ENV PORT=3080
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["./start.sh"]
+CMD ["./scripts/start.sh"]

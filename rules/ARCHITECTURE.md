@@ -70,8 +70,9 @@ make prod-up    # Full Docker deployment
 - `docker-compose.yaml` runs the full Docker deployment with the published Dockroot image
 - `.env.local` is only for host development
 - `.env` is only for Docker deployments
-- Docker deployments inject internal service URLs for `DATABASE_URL`, `PROMETHEUS_URL`, and `DOCKROOT_DATA_DIR`
-- `start.sh` validates runtime env, runs Drizzle migrations, then starts the app server
+- Dockroot derives `DATABASE_URL` from `POSTGRES_*` settings when it is not set explicitly
+- Docker deployments inject internal `POSTGRES_*`, `PROMETHEUS_URL`, and `DOCKROOT_DATA_DIR` values
+- `scripts/start.sh` validates runtime env, runs Drizzle migrations, then starts the app server
 
 ### Runtime Topology
 
@@ -84,7 +85,7 @@ make prod-up    # Full Docker deployment
 ### Migration Flow
 
 1. `packages/db/src/migrate.ts` — Programmatic migration script (bundled to `migrate.mjs` at build time)
-2. `start.sh` — Container entrypoint: runs `migrate.mjs` then `apps/web/server.js`
+2. `scripts/start.sh` — Container entrypoint: runs `migrate.mjs` then `apps/web/server.js`
 3. `packages/db/drizzle/` — SQL migration files (committed to git, generated via `pnpm run db:generate`)
 
 ## Adding a New Dashboard Page

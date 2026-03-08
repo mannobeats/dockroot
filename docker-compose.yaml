@@ -7,7 +7,11 @@ services:
     environment:
       HOSTNAME: 0.0.0.0
       PORT: 3080
-      DATABASE_URL: postgresql://dockroot:${POSTGRES_PASSWORD}@postgres:5432/dockroot
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: dockroot
+      POSTGRES_USER: dockroot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       DOCKROOT_DATA_DIR: /var/lib/dockroot
       PROMETHEUS_URL: http://prometheus:9090
       DOCKROOT_MANAGER_COMPOSE_PROJECT: ${COMPOSE_PROJECT_NAME:-dockroot}

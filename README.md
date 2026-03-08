@@ -20,6 +20,7 @@ apps/
 packages/
   auth/       Better Auth configuration and role-aware session logic
   db/         Drizzle schema, migrations, and shared database client
+scripts/      Runtime helpers and container entrypoint scripts
 server.mjs    Custom Next.js + Socket.IO server for live logs and terminal sessions
 ```
 
@@ -120,7 +121,8 @@ Open Dockroot at `http://localhost:3080` or your configured domain. The first ac
 
 - `.env.local` is only for host development
 - `.env` is only for Docker deployments
-- Docker deployments do not require you to set `DATABASE_URL`, `PROMETHEUS_URL`, or `DOCKROOT_DATA_DIR` manually
+- Dockroot derives `DATABASE_URL` from `POSTGRES_*` settings when needed
+- Docker deployments do not require you to set `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, `PROMETHEUS_URL`, or `DOCKROOT_DATA_DIR` manually
 - Compose injects those values so they stay consistent with the service topology
 
 ### Startup behavior
