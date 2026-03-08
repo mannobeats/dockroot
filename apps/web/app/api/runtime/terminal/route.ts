@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isPrivilegedRole, requireUserSession } from "@/lib/authorization";
+import { requireUserSession } from "@/lib/authorization";
 import { createTerminalSessionForEnvironment } from "@/lib/environment-runtime";
 import { requireAccessibleContainerForUser } from "@/lib/runtime-access";
 
@@ -9,37 +9,28 @@ export async function POST(request: Request) {
 	try {
 		const auth = await requireUserSession(request.headers);
 		const body = (await request.json()) as {
-			target?: "host" | "container";
+			target?: "container";
 			containerId?: string;
 			environmentId?: string;
 			cols?: number;
 			rows?: number;
 		};
 
-		if (body.target === "host" && !isPrivilegedRole(auth.role)) {
-			return NextResponse.json(
-				{ error: "Host shell access is restricted to administrators." },
-				{ status: 403 },
-			);
+		if (!body.containerId) {
+			return NextResponse.json({ error: "containerId is required." }, { status: 400 });
 		}
 
-		if (body.target === "container") {
-			if (!body.containerId) {
-				return NextResponse.json({ error: "containerId is required." }, { status: 400 });
-			}
-
-			await requireAccessibleContainerForUser({
-				containerId: body.containerId,
-				userId: auth.userId,
-				role: auth.role,
-				environmentId: body.environmentId,
-			});
-		}
+		await requireAccessibleContainerForUser({
+			containerId: body.containerId,
+			userId: auth.userId,
+			role: auth.role,
+			environmentId: body.environmentId,
+		});
 
 		const result = await createTerminalSessionForEnvironment({
 			userId: auth.userId,
 			environmentId: body.environmentId,
-			target: body.target || "host",
+			target: "container",
 			containerId: body.containerId,
 			cols: body.cols,
 			rows: body.rows,

@@ -313,7 +313,7 @@ export async function deleteContainerPathForEnvironment(
 export async function createTerminalSessionForEnvironment(input: {
 	userId: string;
 	environmentId?: string;
-	target: "host" | "container";
+	target: "container";
 	containerId?: string;
 	cols?: number;
 	rows?: number;

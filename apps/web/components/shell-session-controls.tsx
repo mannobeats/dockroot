@@ -14,26 +14,24 @@ type ContainerOption = {
 
 export function ShellSessionControls({
 	environmentId,
-	allowHostShell,
 	containers,
 	initialTarget,
 	initialContainerId,
 }: {
 	environmentId: string;
-	allowHostShell: boolean;
 	containers: ContainerOption[];
-	initialTarget: "host" | "container";
+	initialTarget: "container";
 	initialContainerId?: string;
 }) {
 	const router = useRouter();
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
 	const [isPending, startTransition] = useTransition();
-	const [target, setTarget] = useState<"host" | "container">(initialTarget);
+	const [target, setTarget] = useState<"container">(initialTarget);
 	const [containerId, setContainerId] = useState(initialContainerId || "");
 
-	const submitLabel = target === "container" ? "Attach" : "Open shell";
-	const containerRequired = target === "container";
+	const submitLabel = "Attach";
+	const containerRequired = true;
 
 	return (
 		<Panel padding="sm">
@@ -45,9 +43,9 @@ export function ShellSessionControls({
 					startTransition(() => {
 						const params = new URLSearchParams(searchParams.toString());
 						params.set("environment", environmentId);
-						params.set("target", target);
+						params.set("target", "container");
 
-						if (target === "container" && containerId) {
+						if (containerId) {
 							params.set("containerId", containerId);
 						} else {
 							params.delete("containerId");
@@ -60,15 +58,9 @@ export function ShellSessionControls({
 				<Select
 					name="target"
 					value={target}
-					onChange={(event) => {
-						const nextTarget = event.target.value === "container" ? "container" : "host";
-						setTarget(nextTarget);
-						if (nextTarget === "host") {
-							setContainerId("");
-						}
-					}}
+					onChange={() => {}}
+					disabled
 				>
-					{allowHostShell ? <option value="host">Host shell</option> : null}
 					<option value="container">Container shell</option>
 				</Select>
 				<Select

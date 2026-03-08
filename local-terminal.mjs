@@ -25,27 +25,21 @@ const dockerBinary = resolveExecutable(process.env.DOCKER_BIN, [
 const hostShellBinary = resolveExecutable("/bin/sh", ["/bin/sh", "/bin/bash", "/bin/zsh"]);
 
 function buildCommand(payload) {
-	const isContainer = payload?.target === "container" && payload?.containerId;
-
-	if (isContainer) {
-		return {
-			file: dockerBinary,
-			args: [
-				"exec",
-				"-i",
-				payload.containerId,
-				"sh",
-				"-lc",
-				"if command -v bash >/dev/null 2>&1; then exec bash -i; else exec sh -i; fi",
-			],
-			cwd: "/",
-		};
+	if (!payload?.containerId) {
+		throw new Error("containerId is required.");
 	}
 
 	return {
-		file: hostShellBinary,
-		args: ["-i"],
-		cwd: process.cwd(),
+		file: dockerBinary,
+		args: [
+			"exec",
+			"-i",
+			payload.containerId,
+			"sh",
+			"-lc",
+			"if command -v bash >/dev/null 2>&1; then exec bash -i; else exec sh -i; fi",
+		],
+		cwd: "/",
 	};
 }
 

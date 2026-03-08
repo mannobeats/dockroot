@@ -42,8 +42,6 @@ const dockerBinary = resolveExecutable(process.env.DOCKER_BIN, [
 	"/opt/homebrew/bin/docker",
 	"docker",
 ]);
-const shellBinary = resolveExecutable(process.env.SHELL, ["/bin/zsh", "/bin/bash", "/bin/sh"]);
-
 function resolveExecutable(primaryCandidate, fallbackCandidates) {
 	for (const candidate of [primaryCandidate, ...fallbackCandidates]) {
 		if (!candidate) {
@@ -372,17 +370,9 @@ io.on("connection", (socket) => {
 			const sessionId = randomUUID();
 			const cols = Number(payload?.cols || 120);
 			const rows = Number(payload?.rows || 36);
-			const isContainer = payload?.target === "container" && payload?.containerId;
-
-			if (!isContainer && !isPrivilegedRole(socket.data.role)) {
-				callback?.({
-					error: "Host shell access is restricted to administrators.",
-				});
-				return;
-			}
 
 			if (
-				isContainer &&
+				!payload?.containerId ||
 				!(await canAccessContainer(socket.data.userId, socket.data.role, payload.containerId))
 			) {
 				callback?.({
@@ -391,24 +381,18 @@ io.on("connection", (socket) => {
 				return;
 			}
 
-			const command = isContainer
-				? {
-						file: dockerBinary,
-						args: [
-							"exec",
-							"-i",
-							payload.containerId,
-							"sh",
-							"-lc",
-							"if command -v bash >/dev/null 2>&1; then exec bash; else exec sh; fi",
-						],
-						cwd: "/",
-					}
-				: {
-						file: shellBinary,
-						args: ["-i"],
-						cwd: process.cwd(),
-					};
+			const command = {
+				file: dockerBinary,
+				args: [
+					"exec",
+					"-i",
+					payload.containerId,
+					"sh",
+					"-lc",
+					"if command -v bash >/dev/null 2>&1; then exec bash; else exec sh; fi",
+				],
+				cwd: "/",
+			};
 
 			const terminalSession = (() => {
 				try {
