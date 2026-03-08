@@ -1,4 +1,4 @@
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Lock } from "lucide-react";
 import Link from "next/link";
 import { controlContainerAction } from "@/app/(dashboard)/actions";
 import { CodeEditor } from "@/components/code-editor";
@@ -12,6 +12,7 @@ import { isPrivilegedRole, requireUserSession } from "@/lib/authorization";
 import { browseContainerPath, getContainerDetails } from "@/lib/platform/docker";
 import { getPrometheusContainerMetrics } from "@/lib/prometheus";
 import { requireAccessibleContainerForUser } from "@/lib/runtime-access";
+import { getProtectedContainerLabel, isProtectedManagerContainer } from "@/lib/runtime-protection";
 
 const sensitiveEnvPattern =
 	/(SECRET|TOKEN|PASSWORD|KEY|PRIVATE|COOKIE|SESSION|AUTH|DATABASE_URL|CONNECTION_STRING)/i;
@@ -71,6 +72,9 @@ export default async function ContainerDetailPage({
 	const mounts = Array.isArray(inspect.Mounts) ? inspect.Mounts : [];
 	const envVars = redactEnvVars(inspect.Config?.Env || []);
 	const labels = inspect.Config?.Labels || {};
+	const serializedLabels = Object.entries(labels)
+		.map(([key, value]) => `${key}=${value}`)
+		.join(",");
 	const networkEntries = Object.entries(
 		(inspect.NetworkSettings?.Networks || {}) as Record<
 			string,
@@ -94,6 +98,14 @@ export default async function ContainerDetailPage({
 	const publishedPortSummary = publishedPorts
 		.map((binding) => `${binding.hostIp}:${binding.hostPort}->${binding.containerPort}`)
 		.join(", ");
+	const protectedContainer = {
+		ID: containerId,
+		Image: inspect.Config?.Image,
+		Names: inspect.Name?.replace(/^\//, ""),
+		Labels: serializedLabels,
+	};
+	const isProtected = isProtectedManagerContainer(protectedContainer);
+	const protectedLabel = getProtectedContainerLabel(protectedContainer);
 
 	return (
 		<div className="space-y-6">
@@ -117,6 +129,12 @@ export default async function ContainerDetailPage({
 								<FormSubmitButton
 									label={action}
 									pendingLabel={`${action}ing...`}
+									disabled={isProtected}
+									title={
+										isProtected
+											? "Dockroot protected containers cannot be modified from the runtime dashboard."
+											: undefined
+									}
 									className="inline-flex h-11 items-center justify-center rounded-xl border border-default/20 bg-surface px-4 text-sm font-medium text-muted transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
 								/>
 							</form>
@@ -138,6 +156,15 @@ export default async function ContainerDetailPage({
 					<div className="flex items-center gap-2">
 						<h2 className="text-lg font-semibold tracking-tight">Details</h2>
 						<StatusBadge status={inspect.State?.Status || "offline"} />
+						{isProtected ? (
+							<span
+								title={protectedLabel || undefined}
+								className="inline-flex items-center gap-1 rounded-full border border-warning/25 bg-warning/10 px-2.5 py-1 text-[11px] font-semibold text-warning"
+							>
+								<Lock className="h-3 w-3" />
+								Locked
+							</span>
+						) : null}
 					</div>
 					<div className="mt-5 grid gap-3 sm:grid-cols-2">
 						<div className="rounded-xl border border-default/15 bg-background/60 p-4">

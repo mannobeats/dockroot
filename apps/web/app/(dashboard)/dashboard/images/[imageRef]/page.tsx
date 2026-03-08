@@ -1,9 +1,10 @@
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Lock } from "lucide-react";
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
 import { requirePrivilegedPageSession } from "@/lib/authorization";
 import { getImageDetails, listContainers } from "@/lib/platform/docker";
+import { isProtectedManagerImage } from "@/lib/runtime-protection";
 
 export default async function ImageDetailPage({
 	params,
@@ -24,6 +25,7 @@ export default async function ImageDetailPage({
 			`${container.Image}` === decodedRef ||
 			`${container.Image}:${container.Tag || ""}` === decodedRef,
 	);
+	const isProtected = isProtectedManagerImage(decodedRef, containers);
 
 	return (
 		<div className="space-y-6">
@@ -45,8 +47,19 @@ export default async function ImageDetailPage({
 			<div className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
 				<section className="rounded-2xl border border-default/15 bg-surface p-5">
 					<div className="flex items-center justify-between">
-						<h2 className="text-lg font-semibold tracking-tight">Overview</h2>
-						<StatusBadge status="healthy" />
+						<div className="flex items-center gap-2">
+							<h2 className="text-lg font-semibold tracking-tight">Overview</h2>
+							<StatusBadge status="healthy" />
+							{isProtected ? (
+								<span
+									title="Dockroot protected images cannot be deleted from the runtime dashboard."
+									className="inline-flex items-center gap-1 rounded-full border border-warning/25 bg-warning/10 px-2.5 py-1 text-[11px] font-semibold text-warning"
+								>
+									<Lock className="h-3 w-3" />
+									Locked
+								</span>
+							) : null}
+						</div>
 					</div>
 					<div className="mt-5 grid gap-3 sm:grid-cols-2">
 						<div className="rounded-xl border border-default/15 bg-background/60 p-4">

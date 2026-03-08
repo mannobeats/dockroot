@@ -16,6 +16,7 @@ import {
 	controlContainer,
 	createNetwork,
 	createVolume,
+	listContainers,
 	pruneImages,
 	pruneNetworks,
 	pruneVolumes,
@@ -25,6 +26,7 @@ import {
 	removeVolume,
 } from "@/lib/platform/docker";
 import { requireAccessibleContainerForUser } from "@/lib/runtime-access";
+import { isProtectedManagerContainer, isProtectedManagerImage } from "@/lib/runtime-protection";
 
 function getValue(formData: FormData, key: string) {
 	return String(formData.get(key) || "").trim();
@@ -207,6 +209,13 @@ export async function controlContainerAction(formData: FormData) {
 		userId: auth.userId,
 		role: auth.role,
 	});
+	const containers = await listContainers();
+	const container = containers.find((entry) => entry.ID === containerId);
+
+	if (container && isProtectedManagerContainer(container)) {
+		throw new Error("Dockroot protected containers cannot be modified from the runtime dashboard.");
+	}
+
 	await controlContainer(containerId, action as "start" | "stop" | "restart" | "remove");
 	revalidatePath("/dashboard/containers");
 }
@@ -250,6 +259,12 @@ export async function removeImageAction(formData: FormData) {
 
 	if (!imageRef) {
 		throw new Error("Image reference is required");
+	}
+
+	const containers = await listContainers();
+
+	if (isProtectedManagerImage(imageRef, containers)) {
+		throw new Error("Dockroot protected images cannot be deleted from the runtime dashboard.");
 	}
 
 	await removeImage(imageRef);

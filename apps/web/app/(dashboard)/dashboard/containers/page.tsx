@@ -1,3 +1,4 @@
+import { Lock } from "lucide-react";
 import Link from "next/link";
 import { controlContainerAction } from "@/app/(dashboard)/actions";
 import { FormSubmitButton } from "@/components/form-submit-button";
@@ -7,6 +8,7 @@ import { RuntimePortLinks } from "@/components/runtime-port-links";
 import { StatusBadge } from "@/components/status-badge";
 import { isPrivilegedRole, requireUserSession } from "@/lib/authorization";
 import { listAccessibleContainersForUser } from "@/lib/runtime-access";
+import { getProtectedContainerLabel, isProtectedManagerContainer } from "@/lib/runtime-protection";
 
 export default async function ContainersPage({
 	searchParams,
@@ -111,72 +113,94 @@ export default async function ContainersPage({
 						</thead>
 						<tbody className="divide-y divide-default/10 bg-surface/40 text-sm">
 							{filtered.length ? (
-								filtered.map((container) => (
-									<tr key={`${container.ID}-${container.Names}`}>
-										<td className="px-4 py-3 font-medium">
-											<div className="space-y-1">
-												<Link
-													href={`/dashboard/containers/${container.ID}`}
-													className="transition-colors hover:text-accent"
-												>
-													{container.Names}
-												</Link>
-												{container.Labels?.includes("com.docker.compose.project=") ? (
-													<p className="text-xs text-muted">
-														Stack{" "}
-														{container.Labels.split(",")
-															.find((label) => label.startsWith("com.docker.compose.project="))
-															?.split("=")
-															.slice(1)
-															.join("=")}
-													</p>
-												) : null}
-											</div>
-										</td>
-										<td className="px-4 py-3 text-muted">{container.Image}</td>
-										<td className="px-4 py-3">
-											<StatusBadge status={(container.State || "offline").toLowerCase()} />
-										</td>
-										<td className="px-4 py-3 text-muted">{container.Status || "—"}</td>
-										<td className="px-4 py-3">
-											<RuntimePortLinks ports={container.Ports} compact />
-										</td>
-										<td className="px-4 py-3 text-muted">{container.Size || "—"}</td>
-										<td className="px-4 py-3">
-											<div className="flex flex-wrap gap-2">
-												<Link
-													href={`/dashboard/containers/${container.ID}`}
-													className="inline-flex h-8 items-center justify-center rounded-lg border border-accent/20 bg-accent/10 px-3 text-xs font-medium text-accent transition-colors hover:bg-accent/15"
-												>
-													open
-												</Link>
-												{(["start", "stop", "restart", "remove"] as const).map((action) => (
-													<form key={action} action={controlContainerAction}>
-														<input type="hidden" name="containerId" value={container.ID} />
-														<input type="hidden" name="action" value={action} />
-														<FormSubmitButton
-															label={action}
-															pendingLabel={`${action}ing...`}
-															className="inline-flex h-8 items-center justify-center rounded-lg border border-default/20 bg-background px-3 text-xs font-medium text-muted transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
-														/>
-													</form>
-												))}
-												<Link
-													href={`/dashboard/shell?target=container&containerId=${container.ID}`}
-													className="inline-flex h-8 items-center justify-center rounded-lg border border-default/20 bg-background px-3 text-xs font-medium text-muted transition-colors hover:text-foreground"
-												>
-													shell
-												</Link>
-												<Link
-													href={`/dashboard/logs?mode=single&container=${container.ID}`}
-													className="inline-flex h-8 items-center justify-center rounded-lg border border-default/20 bg-background px-3 text-xs font-medium text-muted transition-colors hover:text-foreground"
-												>
-													logs
-												</Link>
-											</div>
-										</td>
-									</tr>
-								))
+								filtered.map((container) => {
+									const isProtected = isProtectedManagerContainer(container);
+									const protectedLabel = getProtectedContainerLabel(container);
+
+									return (
+										<tr key={`${container.ID}-${container.Names}`}>
+											<td className="px-4 py-3 font-medium">
+												<div className="space-y-1">
+													<div className="flex items-center gap-2">
+														<Link
+															href={`/dashboard/containers/${container.ID}`}
+															className="transition-colors hover:text-accent"
+														>
+															{container.Names}
+														</Link>
+														{isProtected ? (
+															<span
+																title={protectedLabel || undefined}
+																className="inline-flex items-center gap-1 rounded-full border border-warning/25 bg-warning/10 px-2 py-0.5 text-[11px] font-semibold text-warning"
+															>
+																<Lock className="h-3 w-3" />
+																Locked
+															</span>
+														) : null}
+													</div>
+													{container.Labels?.includes("com.docker.compose.project=") ? (
+														<p className="text-xs text-muted">
+															Stack{" "}
+															{container.Labels.split(",")
+																.find((label) => label.startsWith("com.docker.compose.project="))
+																?.split("=")
+																.slice(1)
+																.join("=")}
+														</p>
+													) : null}
+												</div>
+											</td>
+											<td className="px-4 py-3 text-muted">{container.Image}</td>
+											<td className="px-4 py-3">
+												<StatusBadge status={(container.State || "offline").toLowerCase()} />
+											</td>
+											<td className="px-4 py-3 text-muted">{container.Status || "—"}</td>
+											<td className="px-4 py-3">
+												<RuntimePortLinks ports={container.Ports} compact />
+											</td>
+											<td className="px-4 py-3 text-muted">{container.Size || "—"}</td>
+											<td className="px-4 py-3">
+												<div className="flex flex-wrap gap-2">
+													<Link
+														href={`/dashboard/containers/${container.ID}`}
+														className="inline-flex h-8 items-center justify-center rounded-lg border border-accent/20 bg-accent/10 px-3 text-xs font-medium text-accent transition-colors hover:bg-accent/15"
+													>
+														open
+													</Link>
+													{(["start", "stop", "restart", "remove"] as const).map((action) => (
+														<form key={action} action={controlContainerAction}>
+															<input type="hidden" name="containerId" value={container.ID} />
+															<input type="hidden" name="action" value={action} />
+															<FormSubmitButton
+																label={action}
+																pendingLabel={`${action}ing...`}
+																disabled={isProtected}
+																title={
+																	isProtected
+																		? "Dockroot protected containers cannot be modified from the runtime dashboard."
+																		: undefined
+																}
+																className="inline-flex h-8 items-center justify-center rounded-lg border border-default/20 bg-background px-3 text-xs font-medium text-muted transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+															/>
+														</form>
+													))}
+													<Link
+														href={`/dashboard/shell?target=container&containerId=${container.ID}`}
+														className="inline-flex h-8 items-center justify-center rounded-lg border border-default/20 bg-background px-3 text-xs font-medium text-muted transition-colors hover:text-foreground"
+													>
+														shell
+													</Link>
+													<Link
+														href={`/dashboard/logs?mode=single&container=${container.ID}`}
+														className="inline-flex h-8 items-center justify-center rounded-lg border border-default/20 bg-background px-3 text-xs font-medium text-muted transition-colors hover:text-foreground"
+													>
+														logs
+													</Link>
+												</div>
+											</td>
+										</tr>
+									);
+								})
 							) : (
 								<tr>
 									<td colSpan={7} className="px-4 py-8 text-center text-sm text-muted">

@@ -1,9 +1,11 @@
+import { Lock } from "lucide-react";
 import Link from "next/link";
 import { pruneImagesAction, pullImageAction, removeImageAction } from "@/app/(dashboard)/actions";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { PageHeader } from "@/components/page-header";
 import { requirePrivilegedPageSession } from "@/lib/authorization";
 import { listContainers, listImages } from "@/lib/platform/docker";
+import { getProtectedImageRefs } from "@/lib/runtime-protection";
 
 export default async function ImagesPage({
 	searchParams,
@@ -21,6 +23,7 @@ export default async function ImagesPage({
 				(image.ID || "").toLowerCase().includes(query),
 	);
 	const containers = await listContainers();
+	const protectedImageRefs = getProtectedImageRefs(containers);
 	const taggedCount = filtered.filter((image) => image.Tag && image.Tag !== "<none>").length;
 	const inUseCount = filtered.filter((image) =>
 		containers.some((container) => container.Image === `${image.Repository}:${image.Tag}`),
@@ -113,15 +116,27 @@ export default async function ImagesPage({
 							{filtered.length ? (
 								filtered.map((image) => {
 									const imageRef = `${image.Repository}:${image.Tag}`;
+									const isProtected = protectedImageRefs.has(imageRef);
 									return (
 										<tr key={`${image.ID}-${imageRef}`}>
 											<td className="px-4 py-3 font-medium">
-												<Link
-													href={`/dashboard/images/${encodeURIComponent(imageRef)}`}
-													className="transition-colors hover:text-accent"
-												>
-													{image.Repository}
-												</Link>
+												<div className="flex items-center gap-2">
+													<Link
+														href={`/dashboard/images/${encodeURIComponent(imageRef)}`}
+														className="transition-colors hover:text-accent"
+													>
+														{image.Repository}
+													</Link>
+													{isProtected ? (
+														<span
+															title="Dockroot protected images cannot be deleted from the runtime dashboard."
+															className="inline-flex items-center gap-1 rounded-full border border-warning/25 bg-warning/10 px-2 py-0.5 text-[11px] font-semibold text-warning"
+														>
+															<Lock className="h-3 w-3" />
+															Locked
+														</span>
+													) : null}
+												</div>
 											</td>
 											<td className="px-4 py-3 text-muted">{image.Tag}</td>
 											<td className="px-4 py-3 text-muted">{image.Size}</td>
@@ -139,6 +154,12 @@ export default async function ImagesPage({
 														<FormSubmitButton
 															label="Delete"
 															pendingLabel="Deleting..."
+															disabled={isProtected}
+															title={
+																isProtected
+																	? "Dockroot protected images cannot be deleted from the runtime dashboard."
+																	: undefined
+															}
 															className="inline-flex h-8 items-center justify-center rounded-lg border border-danger/30 bg-danger/10 px-3 text-xs font-medium text-danger"
 														/>
 													</form>
