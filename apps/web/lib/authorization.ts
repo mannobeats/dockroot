@@ -1,6 +1,7 @@
 import "server-only";
 
 import { auth } from "@dockroot/auth";
+import { redirect } from "next/navigation";
 import { getServerSession } from "@/lib/session";
 
 export const appRoles = ["owner", "admin", "member"] as const;
@@ -41,6 +42,14 @@ export async function requirePrivilegedSession(requestHeaders?: Headers) {
 	}
 
 	return auth;
+}
+
+export async function requirePrivilegedPageSession() {
+	try {
+		return await requirePrivilegedSession();
+	} catch {
+		redirect("/dashboard");
+	}
 }
 
 export function sanitizeInternalRedirectPath(value: string | null | undefined) {

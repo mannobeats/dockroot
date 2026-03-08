@@ -6,7 +6,7 @@ import {
 } from "@/app/(dashboard)/actions";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { PageHeader } from "@/components/page-header";
-import { requirePrivilegedSession } from "@/lib/authorization";
+import { requirePrivilegedPageSession } from "@/lib/authorization";
 import { listVolumes } from "@/lib/platform/docker";
 
 export default async function VolumesPage({
@@ -14,7 +14,7 @@ export default async function VolumesPage({
 }: {
 	searchParams: Promise<{ q?: string; volume?: string }>;
 }) {
-	await requirePrivilegedSession();
+	await requirePrivilegedPageSession();
 	const params = await searchParams;
 	const query = (params.q || "").toLowerCase();
 	const volumes = await listVolumes();

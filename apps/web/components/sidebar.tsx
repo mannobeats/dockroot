@@ -39,9 +39,9 @@ const navGroups = [
 			{ href: "/dashboard/containers", label: "Containers", icon: Cpu },
 			{ href: "/dashboard/shell", label: "Shell", icon: SquareTerminal },
 			{ href: "/dashboard/logs", label: "Logs", icon: Logs },
-			{ href: "/dashboard/images", label: "Images", icon: Boxes },
-			{ href: "/dashboard/volumes", label: "Volumes", icon: CopyPlus },
-			{ href: "/dashboard/networks", label: "Networks", icon: Network },
+			{ href: "/dashboard/images", label: "Images", icon: Boxes, privileged: true },
+			{ href: "/dashboard/volumes", label: "Volumes", icon: CopyPlus, privileged: true },
+			{ href: "/dashboard/networks", label: "Networks", icon: Network, privileged: true },
 		],
 	},
 	{
@@ -53,7 +53,7 @@ const navGroups = [
 	},
 	{
 		label: "Administration",
-		items: [{ href: "/dashboard/settings", label: "Settings", icon: Settings }],
+		items: [{ href: "/dashboard/settings", label: "Settings", icon: Settings, privileged: true }],
 	},
 ];
 
@@ -66,6 +66,8 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
 	const pathname = usePathname();
 	const router = useRouter();
 	const { data: session } = useSession();
+	const role = session?.user && "role" in session.user ? session.user.role : undefined;
+	const isPrivileged = role === "owner" || role === "admin";
 	const [expanded, setExpanded] = useState(true);
 	const [mounted, setMounted] = useState(false);
 
@@ -166,35 +168,45 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
 						</div>
 
 						<div className="mt-6 flex-1 overflow-y-auto">
-							{navGroups.map((group) => (
-								<div key={group.label} className="mb-6">
-									<p className="mb-3 px-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-muted">
-										{group.label}
-									</p>
-									<div className="space-y-1">
-										{group.items.map((item) => {
-											const isActive =
-												pathname === item.href ||
-												(item.href !== "/dashboard" && pathname.startsWith(item.href));
+							{navGroups.map((group) => {
+								const visibleItems = group.items.filter(
+									(item) => !("privileged" in item) || !item.privileged || isPrivileged,
+								);
 
-											return (
-												<Link
-													key={item.href}
-													href={item.href}
-													className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all ${
-														isActive
-															? "bg-accent/10 text-foreground"
-															: "text-muted hover:bg-default/30 hover:text-foreground"
-													}`}
-												>
-													<item.icon className="h-4 w-4" />
-													<span>{item.label}</span>
-												</Link>
-											);
-										})}
+								if (!visibleItems.length) {
+									return null;
+								}
+
+								return (
+									<div key={group.label} className="mb-6">
+										<p className="mb-3 px-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-muted">
+											{group.label}
+										</p>
+										<div className="space-y-1">
+											{visibleItems.map((item) => {
+												const isActive =
+													pathname === item.href ||
+													(item.href !== "/dashboard" && pathname.startsWith(item.href));
+
+												return (
+													<Link
+														key={item.href}
+														href={item.href}
+														className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all ${
+															isActive
+																? "bg-accent/10 text-foreground"
+																: "text-muted hover:bg-default/30 hover:text-foreground"
+														}`}
+													>
+														<item.icon className="h-4 w-4" />
+														<span>{item.label}</span>
+													</Link>
+												);
+											})}
+										</div>
 									</div>
-								</div>
-							))}
+								);
+							})}
 						</div>
 
 						{session ? (
@@ -209,18 +221,22 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
 									</div>
 								</div>
 								<div className="mt-4 flex gap-2">
-									<button
-										type="button"
-										onClick={() => router.push("/dashboard/settings")}
-										className="inline-flex flex-1 items-center justify-center rounded-xl border border-default/20 px-3 py-2 text-sm text-muted transition-colors hover:bg-default/30 hover:text-foreground"
-									>
-										<Settings className="mr-2 h-4 w-4" />
-										Settings
-									</button>
+									{isPrivileged ? (
+										<button
+											type="button"
+											onClick={() => router.push("/dashboard/settings")}
+											className="inline-flex flex-1 items-center justify-center rounded-xl border border-default/20 px-3 py-2 text-sm text-muted transition-colors hover:bg-default/30 hover:text-foreground"
+										>
+											<Settings className="mr-2 h-4 w-4" />
+											Settings
+										</button>
+									) : null}
 									<button
 										type="button"
 										onClick={handleSignOut}
-										className="inline-flex items-center justify-center rounded-xl border border-default/20 px-3 py-2 text-sm text-muted transition-colors hover:bg-default/30 hover:text-foreground"
+										className={`inline-flex items-center justify-center rounded-xl border border-default/20 px-3 py-2 text-sm text-muted transition-colors hover:bg-default/30 hover:text-foreground ${
+											isPrivileged ? "" : "flex-1"
+										}`}
 									>
 										<LogOut className="h-4 w-4" />
 									</button>

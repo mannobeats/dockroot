@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { execFile, spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { createServer } from "node:http";
 import { promisify } from "node:util";
 import postgres from "postgres";
@@ -16,6 +17,26 @@ const execFileAsync = promisify(execFile);
 const terminalSessions = new Map();
 const logSessions = new Map();
 const sql = postgres(process.env.DATABASE_URL, { max: 5 });
+const dockerBinary = resolveExecutable(process.env.DOCKER_BIN, [
+	"/usr/local/bin/docker",
+	"/opt/homebrew/bin/docker",
+	"docker",
+]);
+const shellBinary = resolveExecutable(process.env.SHELL, ["/bin/zsh", "/bin/bash", "/bin/sh"]);
+
+function resolveExecutable(primaryCandidate, fallbackCandidates) {
+	for (const candidate of [primaryCandidate, ...fallbackCandidates]) {
+		if (!candidate) {
+			continue;
+		}
+
+		if (!candidate.includes("/") || existsSync(candidate)) {
+			return candidate;
+		}
+	}
+
+	return fallbackCandidates[fallbackCandidates.length - 1];
+}
 
 function getTrustedOrigins() {
 	return [
@@ -102,7 +123,7 @@ async function listOwnedStackSlugs(userId) {
 async function getContainerComposeProject(containerId) {
 	try {
 		const { stdout } = await execFileAsync(
-			"docker",
+			dockerBinary,
 			["inspect", "--format", "{{ index .Config.Labels \"com.docker.compose.project\" }}", containerId],
 			{
 				maxBuffer: 1024 * 256,
@@ -146,9 +167,13 @@ function emitRuntimeMetrics() {
 
 async function getRuntimeMetrics() {
 	try {
-		const { stdout } = await execFileAsync("docker", ["stats", "--no-stream", "--format", "{{json .}}"], {
-			maxBuffer: 1024 * 1024 * 4,
-		});
+		const { stdout } = await execFileAsync(
+			dockerBinary,
+			["stats", "--no-stream", "--format", "{{json .}}"],
+			{
+				maxBuffer: 1024 * 1024 * 4,
+			},
+		);
 
 		return stdout
 			.split("\n")
@@ -203,7 +228,7 @@ io.on("connection", (socket) => {
 			return;
 		}
 
-		session.pty.kill();
+		session.kill();
 		terminalSessions.delete(sessionId);
 	}
 
@@ -259,46 +284,81 @@ io.on("connection", (socket) => {
 				return;
 			}
 
-			const terminal = isContainer
-				? pty.spawn(
-						"docker",
-						[
+			const command = isContainer
+				? {
+						file: dockerBinary,
+						args: [
 							"exec",
-							"-it",
+							"-i",
 							payload.containerId,
 							"sh",
 							"-lc",
 							"if command -v bash >/dev/null 2>&1; then exec bash; else exec sh; fi",
 						],
-						{
-							name: "xterm-color",
-							cols,
-							rows,
-							cwd: "/",
-							env: process.env,
-						},
-					)
-				: pty.spawn(process.env.SHELL || "/bin/sh", [], {
+						cwd: "/",
+					}
+				: {
+						file: shellBinary,
+						args: ["-i"],
+						cwd: process.cwd(),
+					};
+
+			const terminalSession = (() => {
+				try {
+					const ptyProcess = pty.spawn(command.file, command.args, {
 						name: "xterm-color",
 						cols,
 						rows,
-						cwd: process.cwd(),
+						cwd: command.cwd,
 						env: process.env,
 					});
 
+					return {
+						kind: "pty",
+						write: (data) => ptyProcess.write(data),
+						resize: (nextCols, nextRows) => ptyProcess.resize(nextCols, nextRows),
+						kill: () => ptyProcess.kill(),
+						onData: (listener) => ptyProcess.onData(listener),
+						onExit: (listener) => ptyProcess.onExit(listener),
+					};
+				} catch {
+					const child = spawn(command.file, command.args, {
+						cwd: command.cwd,
+						env: process.env,
+						stdio: "pipe",
+					});
+
+					return {
+						kind: "pipe",
+						write: (data) => {
+							child.stdin.write(data || "");
+						},
+						resize: null,
+						kill: () => child.kill("SIGTERM"),
+						onData: (listener) => {
+							child.stdout.on("data", (chunk) => listener(chunk.toString()));
+							child.stderr.on("data", (chunk) => listener(chunk.toString()));
+						},
+						onExit: (listener) => {
+							child.on("close", (exitCode) => listener({ exitCode }));
+						},
+					};
+				}
+			})();
+
 			terminalSessions.set(sessionId, {
-				pty: terminal,
+				...terminalSession,
 				socketId: socket.id,
 			});
 
-			terminal.onData((data) => {
+			terminalSession.onData((data) => {
 				socket.emit("terminal:data", {
 					sessionId,
 					data,
 				});
 			});
 
-			terminal.onExit(({ exitCode }) => {
+			terminalSession.onExit(({ exitCode }) => {
 				socket.emit("terminal:exit", {
 					sessionId,
 					exitCode,
@@ -319,14 +379,14 @@ io.on("connection", (socket) => {
 	socket.on("terminal:input", (payload) => {
 		const session = terminalSessions.get(payload?.sessionId);
 		if (session?.socketId === socket.id) {
-			session.pty.write(payload.data || "");
+			session.write(payload.data || "");
 		}
 	});
 
 	socket.on("terminal:resize", (payload) => {
 		const session = terminalSessions.get(payload?.sessionId);
-		if (session?.socketId === socket.id) {
-			session.pty.resize(Number(payload.cols || 120), Number(payload.rows || 36));
+		if (session?.socketId === socket.id && session.resize) {
+			session.resize(Number(payload.cols || 120), Number(payload.rows || 36));
 		}
 	});
 
@@ -361,7 +421,7 @@ io.on("connection", (socket) => {
 			}
 			const processes = allowedContainerIds.map((containerId) => {
 				const child = spawn(
-					"docker",
+					dockerBinary,
 					["logs", "-f", "--tail", String(payload?.tail || 150), "--timestamps", containerId],
 					{
 						stdio: ["ignore", "pipe", "pipe"],

@@ -49,7 +49,7 @@ export const auth = betterAuth({
 	rateLimit: {
 		enabled: true,
 		window: 60,
-		max: 10,
+		max: 120,
 	},
 	advanced: {
 		useSecureCookies:

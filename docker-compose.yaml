@@ -45,16 +45,19 @@ services:
     image: prom/prometheus:v3.5.0
     container_name: dockroot-prometheus
     restart: unless-stopped
+    env_file:
+      - .env.local
+    entrypoint:
+      - /bin/sh
+      - /etc/prometheus/start-prometheus.sh
     command:
-      - --config.file=/etc/prometheus/prometheus.yml
-      - --storage.tsdb.path=/prometheus
-      - --web.enable-lifecycle
+      - /prometheus
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
       - "9090:9090"
     volumes:
-      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/prometheus/start-prometheus.sh:/etc/prometheus/start-prometheus.sh:ro
       - prometheus_data:/prometheus
 
   cadvisor:

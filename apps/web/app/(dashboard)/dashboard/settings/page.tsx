@@ -1,10 +1,10 @@
 import { FolderKanban, HardDrive, Server, ShieldCheck } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
-import { requirePrivilegedSession } from "@/lib/authorization";
+import { requirePrivilegedPageSession } from "@/lib/authorization";
 import { getGlobalSettings } from "@/lib/platform";
 
 export default async function SettingsPage() {
-	const { userId } = await requirePrivilegedSession();
+	const { userId } = await requirePrivilegedPageSession();
 
 	const settings = await getGlobalSettings(userId);
 
