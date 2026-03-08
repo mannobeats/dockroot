@@ -19,7 +19,8 @@ export const metadata: Metadata = {
 		default: publicEnv.appName,
 		template: `%s | ${publicEnv.appName}`,
 	},
-	description: "Self-hosted application template for IT professionals and homelab enthusiasts.",
+	description:
+		"Compose-native Docker deployment and management for self-hosted teams and platforms.",
 };
 
 export default function RootLayout({

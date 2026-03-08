@@ -59,17 +59,17 @@ export default function Home() {
 						<div className="mx-auto max-w-2xl text-center">
 							<div className="mb-5 inline-flex items-center gap-2 rounded-full border border-accent/20 bg-accent/5 px-3.5 py-1 text-[13px] font-medium text-accent">
 								<Rocket className="h-3.5 w-3.5" />
-								Production-Ready Template
+								Compose-Native Control Plane
 							</div>
 							<h1 className="text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
-								Build Self-Hosted{" "}
+								Run Docker{" "}
 								<span className="bg-linear-to-r from-accent to-secondary bg-clip-text text-transparent">
-									Apps Faster
+									Operations Smarter
 								</span>
 							</h1>
 							<p className="mx-auto mt-5 max-w-lg text-[15px] leading-relaxed text-muted">
-								A beautifully crafted Next.js template for IT professionals and homelab enthusiasts.
-								Authentication, database, Docker — all wired up and ready to go.
+								Dockroot gives teams a unified control plane for Docker Compose deployments, runtime
+								operations, monitoring, and tenant-aware infrastructure management.
 							</p>
 							<div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
 								<Link
@@ -97,7 +97,8 @@ export default function Home() {
 						<div className="mx-auto mb-12 max-w-lg text-center">
 							<h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Everything You Need</h2>
 							<p className="mt-3 text-[15px] text-muted">
-								A complete foundation for building self-hosted applications with modern tools.
+								The operational building blocks to deploy, observe, and manage containerized
+								workloads from one place.
 							</p>
 						</div>
 						<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -123,10 +124,10 @@ export default function Home() {
 				<section className="border-t border-default/30 py-20 sm:py-24">
 					<div className="mx-auto max-w-7xl px-4 sm:px-6">
 						<div className="mx-auto max-w-lg text-center">
-							<h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Ready to Build?</h2>
+							<h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Ready to Deploy?</h2>
 							<p className="mt-3 text-[15px] text-muted">
-								Clone this template, spin up Docker, and start building your next self-hosted
-								application in minutes.
+								Bring Dockroot up locally, configure your instance, and start managing deployments
+								from the control plane.
 							</p>
 							<div className="mt-8 overflow-hidden rounded-xl border border-default/40 bg-surface">
 								<pre className="overflow-x-auto p-5 text-left text-[13px] leading-relaxed">

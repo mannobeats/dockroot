@@ -20,9 +20,11 @@ COPY --from=deps /app/apps ./apps
 COPY --from=deps /app/packages ./packages
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
-# Dummy values so next build can compile without real secrets
+# Non-production placeholders so `next build` can compile without runtime secrets.
+# Better Auth validates secret quality during build, so this placeholder must
+# still look like a real high-entropy secret to avoid false warnings.
 ENV DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder"
-ENV BETTER_AUTH_SECRET="build-placeholder"
+ENV BETTER_AUTH_SECRET="9d3fd5cdb7c96796b845921a63b742a5d662078f9bc7c83a745f5225f2c98d9d"
 ENV BETTER_AUTH_URL="http://localhost:3000"
 RUN pnpm run build
 RUN pnpm run db:bundle-migrate
