@@ -35,8 +35,8 @@ const features = [
 	},
 	{
 		icon: Container,
-		title: "Docker Ready",
-		description: "Production Dockerfile and docker-compose with PostgreSQL out of the box.",
+		title: "Clean Deployment Modes",
+		description: "Host-run development and full Docker deployment use one consistent, documented flow.",
 	},
 	{
 		icon: Terminal,
@@ -134,10 +134,8 @@ export default function Home() {
 									<code className="text-foreground/80">
 										{`git clone <your-repo>
 cd dockroot
-pnpm install
-docker compose up -d
-pnpm run db:push
-pnpm dev`}
+cp .env.local.example .env.local
+make dev-full`}
 									</code>
 								</pre>
 							</div>

@@ -1,200 +1,136 @@
-# UI Guidelines
+# UI Rules
 
-## Design Direction
+This is the UI contract for Dockroot.
 
-UniFi Network Dashboard + Apple UX. Clean, minimal, functional.
+## Goal
 
-## Color Tokens
+Build UI that is:
 
-Use HeroUI CSS variable tokens — never hardcode colors.
+- consistent
+- reusable
+- easy to restyle globally
+- easy to debug
 
-| Token | Usage |
-|-------|-------|
-| `bg-background` | Page backgrounds |
-| `bg-surface` | Cards, panels, elevated containers |
-| `text-foreground` | Primary text |
-| `text-muted` | Secondary/helper text |
-| `bg-accent` | Primary actions, brand color |
-| `text-accent` | Links, active states, icons |
-| `bg-danger` | Destructive actions |
-| `border-default/30` | Subtle borders |
-| `bg-default/40` | Hover backgrounds |
-| `bg-success` | Status indicators |
+## Core Rule
 
-## Component Patterns
+Pages compose shared primitives.
+Pages do not invent their own visual patterns.
 
-### Cards & Panels
+Before writing UI:
 
-Use plain `div` elements with border + surface background. Avoid HeroUI `Card` for custom layouts — it can clip content.
+1. check `apps/web/components/ui`
+2. use an existing primitive if it fits
+3. if the pattern is repeated and missing, add or extend a primitive
 
-```tsx
-<div className="rounded-xl border border-default/40 bg-surface">
-  <div className="border-b border-default/30 px-5 py-3.5">
-    <h2 className="text-[14px] font-semibold">Title</h2>
-  </div>
-  <div className="px-5 py-4">Content</div>
-</div>
-```
+## Source Of Truth
 
-### List Rows
+- Tokens: `apps/web/app/globals.css`
+- Class merge helper: `apps/web/lib/cn.ts`
+- Reusable primitives: `apps/web/components/ui`
+- Shared product widgets: `apps/web/components`
 
-Divide with `divide-y divide-default/20`. Each row: flex, gap, padding.
+## Use These Primitives
 
-```tsx
-<div className="divide-y divide-default/20">
-  <div className="flex items-center gap-3.5 px-5 py-3">...</div>
-</div>
-```
+- `Panel` for bordered surfaces
+- `Button` for actions
+- `LinkButton` for navigational actions
+- `FormSubmitButton` for submit actions
+- `Field`, `FieldLabel`, `Input`, `Select`, `Alert` for forms
+- `DataTable*` for tables
+- `TabsList`, `TabsTrigger`, `TabsPanel` for tabs
+- `EmptyState` for no-data states
+- `Badge` for small labels
+- `StatusBadge` for runtime/deployment state
+- `LogBlock` for log/code-style dark surfaces
+- `MetricCard` or `StatCard` for metrics
 
-### Icon Containers
+## Do Not
 
-```tsx
-<div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent/8">
-  <Icon className="h-4 w-4 text-accent" />
-</div>
-```
+- do not hand-write repeated button styles
+- do not hand-write repeated panel wrappers
+- do not hand-write repeated input/select styles
+- do not hand-write repeated table markup/styling
+- do not create page-local tab styles
+- do not hardcode semantic colors like raw red/green/amber classes for shared patterns
+- do not hardcode terminal/log background colors
+- do not reimplement status color mapping outside `StatusBadge`
 
-### Buttons
+## Tokens
 
-- **Primary action**: `bg-accent text-white` or HeroUI `Button variant="primary"`
-- **Destructive**: HeroUI `Button variant="danger"`
-- **Ghost/text**: Plain `button` with `text-muted hover:text-foreground`
-- **Never** wrap HeroUI `Button` inside Next.js `Link` — use styled `Link` or `router.push()`
+Use token-backed colors only.
 
-### Links That Look Like Buttons
+Use:
 
-```tsx
-<Link href="/path" className="inline-flex items-center rounded-lg bg-accent px-5 py-2.5 text-[14px] font-medium text-white">
-  Label
-</Link>
-```
+- `background`
+- `foreground`
+- `surface`
+- `accent`
+- `muted`
+- `border-default`
+- `success`
+- `warning`
+- `danger`
+- `console`
+- `console-foreground`
 
-## Typography Scale
+If you need a new reusable color meaning, add a token first.
 
-| Size | Usage |
-|------|-------|
-| `text-xl font-semibold` | Page titles |
-| `text-[14px] font-semibold` | Section headers |
-| `text-[13px] font-medium` | Body text, nav items, labels |
-| `text-[12px] text-muted` | Captions, metadata, timestamps |
-| `text-[11px] text-muted` | Badges, small labels |
+## Page Rules
 
-## Responsive Design
+Pages may:
 
-### Breakpoints
+- define layout
+- define data flow
+- compose primitives
 
-| Breakpoint | Width | Usage |
-|------------|-------|-------|
-| Default | `<768px` | Mobile — single column, compact padding |
-| `sm` | `≥640px` | Small tablets — 2-column grids |
-| `md` | `≥768px` | Tablets — sidebar visible, desktop layout |
-| `lg` | `≥1024px` | Desktop — full multi-column grids |
+Pages may not:
 
-### Mobile-First Rules
+- recreate shared visual patterns inline
 
-- **Always design mobile-first** — start with the smallest screen, add breakpoints up
-- **Sidebar**: Hidden on mobile, toggled via hamburger in topbar, slides in as overlay with backdrop
-- **Stats grids**: Use `grid-cols-2` on mobile, `lg:grid-cols-4` on desktop
-- **Charts**: Use `ResponsiveContainer` (Recharts handles resize), reduce `h-[180px]` on mobile → `sm:h-[220px]`
-- **Card padding**: `p-3 sm:p-5` — tighter on mobile, comfortable on desktop
-- **Page gaps**: `gap-4 sm:gap-6` — reduce vertical spacing on mobile
-- **Page headings**: `text-lg sm:text-xl` — slightly smaller on mobile
-- **Stacking**: Use `flex-col` on mobile → `sm:flex-row` for side-by-side layouts
+A page should mostly read like composition, not styling.
 
-### Pattern: Responsive Card
+## When To Add A Primitive
 
-```tsx
-<div className="rounded-xl border border-default/20 bg-surface p-3 sm:p-5">
-  <h3 className="text-[13px] font-semibold">Title</h3>
-  <div className="h-[180px] sm:h-[220px] w-full">
-    {/* Chart or content */}
-  </div>
-</div>
-```
+Add or extend `components/ui/*` when the pattern:
 
-### Pattern: Responsive Header
+- is visual
+- is reused or clearly will be reused
+- should update globally when restyled
 
-```tsx
-<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-  <h1 className="text-lg sm:text-xl font-semibold">Title</h1>
-  <span className="text-[12px] text-muted w-fit">Badge</span>
-</div>
-```
-
-## Spacing
-
-- Page padding: `p-4 lg:p-6`
-- Section gaps: `gap-4 sm:gap-6`
-- Card internal padding: `p-3 sm:p-5` (content), `px-5 py-3.5` (header)
-- Between cards: `gap-3` or `gap-4`
-
-## Dashboard Patterns
-
-### Sidebar Icon Rail
-
-Active nav items use filled accent background with white icon + shadow. Inactive items use `text-muted` with hover states.
-
-```tsx
-<Link className={isActive
-  ? "bg-accent text-white shadow-md shadow-accent-soft-hover"
-  : "text-muted hover:bg-default/40 hover:text-foreground"
-}>
-```
-
-### Data Tables
-
-Use native `<table>` with consistent styling:
-
-```tsx
-<table className="w-full text-left text-[13px]">
-  <thead>
-    <tr className="border-b border-default/10 bg-default/5 text-muted">
-      <th className="px-6 py-3 font-medium">Column</th>
-    </tr>
-  </thead>
-  <tbody className="divide-y divide-default/10">
-    <tr className="group hover:bg-default/5 transition-colors">
-      <td className="px-6 py-3">Cell</td>
-    </tr>
-  </tbody>
-</table>
-```
-
-### Status Badges
-
-```tsx
-<span className="inline-flex items-center rounded-md bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success ring-1 ring-inset ring-success-soft-hover">
-  Success
-</span>
-```
-
-### Network Node Cards
-
-Large icon containers with status glow for connectivity visualizations:
-
-```tsx
-<div className="flex h-16 w-16 items-center justify-center rounded-2xl border-2 border-success-soft-hover bg-surface shadow-[0_0_20px_rgba(34,197,94,0.1)]">
-  <Icon className="h-8 w-8 text-success" />
-</div>
-```
-
-## Dark/Light Mode
-
-- Handled by `next-themes` with `attribute="class"`
-- All color tokens auto-switch — use tokens, not raw colors
-- Theme toggle lives in the topbar (dashboard) and navbar (public pages)
+If it is Dockroot-specific but still shared, put it in `apps/web/components`.
 
 ## Accessibility
 
-- All form inputs must have `aria-label` or a visible `<label>`
-- HeroUI `RadioGroup` and `Checkbox` require `aria-label` when no visible label is provided
-- Search inputs without visible labels need `aria-label="Search ..."`
+- every input needs a label or `aria-label`
+- every icon-only action needs `aria-label`
+- keyboard focus must stay visible
+- do not rely on color alone for meaning
 
-## Interactive Elements
+## Done Criteria
 
-- **No nested buttons** — `DropdownTrigger` renders its own `<button>`, use `<div>` inside it
-- **No `<a>` wrapping `<button>`** — use styled `Link` or `button` with `router.push()`
-- Always add `type="button"` to non-submit buttons
-- **No `isReadOnly`** on HeroUI v3 `DropdownItem` — prop doesn't exist in this version
-- Use Tailwind v4 syntax: `bg-linear-to-r` not `bg-gradient-to-r`
-- Always pass radix to `parseInt()`: `parseInt(value, 10)`
+UI work is done only if:
+
+- it uses shared primitives where applicable
+- it adds no unnecessary duplicate styling
+- it respects tokens
+- it is responsive
+- it is accessible
+- it type-checks
+
+## Quick Mapping
+
+- surface -> `Panel`
+- action -> `Button`
+- nav action -> `LinkButton`
+- submit -> `FormSubmitButton`
+- text field -> `Input`
+- select -> `Select`
+- table -> `DataTable`
+- tabs -> `Tabs*`
+- empty state -> `EmptyState`
+- label -> `Badge`
+- state -> `StatusBadge`
+- logs -> `LogBlock`
+- metric -> `MetricCard` or `StatCard`
+
+If none fit, extend the system first.

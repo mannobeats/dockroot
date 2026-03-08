@@ -62,215 +62,76 @@ Tag strategy:
 - git tags such as `v0.1.0`
 - commit SHA tags
 
-## Production Deployment
+## Deployment Modes
 
-The example below is the recommended single-host deployment. It runs Dockroot, PostgreSQL, Prometheus, cAdvisor, and node-exporter together so the dashboard features match the full platform architecture.
+Dockroot now has explicit deployment modes.
 
-### 1. Create a `.env`
+### 1. Local host development
 
-Start from the canonical template:
+Use this when you want live code changes and the web app running on your machine.
+
+```bash
+cp .env.local.example .env.local
+make dev-full
+```
+
+What it does:
+
+- runs the app on the host with `pnpm dev`
+- starts PostgreSQL, Prometheus, cAdvisor, and node-exporter in Docker
+- keeps the full monitoring experience available in the UI
+
+If you only want PostgreSQL:
+
+```bash
+make dev-lite
+```
+
+### 2. Docker deployment
+
+Use this when you want the full platform to run in Docker with the published image.
 
 ```bash
 cp .env.example .env
+make env-check-compose
+make prod-up
 ```
 
-```dotenv
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/dockroot
-POSTGRES_DB=dockroot
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=replace-with-a-strong-database-password
+What it does:
 
-BETTER_AUTH_SECRET=replace-with-a-strong-random-secret
-BETTER_AUTH_URL=https://dockroot.example.com
-BETTER_AUTH_TRUSTED_ORIGINS=https://dockroot.example.com
-SESSION_COOKIE_SECURE=true
-
-NEXT_PUBLIC_APP_NAME=Dockroot
-NEXT_PUBLIC_APP_URL=https://dockroot.example.com
-DOCKROOT_DATA_DIR=.dockroot
-PROMETHEUS_URL=http://localhost:9090
-
-DOCKROOT_ALLOW_PUBLIC_SIGNUP=false
-DOCKROOT_TOKEN_PEPPER=replace-with-a-second-strong-random-secret
-METRICS_BEARER_TOKEN=replace-with-a-third-strong-random-secret
-
-GITHUB_APP_ID=
-GITHUB_APP_SLUG=
-GITHUB_APP_PRIVATE_KEY=
-GITHUB_APP_WEBHOOK_SECRET=
-GITHUB_APP_STATE_SECRET=
-```
-
-Generate strong values with:
-
-```bash
-openssl rand -base64 48
-openssl rand -hex 32
-```
-
-Validate the env before deploying:
-
-```bash
-docker run --rm --env-file .env ghcr.io/mannobeats/dockroot:latest node /app/runtime-env.mjs --production
-```
-
-### 2. Create `docker-compose.yml`
-
-```yaml
-services:
-  app:
-    image: ghcr.io/mannobeats/dockroot:latest
-    container_name: dockroot-app
-    restart: unless-stopped
-    env_file:
-      - .env
-    environment:
-      HOSTNAME: 0.0.0.0
-      PORT: 3080
-      DATABASE_URL: postgresql://dockroot:${POSTGRES_PASSWORD}@postgres:5432/dockroot
-      DOCKROOT_DATA_DIR: /var/lib/dockroot
-      PROMETHEUS_URL: http://prometheus:9090
-    ports:
-      - "3080:3080"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      prometheus:
-        condition: service_started
-    volumes:
-      - dockroot_data:/var/lib/dockroot
-      - /var/run/docker.sock:/var/run/docker.sock
-
-  postgres:
-    image: postgres:17-alpine
-    container_name: dockroot-db
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: dockroot
-      POSTGRES_USER: dockroot
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dockroot -d dockroot"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
-  prometheus:
-    image: prom/prometheus:v3.5.0
-    container_name: dockroot-prometheus
-    restart: unless-stopped
-    env_file:
-      - .env
-    entrypoint:
-      - /bin/sh
-      - -ec
-    command:
-      - |
-        cat >/tmp/prometheus.yml <<EOF
-        global:
-          scrape_interval: 15s
-          evaluation_interval: 15s
-
-        scrape_configs:
-          - job_name: prometheus
-            static_configs:
-              - targets: ["prometheus:9090"]
-
-          - job_name: dockroot_app
-            metrics_path: /api/metrics
-            authorization:
-              type: Bearer
-              credentials: $${METRICS_BEARER_TOKEN}
-            static_configs:
-              - targets: ["app:3080"]
-                labels:
-                  service: dockroot-manager
-
-          - job_name: dockroot_host_dev
-            metrics_path: /api/metrics
-            authorization:
-              type: Bearer
-              credentials: $${METRICS_BEARER_TOKEN}
-            static_configs:
-              - targets: ["host.docker.internal:3080"]
-                labels:
-                  service: dockroot-host-dev
-
-          - job_name: cadvisor
-            static_configs:
-              - targets: ["cadvisor:8080"]
-                labels:
-                  service: cadvisor
-
-          - job_name: node_exporter
-            static_configs:
-              - targets: ["node-exporter:9100"]
-                labels:
-                  service: node-exporter
-        EOF
-
-        exec /bin/prometheus \
-          --config.file=/tmp/prometheus.yml \
-          --storage.tsdb.path=/prometheus \
-          --web.enable-lifecycle
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    ports:
-      - "9090:9090"
-    volumes:
-      - prometheus_data:/prometheus
-
-  cadvisor:
-    image: gcr.io/cadvisor/cadvisor:v0.52.1
-    container_name: dockroot-cadvisor
-    restart: unless-stopped
-    privileged: true
-    devices:
-      - /dev/kmsg
-    ports:
-      - "8081:8080"
-    volumes:
-      - /:/rootfs:ro
-      - /var/run:/var/run:rw
-      - /sys:/sys:ro
-      - /var/lib/docker:/var/lib/docker:ro
-      - /dev/disk:/dev/disk:ro
-
-  node-exporter:
-    image: prom/node-exporter:v1.9.1
-    container_name: dockroot-node-exporter
-    restart: unless-stopped
-    command:
-      - --path.rootfs=/host
-    ports:
-      - "9100:9100"
-    volumes:
-      - /:/host:ro
-
-volumes:
-  dockroot_data:
-  postgres_data:
-  prometheus_data:
-```
-
-### 3. Start the stack
-
-```bash
-docker compose up -d
-```
+- runs Dockroot, PostgreSQL, Prometheus, cAdvisor, and node-exporter in Docker
+- injects internal service URLs from Compose
+- keeps monitoring built in by default
 
 Open Dockroot at `http://localhost:3080` or your configured domain. The first account created becomes the instance `owner`.
 
-The deployment env stays intentionally small:
+### File roles
 
-- `POSTGRES_PASSWORD` is the only database value you set manually.
-- `DATABASE_URL`, `PROMETHEUS_URL`, and `DOCKROOT_DATA_DIR` are derived in Compose so they cannot drift out of sync.
-- Everything else in `.env` is either a real secret or a public URL.
-- In production, replace the `localhost` URLs in `.env` with your real app URL. The production compose file ignores the local `DATABASE_URL`, `PROMETHEUS_URL`, and `DOCKROOT_DATA_DIR` values and injects its own internal service URLs.
+- `compose.dev-infra.yml`
+  Local infrastructure only. Used by `make dev-full` and `make dev-lite`.
+- `docker-compose.yaml`
+  Full Docker deployment for users and production-style single-host installs.
+- `.env.local.example`
+  Template for host development.
+- `.env.example`
+  Template for Docker deployments.
 
-If Dockroot exits immediately on boot, check the startup logs first. The container now validates the runtime env before migrations and reports common mistakes directly, including missing secrets, placeholder values, localhost production URLs, and broken `DATABASE_URL` passwords with unencoded `@` characters.
+### Environment rules
+
+- `.env.local` is only for host development
+- `.env` is only for Docker deployments
+- Docker deployments do not require you to set `DATABASE_URL`, `PROMETHEUS_URL`, or `DOCKROOT_DATA_DIR` manually
+- Compose injects those values so they stay consistent with the service topology
+
+### Startup behavior
+
+On container boot, Dockroot now:
+
+1. validates runtime environment
+2. runs database migrations
+3. starts the app server
+
+If Dockroot exits immediately on boot, check container logs first. Startup validation reports missing secrets, placeholder values, localhost production URLs, and malformed database credentials directly.
 
 ## GitHub Container Publish Workflow
 
@@ -285,20 +146,27 @@ For public repositories, `GITHUB_TOKEN` is enough for GHCR publishing in most ca
 
 ## Local Development
 
+Recommended:
+
 ```bash
-pnpm install
-cp .env.example .env.local
-docker compose up -d
-pnpm run db:push
-pnpm dev
+make dev-full
 ```
 
-For local development, keep the `localhost` defaults from `.env.example`. They are intentional for `.env.local`.
+Minimal:
+
+```bash
+make dev-lite
+```
 
 Useful commands:
 
 | Command | Description |
 | --- | --- |
+| `make dev-lite` | Host app + PostgreSQL only |
+| `make dev-full` | Host app + PostgreSQL + monitoring stack |
+| `make prod-up` | Full Docker deployment |
+| `make prod-down` | Stop the Docker deployment |
+| `make prod-logs` | Tail Docker deployment logs |
 | `pnpm dev` | Run Dockroot locally through `server.mjs` |
 | `pnpm build` | Create the production build |
 | `pnpm start` | Start the production server from `.env.local` |
@@ -306,7 +174,7 @@ Useful commands:
 | `pnpm lint:fix` | Apply Biome fixes |
 | `pnpm db:generate` | Generate Drizzle migrations |
 | `pnpm db:migrate` | Run Drizzle migrations |
-| `pnpm db:push` | Push schema directly to the database |
+| `pnpm db:push` | Push schema directly to the local development database |
 | `pnpm db:studio` | Open Drizzle Studio |
 
 ## Security Notes

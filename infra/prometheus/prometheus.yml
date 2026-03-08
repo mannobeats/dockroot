@@ -10,14 +10,14 @@ scrape_configs:
   - job_name: dockroot_app
     metrics_path: /api/metrics
     static_configs:
-      - targets: ["app:3000"]
+      - targets: ["app:3080"]
         labels:
           service: dockroot-manager
 
   - job_name: dockroot_host_dev
     metrics_path: /api/metrics
     static_configs:
-      - targets: ["host.docker.internal:3000"]
+      - targets: ["host.docker.internal:3080"]
         labels:
           service: dockroot-host-dev
 

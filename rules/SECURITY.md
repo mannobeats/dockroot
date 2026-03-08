@@ -3,7 +3,9 @@
 ## Environment Variables
 
 - **Never** commit `.env.local` — it's gitignored
-- `.env.example` is tracked as a reference template
+- **Never** commit `.env` — it's gitignored
+- `.env.local.example` is the host development template
+- `.env.example` is the Docker deployment template
 - `BETTER_AUTH_SECRET` must be a strong random string in production
 - All `NEXT_PUBLIC_*` vars are exposed to the browser — never put secrets there
 

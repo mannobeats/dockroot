@@ -56,23 +56,30 @@ Two-part layout (icon rail + expandable panel):
 To add nav items, edit the `navItems` array in `sidebar.tsx`.
 To customize the panel content, edit the filter/tag sections in the expandable panel JSX.
 
-## Docker
+## Deployment Architecture
 
-The project includes a unified `docker-compose.yaml` that runs both the app and PostgreSQL:
+Dockroot has two explicit runtime modes:
 
 ```bash
-# Development (DB only, app runs locally)
-docker compose up postgres
-
-# Production (full stack)
-docker compose up --build
+make dev-lite   # Host app + PostgreSQL
+make dev-full   # Host app + PostgreSQL + monitoring stack
+make prod-up    # Full Docker deployment
 ```
 
-- **App** builds from `Dockerfile` (multi-stage, pnpm + Node.js, standalone output)
-- **PostgreSQL** uses `postgres:17-alpine` with health checks
-- App waits for DB health before starting (`depends_on: condition: service_healthy`)
-- Real env vars loaded from root `.env.local` via `env_file`; `DATABASE_URL` is overridden to use Docker internal DNS (`postgres:5432`)
-- **Auto-migration** — `start.sh` runs Drizzle migrations before starting the app, so a fresh database gets all tables (auth, etc.) automatically
+- `compose.dev-infra.yml` runs local infrastructure for host development
+- `docker-compose.yaml` runs the full Docker deployment with the published Dockroot image
+- `.env.local` is only for host development
+- `.env` is only for Docker deployments
+- Docker deployments inject internal service URLs for `DATABASE_URL`, `PROMETHEUS_URL`, and `DOCKROOT_DATA_DIR`
+- `start.sh` validates runtime env, runs Drizzle migrations, then starts the app server
+
+### Runtime Topology
+
+- **Host development**
+  `pnpm dev` runs on the host and talks to Dockerized PostgreSQL and monitoring services on localhost
+- **Docker deployment**
+  App, PostgreSQL, Prometheus, cAdvisor, and node-exporter run together in Compose
+  The app talks to sibling services over Docker DNS (`postgres`, `prometheus`)
 
 ### Migration Flow
 

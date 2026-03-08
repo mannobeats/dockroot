@@ -1,39 +1,17 @@
 services:
-  app:
-    image: ${DOCKROOT_IMAGE:-ghcr.io/mannobeats/dockroot:latest}
-    restart: unless-stopped
-    env_file:
-      - .env
-    environment:
-      HOSTNAME: 0.0.0.0
-      PORT: 3080
-      DATABASE_URL: postgresql://dockroot:${POSTGRES_PASSWORD}@postgres:5432/dockroot
-      DOCKROOT_DATA_DIR: /var/lib/dockroot
-      PROMETHEUS_URL: http://prometheus:9090
-      DOCKROOT_MANAGER_COMPOSE_PROJECT: ${COMPOSE_PROJECT_NAME:-dockroot}
-      APP_METRICS_TARGET: app:3080
-    ports:
-      - "3080:3080"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      prometheus:
-        condition: service_started
-    volumes:
-      - dockroot_data:/var/lib/dockroot
-      - /var/run/docker.sock:/var/run/docker.sock
-
   postgres:
     image: postgres:17-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: dockroot
-      POSTGRES_USER: dockroot
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-dockroot}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - dockroot_dev_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dockroot -d dockroot"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-dockroot}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -42,16 +20,18 @@ services:
     image: prom/prometheus:v3.5.0
     restart: unless-stopped
     environment:
-      APP_METRICS_TARGET: app:3080
+      APP_METRICS_TARGET: host.docker.internal:3080
       METRICS_BEARER_TOKEN: ${METRICS_BEARER_TOKEN}
     entrypoint:
       - /bin/sh
       - /etc/dockroot/prometheus/start-prometheus.sh
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "9090:9090"
     volumes:
       - ./infra/prometheus/start-prometheus.sh:/etc/dockroot/prometheus/start-prometheus.sh:ro
-      - prometheus_data:/prometheus
+      - dockroot_dev_prometheus_data:/prometheus
 
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:v0.52.1
@@ -79,6 +59,5 @@ services:
       - /:/host:ro
 
 volumes:
-  dockroot_data:
-  postgres_data:
-  prometheus_data:
+  dockroot_dev_postgres_data:
+  dockroot_dev_prometheus_data:

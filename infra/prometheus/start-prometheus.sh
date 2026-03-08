@@ -2,6 +2,8 @@
 set -eu
 
 CONFIG_FILE=/tmp/prometheus.yml
+APP_TARGET="${APP_METRICS_TARGET:-app:3080}"
+HOST_TARGET="${DEV_HOST_METRICS_TARGET:-}"
 
 cat > "$CONFIG_FILE" <<EOF
 global:
@@ -27,27 +29,35 @@ fi
 
 cat >> "$CONFIG_FILE" <<EOF
     static_configs:
-      - targets: ["app:3000"]
+      - targets: ["${APP_TARGET}"]
         labels:
           service: dockroot-manager
+EOF
+
+if [ -n "$HOST_TARGET" ]; then
+	cat >> "$CONFIG_FILE" <<EOF
 
   - job_name: dockroot_host_dev
     metrics_path: /api/metrics
 EOF
 
-if [ -n "${METRICS_BEARER_TOKEN:-}" ]; then
-	cat >> "$CONFIG_FILE" <<EOF
+	if [ -n "${METRICS_BEARER_TOKEN:-}" ]; then
+		cat >> "$CONFIG_FILE" <<EOF
     authorization:
       type: Bearer
       credentials: ${METRICS_BEARER_TOKEN}
 EOF
+	fi
+
+	cat >> "$CONFIG_FILE" <<EOF
+    static_configs:
+      - targets: ["${HOST_TARGET}"]
+        labels:
+          service: dockroot-host-dev
+EOF
 fi
 
 cat >> "$CONFIG_FILE" <<EOF
-    static_configs:
-      - targets: ["host.docker.internal:3000"]
-        labels:
-          service: dockroot-host-dev
 
   - job_name: cadvisor
     static_configs:

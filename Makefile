@@ -2,20 +2,27 @@ SHELL := /bin/sh
 
 PNPM := pnpm
 DOCKER_COMPOSE := docker compose
-ENV_FILE := .env.local
-ENV_EXAMPLE := .env.example
+DOTENV := $(PNPM) exec dotenv
+LOCAL_ENV_FILE := .env.local
+LOCAL_ENV_EXAMPLE := .env.local.example
+COMPOSE_ENV_FILE := .env
+COMPOSE_ENV_EXAMPLE := .env.example
+DEV_INFRA_COMPOSE_FILE := compose.dev-infra.yml
+PROD_COMPOSE_FILE := docker-compose.yaml
 LOCAL_INFRA_SERVICES := postgres prometheus cadvisor node-exporter
 NEXT_DEV_LOCK := apps/web/.next/dev/lock
 
-.PHONY: help install env env-check dev-prepare dev dev-full build start lint format docker-build docker-up docker-down docker-logs db-push db-generate db-migrate db-studio infra-up infra-down postgres-up postgres-down clean
+.PHONY: help install env-local env-compose env-check-local env-check-compose dev-prepare dev-lite dev-full dev build start lint format prod-up prod-down prod-logs docker-up docker-down docker-logs db-push db-generate db-migrate db-studio infra-up infra-down postgres-up postgres-down clean
 
 help:
 	@printf "\nDockroot Commands\n\n"
 	@printf "  make install      Install workspace dependencies\n"
-	@printf "  make env          Create %s from %s if missing\n" "$(ENV_FILE)" "$(ENV_EXAMPLE)"
-	@printf "  make env-check    Validate local environment configuration\n"
-	@printf "  make dev          Start local app with Docker infra for live UI changes\n"
-	@printf "  make dev-full     Install deps, validate env, sync schema, and start local app\n"
+	@printf "  make env-local    Create %s from %s if missing\n" "$(LOCAL_ENV_FILE)" "$(LOCAL_ENV_EXAMPLE)"
+	@printf "  make env-compose  Create %s from %s if missing\n" "$(COMPOSE_ENV_FILE)" "$(COMPOSE_ENV_EXAMPLE)"
+	@printf "  make env-check-local   Validate host development env\n"
+	@printf "  make env-check-compose Validate Docker deployment env\n"
+	@printf "  make dev-lite     Run host app with PostgreSQL only\n"
+	@printf "  make dev-full     Run host app with full local infra (DB + monitoring)\n"
 	@printf "  make build        Build the web app\n"
 	@printf "  make start        Start the built web app\n"
 	@printf "  make lint         Run Biome checks\n"
@@ -28,58 +35,65 @@ help:
 	@printf "  make db-generate  Generate Drizzle migrations\n"
 	@printf "  make db-migrate   Run Drizzle migrations\n"
 	@printf "  make db-studio    Open Drizzle Studio\n"
-	@printf "  make docker-build Build the app image\n"
-	@printf "  make docker-up    Start the full platform stack in Docker\n"
-	@printf "  make docker-down  Stop Docker services\n"
-	@printf "  make docker-logs  Tail Docker logs\n"
+	@printf "  make prod-up      Start the full platform stack in Docker\n"
+	@printf "  make prod-down    Stop the full platform stack\n"
+	@printf "  make prod-logs    Tail production stack logs\n"
 	@printf "  make clean        Remove local build output\n\n"
 
 install:
 	$(PNPM) install
 
-env:
-	@if [ ! -f "$(ENV_FILE)" ]; then cp "$(ENV_EXAMPLE)" "$(ENV_FILE)"; fi
+env-local:
+	@if [ ! -f "$(LOCAL_ENV_FILE)" ]; then cp "$(LOCAL_ENV_EXAMPLE)" "$(LOCAL_ENV_FILE)"; fi
 
-env-check: env
-	$(PNPM) run env:check
+env-compose:
+	@if [ ! -f "$(COMPOSE_ENV_FILE)" ]; then cp "$(COMPOSE_ENV_EXAMPLE)" "$(COMPOSE_ENV_FILE)"; fi
+
+env-check-local: env-local
+	$(DOTENV) -e $(LOCAL_ENV_FILE) -- node runtime-env.mjs
+
+env-check-compose: env-compose
+	$(DOTENV) -e $(COMPOSE_ENV_FILE) -- node runtime-env.mjs --production --compose
 
 dev-prepare:
 	rm -f $(NEXT_DEV_LOCK)
 
-infra-up: env-check
-	$(DOCKER_COMPOSE) up -d $(LOCAL_INFRA_SERVICES)
+infra-up: env-check-local
+	$(DOCKER_COMPOSE) --env-file $(LOCAL_ENV_FILE) -f $(DEV_INFRA_COMPOSE_FILE) up -d $(LOCAL_INFRA_SERVICES)
 
 infra-down:
-	$(DOCKER_COMPOSE) stop $(LOCAL_INFRA_SERVICES)
+	$(DOCKER_COMPOSE) --env-file $(LOCAL_ENV_FILE) -f $(DEV_INFRA_COMPOSE_FILE) stop $(LOCAL_INFRA_SERVICES)
 
-postgres-up: env-check
-	$(DOCKER_COMPOSE) up -d postgres
+postgres-up: env-check-local
+	$(DOCKER_COMPOSE) --env-file $(LOCAL_ENV_FILE) -f $(DEV_INFRA_COMPOSE_FILE) up -d postgres
 
 postgres-down:
-	$(DOCKER_COMPOSE) stop postgres
+	$(DOCKER_COMPOSE) --env-file $(LOCAL_ENV_FILE) -f $(DEV_INFRA_COMPOSE_FILE) stop postgres
 
-db-push: env-check
+db-push: env-check-local
 	$(PNPM) run db:push
 
-db-generate: env-check
+db-generate: env-check-local
 	$(PNPM) run db:generate
 
-db-migrate: env-check
+db-migrate: env-check-local
 	$(PNPM) run db:migrate
 
-db-studio: env-check
+db-studio: env-check-local
 	$(PNPM) run db:studio
 
-dev: dev-prepare infra-up
+dev-lite: dev-prepare postgres-up
 	$(PNPM) dev
 
-dev-full: dev-prepare env install env-check infra-up db-push
+dev-full: dev-prepare env-local install env-check-local infra-up db-push
 	$(PNPM) dev
 
-build: env-check
+dev: dev-full
+
+build: env-check-local
 	$(PNPM) build
 
-start: env-check
+start: env-check-local
 	$(PNPM) start
 
 lint:
@@ -88,17 +102,18 @@ lint:
 format:
 	$(PNPM) format
 
-docker-build: env-check
-	$(DOCKER_COMPOSE) build
+prod-up: env-check-compose
+	$(DOCKER_COMPOSE) --env-file $(COMPOSE_ENV_FILE) -f $(PROD_COMPOSE_FILE) up -d
 
-docker-up: env-check
-	$(DOCKER_COMPOSE) up --build -d
+prod-down:
+	$(DOCKER_COMPOSE) --env-file $(COMPOSE_ENV_FILE) -f $(PROD_COMPOSE_FILE) down
 
-docker-down:
-	$(DOCKER_COMPOSE) down
+prod-logs:
+	$(DOCKER_COMPOSE) --env-file $(COMPOSE_ENV_FILE) -f $(PROD_COMPOSE_FILE) logs -f
 
-docker-logs:
-	$(DOCKER_COMPOSE) logs -f
+docker-up: prod-up
+docker-down: prod-down
+docker-logs: prod-logs
 
 clean:
 	rm -rf apps/web/.next

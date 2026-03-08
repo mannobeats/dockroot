@@ -36,7 +36,10 @@ function hasAmbiguousDatabaseCredentials(databaseUrl) {
 	return (match[1].match(/@/g) ?? []).length > 0;
 }
 
-export function validateRuntimeEnv({ production = process.env.NODE_ENV === "production" } = {}) {
+export function validateRuntimeEnv({
+	production = process.env.NODE_ENV === "production",
+	compose = false,
+} = {}) {
 	const errors = [];
 	const warnings = [];
 
@@ -47,14 +50,19 @@ export function validateRuntimeEnv({ production = process.env.NODE_ENV === "prod
 	const tokenPepper = readEnv("DOCKROOT_TOKEN_PEPPER");
 	const metricsToken = readEnv("METRICS_BEARER_TOKEN");
 
-	for (const [name, value] of [
-		["DATABASE_URL", databaseUrl],
+	const requiredPairs = [
 		["BETTER_AUTH_SECRET", betterAuthSecret],
 		["BETTER_AUTH_URL", betterAuthUrl],
 		["NEXT_PUBLIC_APP_URL", appUrl],
 		["DOCKROOT_TOKEN_PEPPER", tokenPepper],
 		["METRICS_BEARER_TOKEN", metricsToken],
-	]) {
+	];
+
+	if (!compose) {
+		requiredPairs.unshift(["DATABASE_URL", databaseUrl]);
+	}
+
+	for (const [name, value] of requiredPairs) {
 		if (!value) {
 			errors.push(`Missing required environment variable: ${name}`);
 		}
@@ -129,7 +137,8 @@ export function validateRuntimeEnv({ production = process.env.NODE_ENV === "prod
 
 function main() {
 	const production = process.argv.includes("--production") || process.env.NODE_ENV === "production";
-	const { errors, warnings } = validateRuntimeEnv({ production });
+	const compose = process.argv.includes("--compose");
+	const { errors, warnings } = validateRuntimeEnv({ production, compose });
 
 	if (warnings.length > 0) {
 		console.warn("Environment warnings:");

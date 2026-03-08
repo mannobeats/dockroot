@@ -26,7 +26,7 @@
 | pnpm | Package manager (`pnpm install`, `pnpm dev`) |
 | Node.js 22 | Runtime for local dev, builds, and container startup |
 | Biome v2 | Linting + formatting (replaces ESLint + Prettier) |
-| Docker | PostgreSQL container, production builds |
+| Docker | Local infra services and full single-host deployment |
 | Turbopack | Dev server bundler (via `next dev --turbopack`) |
 
 ## Key Libraries
@@ -62,34 +62,40 @@ pnpm build             # Production build
 pnpm lint              # Check with Biome
 pnpm lint:fix          # Auto-fix with Biome
 pnpm format            # Format with Biome
-pnpm run db:push       # Push schema to database
+pnpm run db:push       # Push schema to the local development database
 pnpm run db:generate   # Generate migrations
 pnpm run db:migrate    # Run migrations
 pnpm run db:studio     # Open Drizzle Studio
 ```
 
-## Docker
+## Deployment
+
+Preferred commands:
 
 ```bash
-docker compose up postgres          # Dev: DB only (run app locally with pnpm dev)
-docker compose up --build           # Production: full stack (app + DB)
-docker compose up --build -d        # Production: detached mode
-docker compose down                 # Stop all services
-docker compose down -v              # Stop + remove volumes (resets DB)
+make dev-lite           # Host app + PostgreSQL
+make dev-full           # Host app + PostgreSQL + monitoring stack
+make prod-up            # Full Docker deployment
+make prod-down          # Stop the Docker deployment
+make prod-logs          # Tail the Docker deployment logs
 ```
 
 - `Dockerfile` — Multi-stage Node.js build with standalone Next.js output
-- `docker-compose.yaml` — App + PostgreSQL, health checks, env_file support
+- `compose.dev-infra.yml` — Local infrastructure for host-run development
+- `docker-compose.yaml` — Full Docker deployment with app, database, and monitoring
 - `.dockerignore` — Excludes node_modules, app build output, and local env files from build context
 
 ## Environment Variables
 
 ```
 DATABASE_URL          # PostgreSQL connection string
+POSTGRES_PASSWORD     # Compose deployment database password
 BETTER_AUTH_SECRET    # Auth encryption secret (change in production!)
 BETTER_AUTH_URL       # Auth base URL
 BETTER_AUTH_TRUSTED_ORIGINS # Optional comma-separated extra trusted origins
 SESSION_COOKIE_SECURE # Optional override for secure auth cookies
 NEXT_PUBLIC_APP_NAME  # App display name
 NEXT_PUBLIC_APP_URL   # Public app URL
+PROMETHEUS_URL        # Metrics backend URL (injected by Docker deployment)
+DOCKROOT_DATA_DIR     # Dockroot data directory (injected by Docker deployment)
 ```
