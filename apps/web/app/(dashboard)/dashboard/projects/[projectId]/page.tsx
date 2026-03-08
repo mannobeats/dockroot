@@ -1,6 +1,7 @@
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import {
+	createGitHubStackAction,
 	createStackAction,
 	deployStackAction,
 	destroyStackAction,
@@ -8,8 +9,10 @@ import {
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { PageHeader } from "@/components/page-header";
 import { StackComposeForm } from "@/components/stack-compose-form";
+import { StackGitHubForm } from "@/components/stack-github-form";
 import { StatusBadge } from "@/components/status-badge";
-import { getProjectById, listEnvironments } from "@/lib/platform";
+import { isGitHubAppConfigured } from "@/lib/github-app";
+import { getProjectById, listEnvironments, listGitHubInstallations } from "@/lib/platform";
 import { getServerSession } from "@/lib/session";
 
 export default async function ProjectDetailPage({
@@ -24,9 +27,10 @@ export default async function ProjectDetailPage({
 	}
 
 	const { projectId } = await params;
-	const [project, environments] = await Promise.all([
+	const [project, environments, githubInstallations] = await Promise.all([
 		getProjectById(projectId, session.user.id),
 		listEnvironments(session.user.id),
+		listGitHubInstallations(session.user.id),
 	]);
 
 	if (!project) {
@@ -79,6 +83,9 @@ export default async function ProjectDetailPage({
 											<div className="mt-3 flex flex-wrap gap-3 text-xs text-muted">
 												<span>Environment: {stack.environment.name}</span>
 												<span>Slug: {stack.slug}</span>
+												<span>
+													Source: {stack.sourceType === "github" ? "GitHub App" : "Manual Compose"}
+												</span>
 												<span>{stack.envFileContent ? "Env file configured" : "No env file"}</span>
 											</div>
 										</div>
@@ -134,6 +141,13 @@ export default async function ProjectDetailPage({
 											<div className="mt-3 space-y-2 text-sm text-muted">
 												<p>{stack.composeFileName}</p>
 												<p>{stack.envFileName || ".env"}</p>
+												{stack.sourceType === "github" &&
+												stack.githubOwner &&
+												stack.githubRepository ? (
+													<p>
+														{stack.githubOwner}/{stack.githubRepository}
+													</p>
+												) : null}
 											</div>
 										</div>
 									</div>
@@ -173,6 +187,28 @@ export default async function ProjectDetailPage({
 								kind: environment.kind,
 							}))}
 							action={createStackAction}
+						/>
+					</div>
+
+					<div className="rounded-2xl border border-default/15 bg-surface p-5">
+						<div className="mb-4">
+							<h2 className="text-lg font-semibold tracking-tight">Create GitHub stack</h2>
+							<p className="mt-1 text-sm text-muted">
+								Connect the GitHub App once, pick a repository, then deploy public or private
+								repositories without tokens.
+							</p>
+						</div>
+						<StackGitHubForm
+							projectId={project.id}
+							environments={environments.map((environment) => ({
+								id: environment.id,
+								name: environment.name,
+								kind: environment.kind,
+							}))}
+							installations={githubInstallations}
+							redirectTo={`/dashboard/projects/${project.id}`}
+							appConfigured={isGitHubAppConfigured()}
+							action={createGitHubStackAction}
 						/>
 					</div>
 				</section>

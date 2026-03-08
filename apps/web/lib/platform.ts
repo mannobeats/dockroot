@@ -1,8 +1,22 @@
 import "server-only";
 
-import { agents, db, deployments, environments, projects, stacks } from "@dockroot/db";
+import {
+	agents,
+	db,
+	deployments,
+	environments,
+	githubInstallations,
+	projects,
+	stacks,
+} from "@dockroot/db";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import {
+	fetchRepositoryTextFile,
+	getGitHubInstallation,
+	getRepositoryBranchHeadSha,
+	listInstallationRepositories,
+} from "@/lib/github-app";
 import { incrementDeploymentEvent } from "@/lib/monitoring";
 import { deployStackLocally, getLocalDockerSnapshot } from "@/lib/platform/docker";
 import { getPlatformDataDir } from "@/lib/platform/fs";
@@ -228,6 +242,42 @@ export async function listProjects(userId: string) {
 	});
 }
 
+export async function listGitHubInstallations(userId: string) {
+	if (
+		!process.env.GITHUB_APP_ID ||
+		!process.env.GITHUB_APP_PRIVATE_KEY ||
+		!process.env.GITHUB_APP_SLUG
+	) {
+		return [];
+	}
+
+	const installations = await db.query.githubInstallations.findMany({
+		where: eq(githubInstallations.createdByUserId, userId),
+		orderBy: [desc(githubInstallations.updatedAt)],
+	});
+
+	const hydrated = await Promise.all(
+		installations.map(async (installation) => {
+			try {
+				const repositories = await listInstallationRepositories(installation.githubInstallationId);
+				return {
+					...installation,
+					repositories,
+				};
+			} catch (error) {
+				return {
+					...installation,
+					repositories: [],
+					repositoryError:
+						error instanceof Error ? error.message : "Unable to load installation repositories.",
+				};
+			}
+		}),
+	);
+
+	return hydrated;
+}
+
 export async function listEnvironments(userId: string) {
 	await ensureDefaultLocalEnvironment(userId);
 
@@ -425,6 +475,165 @@ export async function createStack({
 	revalidatePath(`/dashboard/projects/${projectId}`);
 }
 
+export async function syncGitHubInstallation({
+	userId,
+	githubInstallationId,
+}: {
+	userId: string;
+	githubInstallationId: string;
+}) {
+	const installation = await getGitHubInstallation(githubInstallationId);
+	const existing = await db.query.githubInstallations.findFirst({
+		where: eq(githubInstallations.githubInstallationId, githubInstallationId),
+	});
+	const updatedAt = now();
+
+	if (existing) {
+		await db
+			.update(githubInstallations)
+			.set({
+				accountLogin: installation.account.login,
+				accountType: installation.account.type,
+				appSlug: installation.app_slug,
+				updatedAt,
+			})
+			.where(eq(githubInstallations.id, existing.id));
+
+		return existing.id;
+	}
+
+	const id = crypto.randomUUID();
+	await db.insert(githubInstallations).values({
+		id,
+		githubInstallationId,
+		accountLogin: installation.account.login,
+		accountType: installation.account.type,
+		appSlug: installation.app_slug,
+		createdByUserId: userId,
+		createdAt: updatedAt,
+		updatedAt,
+	});
+
+	return id;
+}
+
+async function materializeGitHubStackSource(input: {
+	githubInstallationId: string;
+	owner: string;
+	repository: string;
+	branch: string;
+	composePath: string;
+	envPath?: string;
+}) {
+	const compose = await fetchRepositoryTextFile({
+		installationId: input.githubInstallationId,
+		owner: input.owner,
+		repository: input.repository,
+		path: input.composePath,
+		ref: input.branch,
+	});
+	const envFile = input.envPath
+		? await fetchRepositoryTextFile({
+				installationId: input.githubInstallationId,
+				owner: input.owner,
+				repository: input.repository,
+				path: input.envPath,
+				ref: input.branch,
+			})
+		: null;
+	const headSha = await getRepositoryBranchHeadSha({
+		installationId: input.githubInstallationId,
+		owner: input.owner,
+		repository: input.repository,
+		branch: input.branch,
+	});
+
+	return {
+		composeYaml: compose.text,
+		envFileContent: envFile?.text ?? null,
+		sourceCommitSha: headSha,
+	};
+}
+
+export async function createGitHubStack({
+	userId,
+	projectId,
+	environmentId,
+	name,
+	description,
+	installationId,
+	repositoryId,
+	owner,
+	repository,
+	branch,
+	composePath,
+	envPath,
+}: {
+	userId: string;
+	projectId: string;
+	environmentId: string;
+	name: string;
+	description?: string;
+	installationId: string;
+	repositoryId?: string;
+	owner: string;
+	repository: string;
+	branch: string;
+	composePath: string;
+	envPath?: string;
+}) {
+	const installation = await db.query.githubInstallations.findFirst({
+		where: and(
+			eq(githubInstallations.id, installationId),
+			eq(githubInstallations.createdByUserId, userId),
+		),
+	});
+
+	if (!installation) {
+		throw new Error("GitHub installation not found");
+	}
+
+	const source = await materializeGitHubStackSource({
+		githubInstallationId: installation.githubInstallationId,
+		owner,
+		repository,
+		branch,
+		composePath,
+		envPath,
+	});
+	const createdAt = now();
+	const slug = await ensureUniqueStackSlug(name);
+
+	await db.insert(stacks).values({
+		id: crypto.randomUUID(),
+		projectId,
+		environmentId,
+		name,
+		slug,
+		description: description?.trim() || null,
+		sourceType: "github",
+		status: "draft",
+		composeYaml: source.composeYaml,
+		composeFileName: composePath.split("/").at(-1) || "compose.yaml",
+		envFileContent: source.envFileContent,
+		envFileName: envPath?.split("/").at(-1) || ".env",
+		githubInstallationId: installation.id,
+		githubRepositoryId: repositoryId || null,
+		githubOwner: owner,
+		githubRepository: repository,
+		githubBranch: branch,
+		githubPath: composePath,
+		githubEnvPath: envPath || null,
+		createdByUserId: userId,
+		createdAt,
+		updatedAt: createdAt,
+	});
+
+	revalidatePath("/dashboard");
+	revalidatePath("/dashboard/projects");
+	revalidatePath(`/dashboard/projects/${projectId}`);
+}
+
 export async function queueOrRunDeployment({
 	stackId,
 	userId,
@@ -437,6 +646,7 @@ export async function queueOrRunDeployment({
 	const stack = await db.query.stacks.findFirst({
 		where: and(eq(stacks.id, stackId), eq(stacks.createdByUserId, userId)),
 		with: {
+			githubInstallation: true,
 			environment: {
 				with: {
 					agent: true,
@@ -453,6 +663,24 @@ export async function queueOrRunDeployment({
 	const createdAt = now();
 	const deploymentId = crypto.randomUUID();
 	const version = `${createdAt.getUTCFullYear()}.${String(createdAt.getUTCMonth() + 1).padStart(2, "0")}.${String(createdAt.getUTCDate()).padStart(2, "0")}-${createdAt.getTime()}`;
+	const githubSource =
+		stack.sourceType === "github" &&
+		stack.githubInstallation &&
+		stack.githubOwner &&
+		stack.githubRepository &&
+		stack.githubBranch &&
+		stack.githubPath
+			? await materializeGitHubStackSource({
+					githubInstallationId: stack.githubInstallation.githubInstallationId,
+					owner: stack.githubOwner,
+					repository: stack.githubRepository,
+					branch: stack.githubBranch,
+					composePath: stack.githubPath,
+					envPath: stack.githubEnvPath || undefined,
+				})
+			: null;
+	const composeSnapshot = githubSource?.composeYaml ?? stack.composeYaml;
+	const envSnapshot = githubSource?.envFileContent ?? stack.envFileContent;
 
 	await db.insert(deployments).values({
 		id: deploymentId,
@@ -462,8 +690,9 @@ export async function queueOrRunDeployment({
 		operation,
 		version,
 		status: stack.environment.kind === "local" ? "running" : "queued",
-		composeSnapshot: stack.composeYaml,
-		envSnapshot: stack.envFileContent,
+		composeSnapshot,
+		envSnapshot,
+		sourceCommitSha: githubSource?.sourceCommitSha ?? null,
 		startedAt: stack.environment.kind === "local" ? createdAt : null,
 		createdAt,
 		updatedAt: createdAt,
@@ -472,6 +701,8 @@ export async function queueOrRunDeployment({
 	await db
 		.update(stacks)
 		.set({
+			composeYaml: composeSnapshot,
+			envFileContent: envSnapshot,
 			status: stack.environment.kind === "local" ? "deploying" : "queued",
 			updatedAt: createdAt,
 		})
@@ -491,8 +722,8 @@ export async function queueOrRunDeployment({
 			deploymentId,
 			stackId: stack.id,
 			stackSlug: stack.slug,
-			composeYaml: stack.composeYaml,
-			envFileContent: stack.envFileContent,
+			composeYaml: composeSnapshot,
+			envFileContent: envSnapshot,
 			operation,
 		});
 	}
@@ -763,4 +994,40 @@ export async function getPendingDeploymentById(id: string) {
 	return db.query.deployments.findFirst({
 		where: and(eq(deployments.id, id), isNull(deployments.finishedAt)),
 	});
+}
+
+export async function triggerGitHubPushDeploy(input: {
+	githubInstallationId: string;
+	owner: string;
+	repository: string;
+	branch: string;
+}) {
+	const installation = await db.query.githubInstallations.findFirst({
+		where: eq(githubInstallations.githubInstallationId, input.githubInstallationId),
+	});
+
+	if (!installation) {
+		return;
+	}
+
+	const matchingStacks = await db.query.stacks.findMany({
+		where: and(
+			eq(stacks.githubInstallationId, installation.id),
+			eq(stacks.githubOwner, input.owner),
+			eq(stacks.githubRepository, input.repository),
+			eq(stacks.githubBranch, input.branch),
+		),
+		columns: {
+			id: true,
+			createdByUserId: true,
+		},
+	});
+
+	for (const stack of matchingStacks) {
+		await queueOrRunDeployment({
+			stackId: stack.id,
+			userId: stack.createdByUserId,
+			operation: "deploy",
+		});
+	}
 }

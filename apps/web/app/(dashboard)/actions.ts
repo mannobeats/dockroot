@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
 	createEnvironment,
+	createGitHubStack,
 	createProject,
 	createStack,
 	queueOrRunDeployment,
@@ -84,6 +85,52 @@ export async function createStackAction(formData: FormData) {
 		description,
 		composeYaml,
 		envFileContent,
+	});
+
+	redirect(`/dashboard/projects/${projectId}`);
+}
+
+export async function createGitHubStackAction(formData: FormData) {
+	const userId = await requireUserId();
+	const projectId = getValue(formData, "projectId");
+	const environmentId = getValue(formData, "environmentId");
+	const installationId = getValue(formData, "installationId");
+	const repositoryId = getValue(formData, "repositoryId");
+	const owner = getValue(formData, "owner");
+	const repository = getValue(formData, "repository");
+	const branch = getValue(formData, "branch");
+	const composePath = getValue(formData, "composePath");
+	const envPath = getValue(formData, "envPath");
+	const name = getValue(formData, "name") || repository;
+	const description = getValue(formData, "description");
+
+	if (
+		!projectId ||
+		!environmentId ||
+		!installationId ||
+		!owner ||
+		!repository ||
+		!branch ||
+		!composePath
+	) {
+		throw new Error(
+			"Project, environment, installation, repository, branch, and compose path are required",
+		);
+	}
+
+	await createGitHubStack({
+		userId,
+		projectId,
+		environmentId,
+		installationId,
+		repositoryId,
+		owner,
+		repository,
+		branch,
+		composePath,
+		envPath: envPath || undefined,
+		name,
+		description,
 	});
 
 	redirect(`/dashboard/projects/${projectId}`);

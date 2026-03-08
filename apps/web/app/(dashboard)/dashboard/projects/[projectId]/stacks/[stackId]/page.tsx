@@ -81,6 +81,17 @@ export default async function StackWorkspacePage({
 							<h2 className="text-lg font-semibold tracking-tight">Source files</h2>
 							<StatusBadge status={stack.status} />
 						</div>
+						<div className="mt-3 flex flex-wrap gap-3 text-xs text-muted">
+							<span>Source: {stack.sourceType === "github" ? "GitHub App" : "Manual Compose"}</span>
+							{stack.sourceType === "github" && stack.githubOwner && stack.githubRepository ? (
+								<span>
+									Repository: {stack.githubOwner}/{stack.githubRepository}
+								</span>
+							) : null}
+							{stack.sourceType === "github" && stack.githubBranch ? (
+								<span>Branch: {stack.githubBranch}</span>
+							) : null}
+						</div>
 						<div className="mt-5 grid gap-4 xl:grid-cols-[1.35fr_0.75fr]">
 							<div className="overflow-hidden rounded-xl border border-default/15">
 								<div className="border-b border-default/10 px-4 py-3">

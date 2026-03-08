@@ -91,6 +91,28 @@ export const agents = pgTable(
 	],
 );
 
+export const githubInstallations = pgTable(
+	"github_installations",
+	{
+		id: text("id").primaryKey(),
+		githubInstallationId: text("github_installation_id").notNull(),
+		accountLogin: text("account_login").notNull(),
+		accountType: text("account_type"),
+		appSlug: text("app_slug"),
+		createdByUserId: text("created_by_user_id")
+			.notNull()
+			.references(() => user.id, { onDelete: "cascade" }),
+		createdAt: timestamp("created_at").notNull(),
+		updatedAt: timestamp("updated_at").notNull(),
+	},
+	(table) => [
+		uniqueIndex("github_installations_github_installation_id_unique").on(
+			table.githubInstallationId,
+		),
+		index("github_installations_user_idx").on(table.createdByUserId),
+	],
+);
+
 export const stacks = pgTable(
 	"stacks",
 	{
@@ -110,10 +132,15 @@ export const stacks = pgTable(
 		composeFileName: text("compose_file_name").notNull().default("compose.yaml"),
 		envFileContent: text("env_file_content"),
 		envFileName: text("env_file_name").default(".env"),
+		githubInstallationId: text("github_installation_id").references(() => githubInstallations.id, {
+			onDelete: "set null",
+		}),
+		githubRepositoryId: text("github_repository_id"),
 		githubOwner: text("github_owner"),
 		githubRepository: text("github_repository"),
 		githubBranch: text("github_branch"),
 		githubPath: text("github_path"),
+		githubEnvPath: text("github_env_path"),
 		lastDeployedAt: timestamp("last_deployed_at"),
 		createdByUserId: text("created_by_user_id")
 			.notNull()
@@ -146,6 +173,7 @@ export const deployments = pgTable(
 		status: deploymentStatusEnum("status").notNull().default("queued"),
 		composeSnapshot: text("compose_snapshot").notNull(),
 		envSnapshot: text("env_snapshot"),
+		sourceCommitSha: text("source_commit_sha"),
 		log: text("log"),
 		summary: text("summary"),
 		startedAt: timestamp("started_at"),
@@ -186,6 +214,14 @@ export const agentRelations = relations(agents, ({ one }) => ({
 	}),
 }));
 
+export const githubInstallationRelations = relations(githubInstallations, ({ many, one }) => ({
+	stacks: many(stacks),
+	createdBy: one(user, {
+		fields: [githubInstallations.createdByUserId],
+		references: [user.id],
+	}),
+}));
+
 export const stackRelations = relations(stacks, ({ many, one }) => ({
 	project: one(projects, {
 		fields: [stacks.projectId],
@@ -194,6 +230,10 @@ export const stackRelations = relations(stacks, ({ many, one }) => ({
 	environment: one(environments, {
 		fields: [stacks.environmentId],
 		references: [environments.id],
+	}),
+	githubInstallation: one(githubInstallations, {
+		fields: [stacks.githubInstallationId],
+		references: [githubInstallations.id],
 	}),
 	deployments: many(deployments),
 	createdBy: one(user, {
