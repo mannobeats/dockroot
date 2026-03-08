@@ -69,6 +69,8 @@ The example below is the recommended single-host deployment. It runs Dockroot, P
 ### 1. Create a `.env`
 
 ```dotenv
+POSTGRES_PASSWORD=replace-with-a-strong-database-password
+
 BETTER_AUTH_SECRET=replace-with-a-strong-random-secret
 BETTER_AUTH_URL=https://dockroot.example.com
 BETTER_AUTH_TRUSTED_ORIGINS=https://dockroot.example.com
@@ -80,14 +82,6 @@ NEXT_PUBLIC_APP_URL=https://dockroot.example.com
 DOCKROOT_ALLOW_PUBLIC_SIGNUP=false
 DOCKROOT_TOKEN_PEPPER=replace-with-a-second-strong-random-secret
 METRICS_BEARER_TOKEN=replace-with-a-third-strong-random-secret
-
-DATABASE_URL=postgresql://dockroot:dockroot-change-me@postgres:5432/dockroot
-PROMETHEUS_URL=http://prometheus:9090
-DOCKROOT_DATA_DIR=/var/lib/dockroot
-
-POSTGRES_DB=dockroot
-POSTGRES_USER=dockroot
-POSTGRES_PASSWORD=dockroot-change-me
 
 GITHUB_APP_ID=
 GITHUB_APP_SLUG=
@@ -116,9 +110,9 @@ services:
     environment:
       HOSTNAME: 0.0.0.0
       PORT: 3000
-      DATABASE_URL: ${DATABASE_URL}
-      DOCKROOT_DATA_DIR: ${DOCKROOT_DATA_DIR}
-      PROMETHEUS_URL: ${PROMETHEUS_URL}
+      DATABASE_URL: postgresql://dockroot:${POSTGRES_PASSWORD}@postgres:5432/dockroot
+      DOCKROOT_DATA_DIR: /var/lib/dockroot
+      PROMETHEUS_URL: http://prometheus:9090
     ports:
       - "3000:3000"
     depends_on:
@@ -135,13 +129,13 @@ services:
     container_name: dockroot-db
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_DB: dockroot
+      POSTGRES_USER: dockroot
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U dockroot -d dockroot"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -251,6 +245,12 @@ docker compose up -d
 ```
 
 Open Dockroot at `http://localhost:3000` or your configured domain. The first account created becomes the instance `owner`.
+
+The deployment env stays intentionally small:
+
+- `POSTGRES_PASSWORD` is the only database value you set manually.
+- `DATABASE_URL`, `PROMETHEUS_URL`, and `DOCKROOT_DATA_DIR` are derived in Compose so they cannot drift out of sync.
+- Everything else in `.env` is either a real secret or a public URL.
 
 ## GitHub Container Publish Workflow
 
