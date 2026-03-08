@@ -7,6 +7,18 @@ import postgres from "postgres";
 import * as pty from "node-pty";
 import next from "next";
 import { Server as SocketIOServer } from "socket.io";
+import { validateRuntimeEnv } from "./runtime-env.mjs";
+
+const { errors: envErrors, warnings: envWarnings } = validateRuntimeEnv();
+if (envWarnings.length > 0) {
+	for (const warning of envWarnings) {
+		console.warn(`[env] ${warning}`);
+	}
+}
+
+if (envErrors.length > 0) {
+	throw new Error(`Invalid environment configuration:\n- ${envErrors.join("\n- ")}`);
+}
 
 const dev = process.env.NODE_ENV !== "production";
 const hostname = process.env.HOSTNAME || "0.0.0.0";

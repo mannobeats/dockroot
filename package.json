@@ -12,6 +12,8 @@
 	"scripts": {
 		"dev": "dotenv -e .env.local -- node server.mjs",
 		"build": "dotenv -e .env.local -- pnpm --filter @dockroot/web build",
+		"env:check": "dotenv -e .env.local -- node runtime-env.mjs",
+		"env:check:prod": "NODE_ENV=production dotenv -e .env.local -- node runtime-env.mjs --production",
 		"start": "dotenv -e .env.local -- node server.mjs",
 		"lint": "biome check .",
 		"lint:fix": "biome check --write .",

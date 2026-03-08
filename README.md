@@ -68,7 +68,16 @@ The example below is the recommended single-host deployment. It runs Dockroot, P
 
 ### 1. Create a `.env`
 
+Start from the canonical template:
+
+```bash
+cp .env.example .env
+```
+
 ```dotenv
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/dockroot
+POSTGRES_DB=dockroot
+POSTGRES_USER=postgres
 POSTGRES_PASSWORD=replace-with-a-strong-database-password
 
 BETTER_AUTH_SECRET=replace-with-a-strong-random-secret
@@ -78,6 +87,8 @@ SESSION_COOKIE_SECURE=true
 
 NEXT_PUBLIC_APP_NAME=Dockroot
 NEXT_PUBLIC_APP_URL=https://dockroot.example.com
+DOCKROOT_DATA_DIR=.dockroot
+PROMETHEUS_URL=http://localhost:9090
 
 DOCKROOT_ALLOW_PUBLIC_SIGNUP=false
 DOCKROOT_TOKEN_PEPPER=replace-with-a-second-strong-random-secret
@@ -95,6 +106,12 @@ Generate strong values with:
 ```bash
 openssl rand -base64 48
 openssl rand -hex 32
+```
+
+Validate the env before deploying:
+
+```bash
+docker run --rm --env-file .env ghcr.io/mannobeats/dockroot:latest node /app/runtime-env.mjs --production
 ```
 
 ### 2. Create `docker-compose.yml`
@@ -251,6 +268,9 @@ The deployment env stays intentionally small:
 - `POSTGRES_PASSWORD` is the only database value you set manually.
 - `DATABASE_URL`, `PROMETHEUS_URL`, and `DOCKROOT_DATA_DIR` are derived in Compose so they cannot drift out of sync.
 - Everything else in `.env` is either a real secret or a public URL.
+- In production, replace the `localhost` URLs in `.env` with your real app URL. The production compose file ignores the local `DATABASE_URL`, `PROMETHEUS_URL`, and `DOCKROOT_DATA_DIR` values and injects its own internal service URLs.
+
+If Dockroot exits immediately on boot, check the startup logs first. The container now validates the runtime env before migrations and reports common mistakes directly, including missing secrets, placeholder values, localhost production URLs, and broken `DATABASE_URL` passwords with unencoded `@` characters.
 
 ## GitHub Container Publish Workflow
 
@@ -272,6 +292,8 @@ docker compose up -d
 pnpm run db:push
 pnpm dev
 ```
+
+For local development, keep the `localhost` defaults from `.env.example`. They are intentional for `.env.local`.
 
 Useful commands:
 
