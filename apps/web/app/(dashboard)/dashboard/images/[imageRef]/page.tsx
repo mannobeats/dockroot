@@ -1,6 +1,11 @@
 import { ArrowLeft, Lock } from "lucide-react";
 import Link from "next/link";
 import { StatusBadge } from "@/components/status-badge";
+import { Badge } from "@/components/ui/badge";
+import { LinkButton } from "@/components/ui/link-button";
+import { LogBlock } from "@/components/ui/log-block";
+import { MetricCard } from "@/components/ui/metric-card";
+import { Panel, PanelHeader, PanelTitle } from "@/components/ui/panel";
 import { requirePrivilegedPageSession } from "@/lib/authorization";
 import {
 	getImageDetailsForEnvironment,
@@ -43,12 +48,13 @@ export default async function ImageDetailPage({
 			{/* Header */}
 			<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 				<div className="flex items-center gap-3">
-					<Link
+					<LinkButton
 						href={`/dashboard/images?environment=${environment.id}`}
-						className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-default/10 text-muted transition-colors hover:text-foreground"
+						variant="outline"
+						size="icon"
 					>
 						<ArrowLeft className="h-4 w-4" />
-					</Link>
+					</LinkButton>
 					<div>
 						<div className="flex items-center gap-2">
 							<p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted">
@@ -56,13 +62,10 @@ export default async function ImageDetailPage({
 							</p>
 							<StatusBadge status="healthy" />
 							{isProtected ? (
-								<span
-									title="Dockroot protected image"
-									className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400"
-								>
+								<Badge title="Dockroot protected image" variant="warning">
 									<Lock className="h-2.5 w-2.5" />
 									Locked
-								</span>
+								</Badge>
 							) : null}
 						</div>
 						<h1 className="text-lg font-semibold">{decodedRef}</h1>
@@ -72,30 +75,18 @@ export default async function ImageDetailPage({
 
 			{/* Info grid */}
 			<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-				<div className="rounded-xl border border-default/10 bg-surface p-4">
-					<p className="text-xs text-muted">Architecture</p>
-					<p className="mt-1 text-sm font-medium">{String(image.Architecture || "unknown")}</p>
-				</div>
-				<div className="rounded-xl border border-default/10 bg-surface p-4">
-					<p className="text-xs text-muted">OS</p>
-					<p className="mt-1 text-sm font-medium">{String(image.Os || "unknown")}</p>
-				</div>
-				<div className="rounded-xl border border-default/10 bg-surface p-4">
-					<p className="text-xs text-muted">Size</p>
-					<p className="mt-1 text-sm font-medium">{String(image.Size || "unknown")}</p>
-				</div>
-				<div className="rounded-xl border border-default/10 bg-surface p-4">
-					<p className="text-xs text-muted">Containers</p>
-					<p className="mt-1 text-sm font-medium">{attachedContainers.length}</p>
-				</div>
+				<MetricCard label="Architecture" value={String(image.Architecture || "unknown")} valueClassName="text-sm" />
+				<MetricCard label="OS" value={String(image.Os || "unknown")} valueClassName="text-sm" />
+				<MetricCard label="Size" value={String(image.Size || "unknown")} valueClassName="text-sm" />
+				<MetricCard label="Containers" value={attachedContainers.length} valueClassName="text-sm" />
 			</div>
 
 			{/* Runtime usage */}
 			{attachedContainers.length ? (
-				<div className="rounded-xl border border-default/10 bg-surface">
-					<div className="border-b border-default/10 px-4 py-3">
-						<h2 className="text-sm font-semibold">Runtime usage</h2>
-					</div>
+				<Panel>
+					<PanelHeader>
+						<PanelTitle>Runtime usage</PanelTitle>
+					</PanelHeader>
 					<div className="divide-y divide-default/5">
 						{attachedContainers.map((container: Record<string, string>) => (
 							<Link
@@ -111,18 +102,18 @@ export default async function ImageDetailPage({
 							</Link>
 						))}
 					</div>
-				</div>
+				</Panel>
 			) : null}
 
 			{/* Inspect payload */}
-			<div className="rounded-xl border border-default/10 bg-surface">
-				<div className="border-b border-default/10 px-4 py-3">
-					<h2 className="text-sm font-semibold">Inspect payload</h2>
-				</div>
-				<pre className="log-viewport max-h-[600px] p-4 text-xs leading-6 text-muted">
+			<Panel>
+				<PanelHeader>
+					<PanelTitle>Inspect payload</PanelTitle>
+				</PanelHeader>
+				<LogBlock className="max-h-[600px] rounded-none border-0 p-4 text-muted">
 					{JSON.stringify(image, null, 2)}
-				</pre>
-			</div>
+				</LogBlock>
+			</Panel>
 		</div>
 	);
 }

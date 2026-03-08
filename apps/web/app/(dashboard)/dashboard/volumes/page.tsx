@@ -6,6 +6,21 @@ import {
 } from "@/app/(dashboard)/actions";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { PageHeader } from "@/components/page-header";
+import { Button } from "@/components/ui/button";
+import {
+	DataTable,
+	DataTableBody,
+	DataTableCell,
+	DataTableEmpty,
+	DataTableHead,
+	DataTableHeader,
+	DataTableRow,
+} from "@/components/ui/data-table";
+import { Input } from "@/components/ui/input";
+import { LinkButton } from "@/components/ui/link-button";
+import { MetricCard } from "@/components/ui/metric-card";
+import { Panel } from "@/components/ui/panel";
+import { Select } from "@/components/ui/select";
 import { requirePrivilegedPageSession } from "@/lib/authorization";
 import { listVolumesForEnvironment, resolveRuntimeEnvironment } from "@/lib/environment-runtime";
 
@@ -37,135 +52,92 @@ export default async function VolumesPage({
 			/>
 
 			{/* Actions */}
-			<div className="rounded-xl border border-default/10 bg-surface p-4">
+			<Panel padding="sm">
 				<div className="flex flex-col gap-3 lg:flex-row">
 					<form className="flex flex-1 gap-3">
-						<input
-							type="search"
-							name="q"
-							defaultValue={params.q || ""}
-							placeholder="Search volumes..."
-							className="h-9 flex-1 rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
-						/>
-						<button
-							type="submit"
-							className="inline-flex h-9 items-center rounded-lg border border-default/10 px-3 text-sm font-medium"
-						>
+						<Input type="search" name="q" defaultValue={params.q || ""} placeholder="Search volumes..." className="flex-1" />
+						<Button type="submit" variant="secondary">
 							Filter
-						</button>
+						</Button>
 					</form>
 					<form action={createVolumeAction} className="flex gap-3">
 						<input type="hidden" name="environmentId" value={environment.id} />
-						<input
-							type="text"
-							name="name"
-							required
-							placeholder="app-data"
-							className="h-9 rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
-						/>
-						<select
-							name="driver"
-							defaultValue="local"
-							className="h-9 rounded-lg border border-default/10 bg-background px-3 text-sm outline-none"
-						>
+						<Input type="text" name="name" required placeholder="app-data" />
+						<Select name="driver" defaultValue="local">
 							<option value="local">local</option>
-						</select>
-						<FormSubmitButton
-							label="Create"
-							pendingLabel="Creating..."
-							className="inline-flex h-9 items-center rounded-lg bg-foreground px-3 text-sm font-medium text-background"
-						/>
+						</Select>
+						<FormSubmitButton label="Create" pendingLabel="Creating..." />
 					</form>
 					<form action={pruneVolumesAction}>
 						<input type="hidden" name="environmentId" value={environment.id} />
-						<FormSubmitButton
-							label="Prune"
-							pendingLabel="Pruning..."
-							className="inline-flex h-9 items-center rounded-lg border border-default/10 px-3 text-sm font-medium text-muted transition-colors hover:text-foreground"
-						/>
+						<FormSubmitButton label="Prune" pendingLabel="Pruning..." variant="outline" />
 					</form>
 				</div>
-			</div>
+			</Panel>
 
 			{/* Stats */}
 			<div className="grid gap-4 sm:grid-cols-3">
-				<div className="rounded-xl border border-default/10 bg-surface p-4">
-					<p className="text-xs text-muted">Total</p>
-					<p className="mt-1 text-2xl font-semibold">{filtered.length}</p>
-				</div>
-				<div className="rounded-xl border border-default/10 bg-surface p-4">
-					<p className="text-xs text-muted">Local driver</p>
-					<p className="mt-1 text-2xl font-semibold">{localCount}</p>
-				</div>
-				<div className="rounded-xl border border-default/10 bg-surface p-4">
-					<p className="text-xs text-muted">Custom drivers</p>
-					<p className="mt-1 text-2xl font-semibold">{filtered.length - localCount}</p>
-				</div>
+				<MetricCard label="Total" value={filtered.length} />
+				<MetricCard label="Local driver" value={localCount} />
+				<MetricCard label="Custom drivers" value={filtered.length - localCount} />
 			</div>
 
 			{/* Table */}
-			<div className="rounded-xl border border-default/10 bg-surface">
-				<div className="table-scroll">
-					<table className="min-w-full text-left text-sm">
-						<thead>
-							<tr className="border-b border-default/10 text-xs text-muted">
-								<th className="px-4 py-3 font-medium">Name</th>
-								<th className="px-4 py-3 font-medium">Driver</th>
-								<th className="px-4 py-3 font-medium">Mount point</th>
-								<th className="px-4 py-3 font-medium">Actions</th>
-							</tr>
-						</thead>
-						<tbody className="divide-y divide-default/5">
+			<Panel>
+				<DataTable>
+					<DataTableHeader>
+						<tr>
+							<DataTableHead>Name</DataTableHead>
+							<DataTableHead>Driver</DataTableHead>
+							<DataTableHead>Mount point</DataTableHead>
+							<DataTableHead>Actions</DataTableHead>
+						</tr>
+					</DataTableHeader>
+					<DataTableBody>
 							{filtered.length ? (
 								filtered.map((volume: Record<string, string>) => (
-									<tr
-										key={`${volume.Name}-${volume.Driver}`}
-										className="transition-colors hover:bg-foreground/[0.02]"
-									>
-										<td className="px-4 py-3">
+									<DataTableRow key={`${volume.Name}-${volume.Driver}`}>
+										<DataTableCell>
 											<Link
 												href={`/dashboard/volumes/${encodeURIComponent(volume.Name)}?environment=${environment.id}`}
 												className="font-medium transition-colors hover:text-foreground/80"
 											>
 												{volume.Name}
 											</Link>
-										</td>
-										<td className="px-4 py-3 text-xs text-muted">{volume.Driver}</td>
-										<td className="px-4 py-3 text-xs text-muted">
+										</DataTableCell>
+										<DataTableCell className="text-xs text-muted">{volume.Driver}</DataTableCell>
+										<DataTableCell className="text-xs text-muted">
 											{volume.Mountpoint || "Docker managed"}
-										</td>
-										<td className="px-4 py-3">
+										</DataTableCell>
+										<DataTableCell>
 											<div className="flex gap-1.5">
-												<Link
+												<LinkButton
 													href={`/dashboard/volumes/${encodeURIComponent(volume.Name)}?environment=${environment.id}`}
-													className="inline-flex h-7 items-center rounded-md border border-default/10 px-2.5 text-xs font-medium text-muted transition-colors hover:text-foreground"
+													variant="outline"
+													size="xs"
 												>
 													Details
-												</Link>
+												</LinkButton>
 												<form action={removeVolumeAction}>
 													<input type="hidden" name="name" value={volume.Name} />
 													<input type="hidden" name="environmentId" value={environment.id} />
 													<FormSubmitButton
 														label="Delete"
 														pendingLabel="Deleting..."
-														className="inline-flex h-7 items-center rounded-md border border-red-200 bg-red-50 px-2.5 text-xs font-medium text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400"
+														variant="danger"
+														size="xs"
 													/>
 												</form>
 											</div>
-										</td>
-									</tr>
+										</DataTableCell>
+									</DataTableRow>
 								))
 							) : (
-								<tr>
-									<td colSpan={4} className="px-4 py-12 text-center text-sm text-muted">
-										No volumes found.
-									</td>
-								</tr>
+								<DataTableEmpty colSpan={4}>No volumes found.</DataTableEmpty>
 							)}
-						</tbody>
-					</table>
-				</div>
-			</div>
+					</DataTableBody>
+				</DataTable>
+			</Panel>
 		</div>
 	);
 }

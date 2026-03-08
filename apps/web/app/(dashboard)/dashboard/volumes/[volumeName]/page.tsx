@@ -1,5 +1,8 @@
 import { ArrowLeft } from "lucide-react";
-import Link from "next/link";
+import { LinkButton } from "@/components/ui/link-button";
+import { LogBlock } from "@/components/ui/log-block";
+import { MetricCard } from "@/components/ui/metric-card";
+import { Panel, PanelHeader, PanelTitle } from "@/components/ui/panel";
 import { requirePrivilegedPageSession } from "@/lib/authorization";
 import {
 	getVolumeDetailsForEnvironment,
@@ -32,12 +35,13 @@ export default async function VolumeDetailPage({
 		<div className="animate-in space-y-6">
 			{/* Header */}
 			<div className="flex items-center gap-3">
-				<Link
+				<LinkButton
 					href={`/dashboard/volumes?environment=${environment.id}`}
-					className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-default/10 text-muted transition-colors hover:text-foreground"
+					variant="outline"
+					size="icon"
 				>
 					<ArrowLeft className="h-4 w-4" />
-				</Link>
+				</LinkButton>
 				<div>
 					<p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted">Volume</p>
 					<h1 className="text-lg font-semibold">{decodedName}</h1>
@@ -46,31 +50,24 @@ export default async function VolumeDetailPage({
 
 			{/* Info grid */}
 			<div className="grid gap-3 sm:grid-cols-3">
-				<div className="rounded-xl border border-default/10 bg-surface p-4">
-					<p className="text-xs text-muted">Driver</p>
-					<p className="mt-1 text-sm font-medium">{String(volume.Driver || "local")}</p>
-				</div>
-				<div className="rounded-xl border border-default/10 bg-surface p-4">
-					<p className="text-xs text-muted">Mount point</p>
-					<p className="mt-1 break-all text-sm font-medium">
-						{String(volume.Mountpoint || "Managed by Docker")}
-					</p>
-				</div>
-				<div className="rounded-xl border border-default/10 bg-surface p-4">
-					<p className="text-xs text-muted">Scope</p>
-					<p className="mt-1 text-sm font-medium">{String(volume.Scope || "local")}</p>
-				</div>
+				<MetricCard label="Driver" value={String(volume.Driver || "local")} valueClassName="text-sm" />
+				<MetricCard
+					label="Mount point"
+					value={String(volume.Mountpoint || "Managed by Docker")}
+					valueClassName="break-all text-sm"
+				/>
+				<MetricCard label="Scope" value={String(volume.Scope || "local")} valueClassName="text-sm" />
 			</div>
 
 			{/* Inspect payload */}
-			<div className="rounded-xl border border-default/10 bg-surface">
-				<div className="border-b border-default/10 px-4 py-3">
-					<h2 className="text-sm font-semibold">Inspect payload</h2>
-				</div>
-				<pre className="log-viewport max-h-[600px] p-4 text-xs leading-6 text-muted">
+			<Panel>
+				<PanelHeader>
+					<PanelTitle>Inspect payload</PanelTitle>
+				</PanelHeader>
+				<LogBlock className="max-h-[600px] rounded-none border-0 p-4 text-muted">
 					{JSON.stringify(volume, null, 2)}
-				</pre>
-			</div>
+				</LogBlock>
+			</Panel>
 		</div>
 	);
 }

@@ -4,6 +4,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { CodeEditor } from "@/components/code-editor";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Input } from "@/components/ui/input";
+import { Panel } from "@/components/ui/panel";
 
 interface ContainerFileBrowserProps {
 	containerId: string;
@@ -108,7 +112,7 @@ export function ContainerFileBrowser({
 	}
 
 	return (
-		<section className="rounded-xl border border-default/10 bg-surface p-5">
+		<Panel padding="md" className="block">
 			<div className="flex items-center justify-between gap-4">
 				<h2 className="text-lg font-semibold tracking-tight">Container files</h2>
 				<form
@@ -123,19 +127,10 @@ export function ContainerFileBrowser({
 						);
 					}}
 				>
-					<input
-						type="text"
-						name="path"
-						defaultValue={path}
-						placeholder="/"
-						className="h-10 rounded-xl border border-default/10 bg-background px-3 text-sm outline-none transition-colors focus:border-accent"
-					/>
-					<button
-						type="submit"
-						className="inline-flex h-10 items-center justify-center rounded-xl bg-accent px-4 text-sm font-medium text-white"
-					>
+					<Input type="text" name="path" defaultValue={path} placeholder="/" inputSize="md" className="rounded-xl" />
+					<Button type="submit" size="lg" className="rounded-xl">
 						Browse
-					</button>
+					</Button>
 				</form>
 			</div>
 			<div className="mt-4 rounded-xl border border-default/10 bg-background/60 p-4">
@@ -160,13 +155,9 @@ export function ContainerFileBrowser({
 							required
 							className="block text-sm text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-accent/10 file:px-3 file:py-2 file:text-accent"
 						/>
-						<button
-							type="submit"
-							disabled={isPending}
-							className="inline-flex h-10 items-center justify-center rounded-xl border border-default/20 px-4 text-sm font-medium"
-						>
+						<Button type="submit" disabled={isPending} variant="outline" size="lg" className="rounded-xl">
 							Upload
-						</button>
+						</Button>
 					</form>
 					{browser.path !== "/" ? (
 						<Link
@@ -193,13 +184,9 @@ export function ContainerFileBrowser({
 									<p className="truncate font-medium">{entry.name}</p>
 									<p className="mt-1 text-xs text-muted">{entry.kind}</p>
 								</Link>
-								<button
-									type="button"
-									onClick={() => void deletePath(nextPath)}
-									className="inline-flex h-9 items-center justify-center rounded-lg border border-danger/30 bg-danger/10 px-3 text-xs font-medium text-danger"
-								>
+								<Button type="button" onClick={() => void deletePath(nextPath)} variant="danger" size="md">
 									Delete
-								</button>
+								</Button>
 							</div>
 						);
 					})}
@@ -209,21 +196,12 @@ export function ContainerFileBrowser({
 					<div className="flex items-center justify-between border-b border-default/10 px-4 py-3">
 						<p className="text-sm font-semibold">{browser.path}</p>
 						<div className="flex gap-2">
-							<button
-								type="button"
-								onClick={() => void deletePath(browser.path)}
-								className="inline-flex h-9 items-center justify-center rounded-lg border border-danger/30 bg-danger/10 px-3 text-xs font-medium text-danger"
-							>
+							<Button type="button" onClick={() => void deletePath(browser.path)} variant="danger" size="md">
 								Delete
-							</button>
-							<button
-								type="button"
-								onClick={() => void saveFile()}
-								disabled={isPending}
-								className="inline-flex h-9 items-center justify-center rounded-lg bg-accent px-3 text-xs font-medium text-white"
-							>
+							</Button>
+							<Button type="button" onClick={() => void saveFile()} disabled={isPending} size="md">
 								Save
-							</button>
+							</Button>
 						</div>
 					</div>
 					<CodeEditor
@@ -234,10 +212,12 @@ export function ContainerFileBrowser({
 					/>
 				</div>
 			) : (
-				<div className="mt-4 rounded-xl border border-dashed border-default/20 bg-background/60 p-6 text-sm text-muted">
-					The selected path does not exist inside the container or could not be inspected.
-				</div>
+				<EmptyState
+					title="Path unavailable"
+					description="The selected path does not exist inside the container or could not be inspected."
+					className="mt-4 border-default/20 bg-background/60 p-6"
+				/>
 			)}
-		</section>
+		</Panel>
 	);
 }

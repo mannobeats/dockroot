@@ -7,6 +7,10 @@ import {
 import { CopyButton } from "@/components/copy-button";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { StatusBadge } from "@/components/status-badge";
+import { LinkButton } from "@/components/ui/link-button";
+import { LogBlock } from "@/components/ui/log-block";
+import { MetricCard } from "@/components/ui/metric-card";
+import { Panel, PanelHeader, PanelTitle } from "@/components/ui/panel";
 import { getEnvironmentById, getInstallCommand } from "@/lib/platform";
 import { getServerSession } from "@/lib/session";
 
@@ -37,12 +41,9 @@ export default async function EnvironmentDetailPage({
 			{/* Header */}
 			<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 				<div className="flex items-center gap-3">
-					<Link
-						href="/dashboard/environments"
-						className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-default/10 text-muted transition-colors hover:text-foreground"
-					>
+					<LinkButton href="/dashboard/environments" variant="outline" size="icon">
 						<ArrowLeft className="h-4 w-4" />
-					</Link>
+					</LinkButton>
 					<div>
 						<div className="flex items-center gap-2">
 							<p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted">
@@ -53,92 +54,67 @@ export default async function EnvironmentDetailPage({
 						<h1 className="text-lg font-semibold">{environment.name}</h1>
 					</div>
 				</div>
-				<Link
-					href={`/dashboard?environment=${environment.id}`}
-					className="inline-flex h-8 items-center rounded-md bg-foreground px-3 text-xs font-medium text-background transition-opacity hover:opacity-90"
-				>
+				<LinkButton href={`/dashboard?environment=${environment.id}`} size="sm">
 					Open workspace
-				</Link>
+				</LinkButton>
 				{environment.isDefaultLocal ? null : (
 					<form action={deleteEnvironmentAction}>
 						<input type="hidden" name="environmentId" value={environment.id} />
-						<FormSubmitButton
-							label="Delete environment"
-							pendingLabel="Deleting..."
-							className="inline-flex h-8 items-center rounded-md border border-default/10 px-3 text-xs font-medium text-muted transition-colors hover:text-red-600"
-						/>
+						<FormSubmitButton label="Delete environment" pendingLabel="Deleting..." variant="quietDanger" size="sm" />
 					</form>
 				)}
 			</div>
 
 			{/* Connection details */}
 			<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-				<div className="rounded-xl border border-default/10 bg-surface p-4">
-					<p className="text-xs text-muted">Kind</p>
-					<p className="mt-2 text-sm font-medium capitalize">{environment.kind}</p>
-				</div>
-				<div className="rounded-xl border border-default/10 bg-surface p-4">
-					<p className="text-xs text-muted">Agent URL</p>
-					<p className="mt-2 break-all text-sm font-medium">
-						{environment.managerUrl || "Not configured"}
-					</p>
-				</div>
-				<div className="rounded-xl border border-default/10 bg-surface p-4">
-					<p className="text-xs text-muted">Hostname</p>
-					<p className="mt-2 text-sm font-medium">{agent?.hostname || "Pending install"}</p>
-				</div>
-				<div className="rounded-xl border border-default/10 bg-surface p-4">
-					<p className="text-xs text-muted">Docker version</p>
-					<p className="mt-2 text-sm font-medium">{agent?.dockerVersion || "Pending install"}</p>
-				</div>
+				<MetricCard label="Kind" value={environment.kind} valueClassName="text-sm capitalize" />
+				<MetricCard label="Agent URL" value={environment.managerUrl || "Not configured"} valueClassName="break-all text-sm" />
+				<MetricCard label="Hostname" value={agent?.hostname || "Pending install"} valueClassName="text-sm" />
+				<MetricCard label="Docker version" value={agent?.dockerVersion || "Pending install"} valueClassName="text-sm" />
 			</div>
 
 			{/* Install commands */}
 			{installCommands ? (
 				<div className="space-y-4">
-					<div className="flex items-center justify-between rounded-xl border border-default/10 bg-surface px-4 py-3">
+					<Panel padding="sm" className="flex items-center justify-between">
 						<div>
 							<p className="text-sm font-semibold">Registration token</p>
 							<p className="mt-0.5 text-xs text-muted">Stable until you rotate it manually.</p>
 						</div>
 						<form action={rotateAgentRegistrationTokenAction}>
 							<input type="hidden" name="environmentId" value={environment.id} />
-							<FormSubmitButton
-								label="Rotate token"
-								pendingLabel="Rotating..."
-								className="inline-flex h-7 items-center rounded-md border border-default/10 px-2.5 text-xs font-medium text-muted transition-colors hover:text-foreground"
-							/>
+							<FormSubmitButton label="Rotate token" pendingLabel="Rotating..." variant="outline" size="xs" />
 						</form>
-					</div>
+					</Panel>
 					<div className="grid gap-3 xl:grid-cols-2">
-						<div className="rounded-xl border border-default/10 bg-[#0a0a0a] p-4">
+						<Panel className="bg-console p-4">
 							<div className="flex items-center justify-between gap-3">
-								<p className="text-xs font-medium text-white/60">Docker Compose</p>
+								<p className="text-xs font-medium text-console-foreground/60">Docker Compose</p>
 								<CopyButton value={installCommands.dockerCompose} />
 							</div>
-							<pre className="log-viewport mt-3 text-xs leading-6 text-white/80">
+							<LogBlock className="mt-3 border-0 bg-transparent p-0 text-console-foreground/90">
 								{installCommands.dockerCompose}
-							</pre>
-						</div>
-						<div className="rounded-xl border border-default/10 bg-[#0a0a0a] p-4">
+							</LogBlock>
+						</Panel>
+						<Panel className="bg-console p-4">
 							<div className="flex items-center justify-between gap-3">
-								<p className="text-xs font-medium text-white/60">Docker Run</p>
+								<p className="text-xs font-medium text-console-foreground/60">Docker Run</p>
 								<CopyButton value={installCommands.dockerRun} />
 							</div>
-							<pre className="log-viewport mt-3 text-xs leading-6 text-white/80">
+							<LogBlock className="mt-3 border-0 bg-transparent p-0 text-console-foreground/90">
 								{installCommands.dockerRun}
-							</pre>
-						</div>
+							</LogBlock>
+						</Panel>
 					</div>
 				</div>
 			) : null}
 
 			{/* Stacks and deployments in compact tables */}
 			<div className="grid gap-5 xl:grid-cols-2">
-				<div className="rounded-xl border border-default/10 bg-surface">
-					<div className="border-b border-default/10 px-4 py-3">
-						<h2 className="text-sm font-semibold">Stacks ({environment.stacks.length})</h2>
-					</div>
+				<Panel>
+					<PanelHeader>
+						<PanelTitle>Stacks ({environment.stacks.length})</PanelTitle>
+					</PanelHeader>
 					{environment.stacks.length ? (
 						<div className="divide-y divide-default/5">
 							{environment.stacks.map((stack) => (
@@ -156,14 +132,12 @@ export default async function EnvironmentDetailPage({
 							No stacks assigned to this environment yet.
 						</div>
 					)}
-				</div>
+				</Panel>
 
-				<div className="rounded-xl border border-default/10 bg-surface">
-					<div className="border-b border-default/10 px-4 py-3">
-						<h2 className="text-sm font-semibold">
-							Recent deployments ({environment.deployments.length})
-						</h2>
-					</div>
+				<Panel>
+					<PanelHeader>
+						<PanelTitle>Recent deployments ({environment.deployments.length})</PanelTitle>
+					</PanelHeader>
 					{environment.deployments.length ? (
 						<div className="divide-y divide-default/5">
 							{environment.deployments.map((deployment) => (
@@ -181,7 +155,7 @@ export default async function EnvironmentDetailPage({
 							No deployments have targeted this environment yet.
 						</div>
 					)}
-				</div>
+				</Panel>
 			</div>
 		</div>
 	);

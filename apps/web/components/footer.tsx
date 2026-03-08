@@ -1,5 +1,6 @@
 import { Server } from "lucide-react";
 import { publicEnv } from "@/lib/public-env";
+import { Badge } from "@/components/ui/badge";
 
 export function Footer() {
 	return (
@@ -11,7 +12,10 @@ export function Footer() {
 					</div>
 					<span className="text-[13px] font-medium">{publicEnv.appName}</span>
 				</div>
-				<p className="text-[12px] text-muted">
+				<p className="flex items-center gap-2 text-[12px] text-muted">
+					<Badge variant="accent" className="px-2 py-0.5 text-[11px]">
+						Platform UI
+					</Badge>
 					&copy; {new Date().getFullYear()} Dockroot. All rights reserved.
 				</p>
 			</div>

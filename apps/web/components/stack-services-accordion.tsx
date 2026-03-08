@@ -5,6 +5,8 @@ import { useState } from "react";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { RuntimePortLinks } from "@/components/runtime-port-links";
 import { StatusBadge } from "@/components/status-badge";
+import { EmptyState } from "@/components/ui/empty-state";
+import { LogBlock } from "@/components/ui/log-block";
 
 type Container = Record<string, string>;
 
@@ -40,9 +42,7 @@ export function StackServicesAccordion({
 
 	if (!containers.length) {
 		return (
-			<div className="rounded-xl border border-dashed border-default/10 p-8 text-center text-sm text-muted">
-				No runtime containers found for this stack. Deploy to see services here.
-			</div>
+			<EmptyState title="No runtime containers found" description="Deploy to see services here." className="p-8" />
 		);
 	}
 
@@ -108,7 +108,9 @@ export function StackServicesAccordion({
 											<FormSubmitButton
 												label={action}
 												pendingLabel="..."
-												className="inline-flex h-7 items-center rounded-md border border-default/10 px-2.5 text-xs font-medium text-muted transition-colors hover:text-foreground capitalize"
+												variant="outline"
+												size="xs"
+												className="capitalize"
 											/>
 										</form>
 									))}
@@ -116,9 +118,9 @@ export function StackServicesAccordion({
 
 								{/* Container logs preview */}
 								{details?.logs ? (
-									<pre className="log-viewport max-h-[200px] rounded-lg bg-[#0a0a0a] p-3 text-xs leading-5 text-white/80">
+									<LogBlock className="max-h-[200px] p-3">
 										{details.logs}
-									</pre>
+									</LogBlock>
 								) : (
 									<p className="text-xs text-muted">No logs yet.</p>
 								)}

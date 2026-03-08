@@ -1,5 +1,8 @@
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
+import { EmptyState } from "@/components/ui/empty-state";
+import { LogBlock } from "@/components/ui/log-block";
+import { Panel } from "@/components/ui/panel";
 import { listDeployments } from "@/lib/platform";
 import { getServerSession } from "@/lib/session";
 
@@ -23,10 +26,7 @@ export default async function ActivityPage() {
 			<div className="space-y-3">
 				{deployments.length ? (
 					deployments.map((deployment) => (
-						<div
-							key={deployment.id}
-							className="rounded-xl border border-default/10 bg-surface p-5 transition-all hover:border-default/20"
-						>
+						<Panel key={deployment.id} padding="md" className="transition-all hover:border-default/20">
 							<div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
 								<div>
 									<div className="flex items-center gap-2">
@@ -46,16 +46,14 @@ export default async function ActivityPage() {
 								{deployment.summary || "Awaiting result..."}
 							</p>
 							{deployment.log ? (
-								<pre className="mt-3 max-h-48 overflow-auto rounded-lg bg-[#0a0a0a] p-4 text-xs leading-5 text-white/80">
+								<LogBlock className="mt-3 max-h-48 p-4">
 									{deployment.log}
-								</pre>
+								</LogBlock>
 							) : null}
-						</div>
+						</Panel>
 					))
 				) : (
-					<div className="rounded-xl border border-dashed border-default/10 p-12 text-center text-sm text-muted">
-						No deployment activity yet.
-					</div>
+					<EmptyState title="No deployment activity yet" />
 				)}
 			</div>
 		</div>

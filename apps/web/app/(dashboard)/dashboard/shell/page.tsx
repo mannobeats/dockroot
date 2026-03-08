@@ -1,5 +1,9 @@
 import { PageHeader } from "@/components/page-header";
 import { TerminalPanel } from "@/components/terminal-panel";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Panel } from "@/components/ui/panel";
+import { Select } from "@/components/ui/select";
 import { isPrivilegedRole, requireUserSession } from "@/lib/authorization";
 import { resolveRuntimeEnvironment } from "@/lib/environment-runtime";
 import { listAccessibleContainersForUser } from "@/lib/runtime-access";
@@ -34,21 +38,20 @@ export default async function ShellPage({
 				}
 			/>
 
-			<div className="rounded-xl border border-default/10 bg-surface p-4">
+			<Panel padding="sm">
 				<form className="flex flex-col gap-3 sm:flex-row">
 					<input type="hidden" name="environment" value={environment.id} />
-					<select
+					<Select
 						name="target"
 						defaultValue={isContainerShell ? "container" : "host"}
-						className="h-9 rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors focus:border-foreground/20"
 					>
 						{allowHostShell ? <option value="host">Host shell</option> : null}
 						<option value="container">Container shell</option>
-					</select>
-					<select
+					</Select>
+					<Select
 						name="containerId"
 						defaultValue={selectedContainer?.ID || ""}
-						className="h-9 flex-1 rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors focus:border-foreground/20"
+						className="flex-1"
 					>
 						<option value="">Select container</option>
 						{containers.map((container: Record<string, string>) => (
@@ -56,20 +59,15 @@ export default async function ShellPage({
 								{container.Names} ({container.State})
 							</option>
 						))}
-					</select>
-					<button
-						type="submit"
-						className="inline-flex h-9 items-center justify-center rounded-lg bg-foreground px-4 text-sm font-medium text-background"
-					>
+					</Select>
+					<Button type="submit">
 						Connect
-					</button>
+					</Button>
 				</form>
-			</div>
+			</Panel>
 
 			{isContainerShell && !selectedContainer ? (
-				<div className="rounded-xl border border-dashed border-default/10 p-8 text-center text-sm text-muted">
-					No accessible containers available.
-				</div>
+				<EmptyState title="No accessible containers available" className="p-8" />
 			) : (
 				<TerminalPanel
 					target={isContainerShell ? "container" : "host"}

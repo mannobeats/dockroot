@@ -20,6 +20,8 @@
 	--color-success: var(--success);
 	--color-warning: var(--warning);
 	--color-danger: var(--danger);
+	--color-console: var(--console);
+	--color-console-foreground: var(--console-foreground);
 }
 
 :root {
@@ -38,6 +40,8 @@
 	--success: #22c55e;
 	--warning: #eab308;
 	--danger: #ef4444;
+	--console: #0a0a0a;
+	--console-foreground: rgba(255, 255, 255, 0.85);
 
 	--chart-1: #0a0a0a;
 	--chart-2: #22c55e;
@@ -58,6 +62,9 @@
 
 	--muted: #a3a3a3;
 	--border: #262626;
+	--danger: #f87171;
+	--console: #050505;
+	--console-foreground: rgba(255, 255, 255, 0.85);
 
 	--chart-1: #fafafa;
 	--chart-2: #22c55e;
@@ -148,36 +155,6 @@ body {
 .code-block {
 	overflow: auto;
 	max-width: 100%;
-}
-
-/* Tabbed navigation */
-.tab-nav {
-	display: flex;
-	gap: 0;
-	border-bottom: 1px solid var(--border);
-}
-.tab-nav button,
-.tab-nav a {
-	padding: 0.5rem 1rem;
-	font-size: 0.8125rem;
-	font-weight: 500;
-	color: var(--muted);
-	border-bottom: 2px solid transparent;
-	transition: all 0.2s;
-	cursor: pointer;
-	background: none;
-	border-top: none;
-	border-left: none;
-	border-right: none;
-}
-.tab-nav button:hover,
-.tab-nav a:hover {
-	color: var(--foreground);
-}
-.tab-nav button[data-active="true"],
-.tab-nav a[data-active="true"] {
-	color: var(--foreground);
-	border-bottom-color: var(--foreground);
 }
 
 /* Focus ring */

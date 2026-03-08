@@ -1,5 +1,9 @@
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
+import { LinkButton } from "@/components/ui/link-button";
+import { LogBlock } from "@/components/ui/log-block";
+import { MetricCard } from "@/components/ui/metric-card";
+import { Panel, PanelHeader, PanelTitle } from "@/components/ui/panel";
 import { requirePrivilegedPageSession } from "@/lib/authorization";
 import {
 	getNetworkDetailsForEnvironment,
@@ -36,12 +40,13 @@ export default async function NetworkDetailPage({
 		<div className="animate-in space-y-6">
 			{/* Header */}
 			<div className="flex items-center gap-3">
-				<Link
+				<LinkButton
 					href={`/dashboard/networks?environment=${environment.id}`}
-					className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-default/10 text-muted transition-colors hover:text-foreground"
+					variant="outline"
+					size="icon"
 				>
 					<ArrowLeft className="h-4 w-4" />
-				</Link>
+				</LinkButton>
 				<div>
 					<p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted">
 						Network
@@ -52,26 +57,17 @@ export default async function NetworkDetailPage({
 
 			{/* Info */}
 			<div className="grid gap-3 sm:grid-cols-3">
-				<div className="rounded-xl border border-default/10 bg-surface p-4">
-					<p className="text-xs text-muted">Driver</p>
-					<p className="mt-1 text-sm font-medium">{String(network.Driver || "unknown")}</p>
-				</div>
-				<div className="rounded-xl border border-default/10 bg-surface p-4">
-					<p className="text-xs text-muted">Scope</p>
-					<p className="mt-1 text-sm font-medium">{String(network.Scope || "local")}</p>
-				</div>
-				<div className="rounded-xl border border-default/10 bg-surface p-4">
-					<p className="text-xs text-muted">Containers</p>
-					<p className="mt-1 text-sm font-medium">{containers.length}</p>
-				</div>
+				<MetricCard label="Driver" value={String(network.Driver || "unknown")} valueClassName="text-sm" />
+				<MetricCard label="Scope" value={String(network.Scope || "local")} valueClassName="text-sm" />
+				<MetricCard label="Containers" value={containers.length} valueClassName="text-sm" />
 			</div>
 
 			{/* Attached containers */}
 			{containers.length ? (
-				<div className="rounded-xl border border-default/10 bg-surface">
-					<div className="border-b border-default/10 px-4 py-3">
-						<h2 className="text-sm font-semibold">Attached containers</h2>
-					</div>
+				<Panel>
+					<PanelHeader>
+						<PanelTitle>Attached containers</PanelTitle>
+					</PanelHeader>
 					<div className="divide-y divide-default/5">
 						{containers.map(([containerId, container]) => (
 							<Link
@@ -86,18 +82,18 @@ export default async function NetworkDetailPage({
 							</Link>
 						))}
 					</div>
-				</div>
+				</Panel>
 			) : null}
 
 			{/* Inspect payload */}
-			<div className="rounded-xl border border-default/10 bg-surface">
-				<div className="border-b border-default/10 px-4 py-3">
-					<h2 className="text-sm font-semibold">Inspect payload</h2>
-				</div>
-				<pre className="log-viewport max-h-[600px] p-4 text-xs leading-6 text-muted">
+			<Panel>
+				<PanelHeader>
+					<PanelTitle>Inspect payload</PanelTitle>
+				</PanelHeader>
+				<LogBlock className="max-h-[600px] rounded-none border-0 p-4 text-muted">
 					{JSON.stringify(network, null, 2)}
-				</pre>
-			</div>
+				</LogBlock>
+			</Panel>
 		</div>
 	);
 }

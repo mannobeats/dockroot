@@ -3,6 +3,19 @@ import { createProjectAction } from "@/app/(dashboard)/actions";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
+import {
+	DataTable,
+	DataTableBody,
+	DataTableCell,
+	DataTableEmpty,
+	DataTableHead,
+	DataTableHeader,
+	DataTableRow,
+} from "@/components/ui/data-table";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Panel } from "@/components/ui/panel";
 import { listProjects } from "@/lib/platform";
 import { getServerSession } from "@/lib/session";
 
@@ -25,20 +38,19 @@ export default async function ProjectsPage() {
 
 			{/* Project table — cleaner and scalable */}
 			{projects.length ? (
-				<div className="rounded-xl border border-default/10 bg-surface">
-					<div className="table-scroll">
-						<table className="min-w-full text-left text-sm">
-							<thead>
-								<tr className="border-b border-default/10 text-xs text-muted">
-									<th className="px-4 py-3 font-medium">Project</th>
-									<th className="px-4 py-3 font-medium">Stacks</th>
-									<th className="px-4 py-3 font-medium">Status</th>
-								</tr>
-							</thead>
-							<tbody className="divide-y divide-default/5">
+				<Panel>
+					<DataTable>
+						<DataTableHeader>
+							<tr>
+								<DataTableHead>Project</DataTableHead>
+								<DataTableHead>Stacks</DataTableHead>
+								<DataTableHead>Status</DataTableHead>
+							</tr>
+						</DataTableHeader>
+						<DataTableBody>
 								{projects.map((project) => (
-									<tr key={project.id} className="transition-colors hover:bg-foreground/[0.02]">
-										<td className="px-4 py-3">
+									<DataTableRow key={project.id}>
+										<DataTableCell>
 											<Link
 												href={`/dashboard/projects/${project.id}`}
 												className="font-medium transition-colors hover:text-foreground/80"
@@ -48,9 +60,9 @@ export default async function ProjectsPage() {
 											<p className="mt-0.5 text-xs text-muted">
 												{project.description || "No description"}
 											</p>
-										</td>
-										<td className="px-4 py-3 text-xs text-muted">{project.stacks.length}</td>
-										<td className="px-4 py-3">
+										</DataTableCell>
+										<DataTableCell className="text-xs text-muted">{project.stacks.length}</DataTableCell>
+										<DataTableCell>
 											{project.stacks.length > 0 ? (
 												<div className="flex flex-wrap gap-1.5">
 													{project.stacks.slice(0, 3).map((stack) => (
@@ -66,58 +78,40 @@ export default async function ProjectsPage() {
 											) : (
 												<span className="text-xs text-muted">No stacks</span>
 											)}
-										</td>
-									</tr>
+										</DataTableCell>
+									</DataTableRow>
 								))}
-							</tbody>
-						</table>
-					</div>
-				</div>
+						</DataTableBody>
+					</DataTable>
+				</Panel>
 			) : (
-				<div className="rounded-xl border border-dashed border-default/10 bg-surface p-12 text-center text-sm text-muted">
-					Create your first project to start organizing stacks.
-				</div>
+				<EmptyState title="No projects yet" description="Create your first project to start organizing stacks." />
 			)}
 
 			{/* Inline create form — same row layout instead of sidebar */}
-			<div className="rounded-xl border border-default/10 bg-surface p-5">
+			<Panel padding="md">
 				<h2 className="text-sm font-semibold">Create project</h2>
 				<p className="mt-1 text-xs text-muted">
 					Projects organize stacks by application or service.
 				</p>
 				<form action={createProjectAction} className="mt-4 grid gap-4 sm:grid-cols-3">
-					<div className="space-y-1.5">
-						<label htmlFor="project-name" className="text-xs font-medium text-muted">
-							Name
-						</label>
-						<input
-							id="project-name"
-							name="name"
-							required
-							placeholder="my-app"
-							className="h-9 w-full rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
-						/>
-					</div>
-					<div className="space-y-1.5">
-						<label htmlFor="project-description" className="text-xs font-medium text-muted">
-							Description
-						</label>
-						<input
+					<Field>
+						<FieldLabel htmlFor="project-name">Name</FieldLabel>
+						<Input id="project-name" name="name" required placeholder="my-app" />
+					</Field>
+					<Field>
+						<FieldLabel htmlFor="project-description">Description</FieldLabel>
+						<Input
 							id="project-description"
 							name="description"
 							placeholder="Production app with web, worker, and database stacks."
-							className="h-9 w-full rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
 						/>
-					</div>
+					</Field>
 					<div className="flex items-end">
-						<FormSubmitButton
-							label="Create project"
-							pendingLabel="Creating..."
-							className="inline-flex h-9 items-center rounded-lg bg-foreground px-4 text-sm font-medium text-background transition-opacity hover:opacity-90"
-						/>
+						<FormSubmitButton label="Create project" pendingLabel="Creating..." />
 					</div>
 				</form>
-			</div>
+			</Panel>
 		</div>
 	);
 }

@@ -5,6 +5,15 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { CodeEditor } from "@/components/code-editor";
 import { FormSubmitButton } from "@/components/form-submit-button";
+import { Alert } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { LinkButton } from "@/components/ui/link-button";
+import { Panel } from "@/components/ui/panel";
+import { Select } from "@/components/ui/select";
 
 interface InstallationRepository {
 	id: number;
@@ -269,40 +278,38 @@ export function StackGitHubForm({
 
 	if (!installationOptions.length) {
 		return (
-			<div className="rounded-xl border border-dashed border-default/10 p-8 text-center">
-				<p className="text-sm font-medium">
-					{appConfigured
+			<EmptyState
+				title={
+					appConfigured
 						? "No GitHub App installations connected yet."
-						: "GitHub App environment variables are not configured yet."}
-				</p>
-				<p className="mt-2 text-xs text-muted">
-					{appConfigured
+						: "GitHub App environment variables are not configured yet."
+				}
+				description={
+					appConfigured
 						? "Install the GitHub App once, then deploy repositories without pasting tokens."
-						: "Set GITHUB_APP_ID, GITHUB_APP_SLUG, GITHUB_APP_PRIVATE_KEY, and GITHUB_APP_WEBHOOK_SECRET."}
-				</p>
-				{appConfigured ? (
-					<div className="mt-4 flex justify-center gap-2">
-						<Link
-							href={`/api/github/install?redirectTo=${encodeURIComponent(redirectTo)}`}
-							prefetch={false}
-							className="inline-flex h-8 items-center rounded-md bg-foreground px-3 text-xs font-medium text-background"
-						>
-							Connect GitHub App
-						</Link>
-						<button
-							type="button"
-							onClick={() => void refreshInstallations()}
-							className="inline-flex h-8 items-center rounded-md border border-default/10 px-3 text-xs font-medium text-muted transition-colors hover:text-foreground"
-						>
+						: "Set GITHUB_APP_ID, GITHUB_APP_SLUG, GITHUB_APP_PRIVATE_KEY, and GITHUB_APP_WEBHOOK_SECRET."
+				}
+				actions={
+					appConfigured ? (
+						<>
+							<LinkButton
+								href={`/api/github/install?redirectTo=${encodeURIComponent(redirectTo)}`}
+								prefetch={false}
+								size="sm"
+							>
+								Connect GitHub App
+							</LinkButton>
+							<Button type="button" variant="outline" size="sm" onClick={() => void refreshInstallations()}>
 							<RefreshCw className="mr-1.5 h-3 w-3" />
 							Refresh
-						</button>
-					</div>
-				) : null}
-				{installationStateMessage ? (
-					<p className="mt-3 text-xs text-muted">{installationStateMessage}</p>
-				) : null}
-			</div>
+							</Button>
+						</>
+					) : null
+				}
+				className="p-8"
+			>
+				{installationStateMessage ? <p className="mt-3 text-xs text-muted">{installationStateMessage}</p> : null}
+			</EmptyState>
 		);
 	}
 
@@ -322,7 +329,7 @@ export function StackGitHubForm({
 			<input type="hidden" name="envFileContent" value={envFileContent} />
 
 			{/* Step 1: Select repository */}
-			<div className="rounded-xl border border-default/10 bg-surface p-4">
+			<Panel padding="sm">
 				<div className="flex items-center justify-between">
 					<div className="flex items-center gap-2">
 						<span className="flex h-5 w-5 items-center justify-center rounded-full bg-foreground text-[10px] font-bold text-background">
@@ -331,7 +338,7 @@ export function StackGitHubForm({
 						<p className="text-sm font-semibold">Select repository</p>
 					</div>
 					<div className="flex items-center gap-2">
-						<select
+						<Select
 							value={installationId}
 							onChange={(event) => {
 								setInstallationId(event.target.value);
@@ -344,30 +351,27 @@ export function StackGitHubForm({
 								setHeadSha("");
 								setLoadError("");
 							}}
-							className="h-7 rounded-md border border-default/10 bg-background px-2 text-xs outline-none"
+							selectSize="sm"
+							className="h-7 px-2 text-xs"
 						>
-							{installations.map((installation) => (
+							{installationOptions.map((installation) => (
 								<option key={installation.id} value={installation.id}>
 									{installation.accountLogin}
 								</option>
 							))}
-						</select>
-						<button
-							type="button"
-							onClick={() => void refreshInstallations()}
-							className="inline-flex h-7 items-center rounded-md border border-default/10 px-2 text-xs text-muted transition-colors hover:text-foreground"
-						>
+						</Select>
+						<Button type="button" variant="outline" size="xs" onClick={() => void refreshInstallations()}>
 							<RefreshCw className="h-3 w-3" />
-						</button>
+						</Button>
 					</div>
 				</div>
 				<div className="relative mt-3">
 					<Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
-					<input
+					<Input
 						value={repositoryQuery}
 						onChange={(event) => setRepositoryQuery(event.target.value)}
 						placeholder="Search repositories..."
-						className="h-9 w-full rounded-lg border border-default/10 bg-background pl-9 pr-3 text-sm outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
+						withIcon
 					/>
 				</div>
 				<div className="mt-2 max-h-48 overflow-auto rounded-lg border border-default/10">
@@ -392,11 +396,9 @@ export function StackGitHubForm({
 									className={`flex w-full items-center justify-between border-b border-default/5 px-3 py-2 text-left text-xs last:border-b-0 ${active ? "bg-foreground/[0.06] text-foreground" : "text-muted hover:bg-foreground/[0.03] hover:text-foreground"}`}
 								>
 									<span className="font-medium">{repository.full_name}</span>
-									<span
-										className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${repository.private ? "bg-amber-500/10 text-amber-600 dark:text-amber-400" : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"}`}
-									>
+									<Badge variant={repository.private ? "warning" : "success"}>
 										{repository.private ? "private" : "public"}
-									</span>
+									</Badge>
 								</button>
 							);
 						})
@@ -404,13 +406,11 @@ export function StackGitHubForm({
 						<p className="px-3 py-4 text-xs text-muted">No repositories match.</p>
 					)}
 				</div>
-				{activeInstallation?.repositoryError ? (
-					<p className="mt-2 text-xs text-red-500">{activeInstallation.repositoryError}</p>
-				) : null}
-			</div>
+				{activeInstallation?.repositoryError ? <Alert className="mt-2 text-xs">{activeInstallation.repositoryError}</Alert> : null}
+			</Panel>
 
 			{/* Step 2: Configuration */}
-			<div className="rounded-xl border border-default/10 bg-surface p-4">
+			<Panel padding="sm">
 				<div className="flex items-center gap-2">
 					<span className="flex h-5 w-5 items-center justify-center rounded-full bg-foreground text-[10px] font-bold text-background">
 						2
@@ -418,68 +418,54 @@ export function StackGitHubForm({
 					<p className="text-sm font-semibold">Configure stack</p>
 				</div>
 				<div className="mt-3 grid gap-3 sm:grid-cols-2">
-					<div className="space-y-1">
-						<label htmlFor="github-stack-name" className="text-xs text-muted">
-							Stack name
-						</label>
-						<input
+					<Field className="space-y-1">
+						<FieldLabel htmlFor="github-stack-name">Stack name</FieldLabel>
+						<Input
 							id="github-stack-name"
 							value={stackName}
 							onChange={(event) => setStackName(event.target.value)}
 							placeholder="my-app"
-							className="h-9 w-full rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
 						/>
-					</div>
-					<div className="space-y-1">
-						<label htmlFor="github-environment-id" className="text-xs text-muted">
-							Environment
-						</label>
-						<select
+					</Field>
+					<Field className="space-y-1">
+						<FieldLabel htmlFor="github-environment-id">Environment</FieldLabel>
+						<Select
 							id="github-environment-id"
 							name="environmentId"
 							required
-							className="h-9 w-full rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors focus:border-foreground/20"
 						>
 							{environments.map((environment) => (
 								<option key={environment.id} value={environment.id}>
 									{environment.name} ({environment.kind})
 								</option>
 							))}
-						</select>
-					</div>
+						</Select>
+					</Field>
 				</div>
-				<div className="mt-3 space-y-1">
-					<label htmlFor="github-stack-description" className="text-xs text-muted">
-						Description
-					</label>
-					<input
+				<Field className="mt-3 space-y-1">
+					<FieldLabel htmlFor="github-stack-description">Description</FieldLabel>
+					<Input
 						id="github-stack-description"
 						value={description}
 						onChange={(event) => setDescription(event.target.value)}
 						placeholder="Frontend + API + worker"
-						className="h-9 w-full rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
 					/>
-				</div>
+				</Field>
 				<div className="mt-3 grid gap-3 sm:grid-cols-3">
-					<div className="space-y-1">
-						<label htmlFor="github-stack-branch" className="text-xs text-muted">
-							Branch
-						</label>
-						<input
+					<Field className="space-y-1">
+						<FieldLabel htmlFor="github-stack-branch">Branch</FieldLabel>
+						<Input
 							id="github-stack-branch"
 							value={branch}
 							onChange={(event) => {
 								setBranch(event.target.value);
 								setIsLoaded(false);
 							}}
-							className="h-9 w-full rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors focus:border-foreground/20"
 						/>
-					</div>
-					<div className="space-y-1">
-						<label htmlFor="github-compose-path" className="text-xs text-muted">
-							Compose file path
-						</label>
-						<input
+					</Field>
+					<Field className="space-y-1">
+						<FieldLabel htmlFor="github-compose-path">Compose file path</FieldLabel>
+						<Input
 							id="github-compose-path"
 							value={composePath}
 							onChange={(event) => {
@@ -488,14 +474,11 @@ export function StackGitHubForm({
 								setLoadError("");
 							}}
 							placeholder="compose.yaml"
-							className="h-9 w-full rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
 						/>
-					</div>
-					<div className="space-y-1">
-						<label htmlFor="github-env-path" className="text-xs text-muted">
-							Env file path
-						</label>
-						<input
+					</Field>
+					<Field className="space-y-1">
+						<FieldLabel htmlFor="github-env-path">Env file path</FieldLabel>
+						<Input
 							id="github-env-path"
 							value={envPath}
 							onChange={(event) => {
@@ -504,9 +487,8 @@ export function StackGitHubForm({
 								setLoadError("");
 							}}
 							placeholder=".env.production"
-							className="h-9 w-full rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
 						/>
-					</div>
+					</Field>
 				</div>
 				{pathSuggestions.length ? (
 					<div className="mt-3 flex flex-wrap gap-1.5">
@@ -530,31 +512,30 @@ export function StackGitHubForm({
 					</div>
 				) : null}
 				<div className="mt-3 flex items-center gap-2">
-					<button
-						type="button"
+					<Button
 						onClick={() => void loadRepositoryFiles()}
 						disabled={!selectedRepository || isPending}
-						className="inline-flex h-8 items-center rounded-md bg-foreground px-3 text-xs font-medium text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+						size="sm"
 					>
 						{isPending ? "Loading..." : "Load repository"}
-					</button>
+					</Button>
 					{isLoaded ? (
-						<span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+						<span className="inline-flex items-center gap-1 text-xs text-success">
 							<Sparkles className="h-3 w-3" />
 							Loaded · {headSha?.slice(0, 8)}
 						</span>
 					) : null}
-					{loadError ? <p className="text-xs text-red-500">{loadError}</p> : null}
+					{loadError ? <p className="text-xs text-danger">{loadError}</p> : null}
 				</div>
 				<p className="mt-3 text-xs text-muted">
 					Dockroot deploys the selected commit by materializing the repository on the target host,
 					then running Docker Compose with your reviewed compose and env files. Rebuilds use the
 					pinned commit SHA shown after load.
 				</p>
-			</div>
+			</Panel>
 
 			{/* Step 3: Review & Create */}
-			<div className="rounded-xl border border-default/10 bg-surface">
+			<Panel>
 				<button
 					type="button"
 					onClick={() => setShowEditor(!showEditor)}
@@ -612,7 +593,7 @@ export function StackGitHubForm({
 						className="inline-flex h-8 items-center rounded-md bg-foreground px-3 text-xs font-medium text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
 					/>
 				</div>
-			</div>
+			</Panel>
 		</form>
 	);
 }

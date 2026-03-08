@@ -6,6 +6,21 @@ import {
 } from "@/app/(dashboard)/actions";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { PageHeader } from "@/components/page-header";
+import { Button } from "@/components/ui/button";
+import {
+	DataTable,
+	DataTableBody,
+	DataTableCell,
+	DataTableEmpty,
+	DataTableHead,
+	DataTableHeader,
+	DataTableRow,
+} from "@/components/ui/data-table";
+import { Input } from "@/components/ui/input";
+import { LinkButton } from "@/components/ui/link-button";
+import { MetricCard } from "@/components/ui/metric-card";
+import { Panel } from "@/components/ui/panel";
+import { Select } from "@/components/ui/select";
 import { requirePrivilegedPageSession } from "@/lib/authorization";
 import { listNetworksForEnvironment, resolveRuntimeEnvironment } from "@/lib/environment-runtime";
 
@@ -37,136 +52,93 @@ export default async function NetworksPage({
 			/>
 
 			{/* Actions */}
-			<div className="rounded-xl border border-default/10 bg-surface p-4">
+			<Panel padding="sm">
 				<div className="flex flex-col gap-3 lg:flex-row">
 					<form className="flex flex-1 gap-3">
-						<input
-							type="search"
-							name="q"
-							defaultValue={params.q || ""}
-							placeholder="Search networks..."
-							className="h-9 flex-1 rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
-						/>
-						<button
-							type="submit"
-							className="inline-flex h-9 items-center rounded-lg border border-default/10 px-3 text-sm font-medium"
-						>
+						<Input type="search" name="q" defaultValue={params.q || ""} placeholder="Search networks..." className="flex-1" />
+						<Button type="submit" variant="secondary">
 							Filter
-						</button>
+						</Button>
 					</form>
 					<form action={createNetworkAction} className="flex gap-3">
 						<input type="hidden" name="environmentId" value={environment.id} />
-						<input
-							type="text"
-							name="name"
-							required
-							placeholder="app-network"
-							className="h-9 rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
-						/>
-						<select
-							name="driver"
-							defaultValue="bridge"
-							className="h-9 rounded-lg border border-default/10 bg-background px-3 text-sm outline-none"
-						>
+						<Input type="text" name="name" required placeholder="app-network" />
+						<Select name="driver" defaultValue="bridge">
 							<option value="bridge">bridge</option>
 							<option value="overlay">overlay</option>
 							<option value="macvlan">macvlan</option>
 							<option value="host">host</option>
-						</select>
-						<FormSubmitButton
-							label="Create"
-							pendingLabel="Creating..."
-							className="inline-flex h-9 items-center rounded-lg bg-foreground px-3 text-sm font-medium text-background"
-						/>
+						</Select>
+						<FormSubmitButton label="Create" pendingLabel="Creating..." />
 					</form>
 					<form action={pruneNetworksAction}>
 						<input type="hidden" name="environmentId" value={environment.id} />
-						<FormSubmitButton
-							label="Prune"
-							pendingLabel="Pruning..."
-							className="inline-flex h-9 items-center rounded-lg border border-default/10 px-3 text-sm font-medium text-muted transition-colors hover:text-foreground"
-						/>
+						<FormSubmitButton label="Prune" pendingLabel="Pruning..." variant="outline" />
 					</form>
 				</div>
-			</div>
+			</Panel>
 
 			{/* Stats */}
 			<div className="grid gap-4 sm:grid-cols-3">
-				<div className="rounded-xl border border-default/10 bg-surface p-4">
-					<p className="text-xs text-muted">Total</p>
-					<p className="mt-1 text-2xl font-semibold">{filtered.length}</p>
-				</div>
-				<div className="rounded-xl border border-default/10 bg-surface p-4">
-					<p className="text-xs text-muted">Bridge</p>
-					<p className="mt-1 text-2xl font-semibold">{bridgeCount}</p>
-				</div>
-				<div className="rounded-xl border border-default/10 bg-surface p-4">
-					<p className="text-xs text-muted">Other drivers</p>
-					<p className="mt-1 text-2xl font-semibold">{filtered.length - bridgeCount}</p>
-				</div>
+				<MetricCard label="Total" value={filtered.length} />
+				<MetricCard label="Bridge" value={bridgeCount} />
+				<MetricCard label="Other drivers" value={filtered.length - bridgeCount} />
 			</div>
 
 			{/* Table */}
-			<div className="rounded-xl border border-default/10 bg-surface">
-				<div className="table-scroll">
-					<table className="min-w-full text-left text-sm">
-						<thead>
-							<tr className="border-b border-default/10 text-xs text-muted">
-								<th className="px-4 py-3 font-medium">Name</th>
-								<th className="px-4 py-3 font-medium">Driver</th>
-								<th className="px-4 py-3 font-medium">Scope</th>
-								<th className="px-4 py-3 font-medium">Actions</th>
-							</tr>
-						</thead>
-						<tbody className="divide-y divide-default/5">
+			<Panel>
+				<DataTable>
+					<DataTableHeader>
+						<tr>
+							<DataTableHead>Name</DataTableHead>
+							<DataTableHead>Driver</DataTableHead>
+							<DataTableHead>Scope</DataTableHead>
+							<DataTableHead>Actions</DataTableHead>
+						</tr>
+					</DataTableHeader>
+					<DataTableBody>
 							{filtered.length ? (
 								filtered.map((network: Record<string, string>) => (
-									<tr
-										key={`${network.ID}-${network.Name}`}
-										className="transition-colors hover:bg-foreground/[0.02]"
-									>
-										<td className="px-4 py-3">
+									<DataTableRow key={`${network.ID}-${network.Name}`}>
+										<DataTableCell>
 											<Link
 												href={`/dashboard/networks/${encodeURIComponent(network.Name)}?environment=${environment.id}`}
 												className="font-medium transition-colors hover:text-foreground/80"
 											>
 												{network.Name}
 											</Link>
-										</td>
-										<td className="px-4 py-3 text-xs text-muted">{network.Driver}</td>
-										<td className="px-4 py-3 text-xs text-muted">{network.Scope || "local"}</td>
-										<td className="px-4 py-3">
+										</DataTableCell>
+										<DataTableCell className="text-xs text-muted">{network.Driver}</DataTableCell>
+										<DataTableCell className="text-xs text-muted">{network.Scope || "local"}</DataTableCell>
+										<DataTableCell>
 											<div className="flex gap-1.5">
-												<Link
+												<LinkButton
 													href={`/dashboard/networks/${encodeURIComponent(network.Name)}?environment=${environment.id}`}
-													className="inline-flex h-7 items-center rounded-md border border-default/10 px-2.5 text-xs font-medium text-muted transition-colors hover:text-foreground"
+													variant="outline"
+													size="xs"
 												>
 													Details
-												</Link>
+												</LinkButton>
 												<form action={removeNetworkAction}>
 													<input type="hidden" name="name" value={network.Name} />
 													<input type="hidden" name="environmentId" value={environment.id} />
 													<FormSubmitButton
 														label="Delete"
 														pendingLabel="Deleting..."
-														className="inline-flex h-7 items-center rounded-md border border-red-200 bg-red-50 px-2.5 text-xs font-medium text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400"
+														variant="danger"
+														size="xs"
 													/>
 												</form>
 											</div>
-										</td>
-									</tr>
+										</DataTableCell>
+									</DataTableRow>
 								))
 							) : (
-								<tr>
-									<td colSpan={4} className="px-4 py-12 text-center text-sm text-muted">
-										No networks found.
-									</td>
-								</tr>
+								<DataTableEmpty colSpan={4}>No networks found.</DataTableEmpty>
 							)}
-						</tbody>
-					</table>
-				</div>
-			</div>
+					</DataTableBody>
+				</DataTable>
+			</Panel>
 		</div>
 	);
 }

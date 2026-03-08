@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { LogBlock } from "@/components/ui/log-block";
+import { Panel } from "@/components/ui/panel";
 import { getSocket } from "@/lib/socket-client";
 
 interface StackEvent {
@@ -59,19 +62,19 @@ export function LiveStackFeed({
 	}, [events, initialLog]);
 
 	return (
-		<div className="rounded-xl border border-default/10 bg-[#0a0a0a] p-4">
+		<Panel className="bg-console p-4">
 			<div className="flex items-center justify-between">
 				<div>
-					<p className="text-sm font-semibold text-white">Live logs</p>
-					<p className="text-xs text-white/45">Socket.IO powered deployment feed</p>
+					<p className="text-sm font-semibold text-console-foreground">Live logs</p>
+					<p className="text-xs text-console-foreground/50">Socket.IO powered deployment feed</p>
 				</div>
-				<div className="rounded-full bg-accent/15 px-2.5 py-1 text-[11px] font-medium text-accent">
+				<Badge variant="accent" className="rounded-full px-2.5 py-1 text-[11px]">
 					Live
-				</div>
+				</Badge>
 			</div>
-			<pre className="log-viewport mt-4 max-h-[480px] text-xs leading-6 text-white/80">
+			<LogBlock className="mt-4 max-h-[480px] border-0 bg-transparent p-0 text-console-foreground/90">
 				{feed || "No logs yet."}
-			</pre>
-		</div>
+			</LogBlock>
+		</Panel>
 	);
 }

@@ -2,6 +2,9 @@
 
 import { Area, AreaChart, CartesianGrid, Tooltip, XAxis, YAxis } from "recharts";
 import { ChartFrame } from "@/components/chart-frame";
+import { EmptyState } from "@/components/ui/empty-state";
+import { MetricCard } from "@/components/ui/metric-card";
+import { Panel } from "@/components/ui/panel";
 
 function formatBytes(value: number | null) {
 	if (value === null) {
@@ -37,35 +40,21 @@ export function ContainerMetricsPanel({
 }) {
 	if (!metrics.available) {
 		return (
-			<div className="rounded-xl border border-dashed border-default/10 bg-surface p-6 text-sm text-muted">
-				Prometheus container metrics are not available yet for this container.
-			</div>
+			<EmptyState title="Metrics unavailable" description="Prometheus container metrics are not available yet for this container." className="p-6" />
 		);
 	}
 
 	return (
 		<div className="space-y-5">
 			<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-				<div className="rounded-xl border border-default/10 bg-surface p-4">
-					<p className="text-xs text-muted">CPU</p>
-					<p className="mt-2 text-2xl font-semibold">{metrics.cpuPercent?.toFixed(1) ?? "—"}%</p>
-				</div>
-				<div className="rounded-xl border border-default/10 bg-surface p-4">
-					<p className="text-xs text-muted">Working set memory</p>
-					<p className="mt-2 text-2xl font-semibold">{formatBytes(metrics.memoryBytes)}</p>
-				</div>
-				<div className="rounded-xl border border-default/10 bg-surface p-4">
-					<p className="text-xs text-muted">RX / sec</p>
-					<p className="mt-2 text-2xl font-semibold">{formatBytes(metrics.rxBytes)}</p>
-				</div>
-				<div className="rounded-xl border border-default/10 bg-surface p-4">
-					<p className="text-xs text-muted">TX / sec</p>
-					<p className="mt-2 text-2xl font-semibold">{formatBytes(metrics.txBytes)}</p>
-				</div>
+				<MetricCard label="CPU" value={`${metrics.cpuPercent?.toFixed(1) ?? "—"}%`} />
+				<MetricCard label="Working set memory" value={formatBytes(metrics.memoryBytes)} />
+				<MetricCard label="RX / sec" value={formatBytes(metrics.rxBytes)} />
+				<MetricCard label="TX / sec" value={formatBytes(metrics.txBytes)} />
 			</div>
 
 			<div className="grid gap-5 xl:grid-cols-2">
-				<div className="rounded-xl border border-default/10 bg-surface p-5">
+				<Panel padding="md">
 					<p className="text-sm font-semibold">CPU and memory</p>
 					<ChartFrame className="mt-4 h-64">
 						{({ width, height }) => (
@@ -107,9 +96,9 @@ export function ContainerMetricsPanel({
 							</AreaChart>
 						)}
 					</ChartFrame>
-				</div>
+				</Panel>
 
-				<div className="rounded-xl border border-default/10 bg-surface p-5">
+				<Panel padding="md">
 					<p className="text-sm font-semibold">Network throughput</p>
 					<ChartFrame className="mt-4 h-64">
 						{({ width, height }) => (
@@ -151,7 +140,7 @@ export function ContainerMetricsPanel({
 							</AreaChart>
 						)}
 					</ChartFrame>
-				</div>
+				</Panel>
 			</div>
 		</div>
 	);

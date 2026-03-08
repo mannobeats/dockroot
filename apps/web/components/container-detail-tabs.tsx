@@ -6,6 +6,21 @@ import { CodeEditor } from "@/components/code-editor";
 import { ContainerFileBrowser } from "@/components/container-file-browser";
 import { ContainerMetricsPanel } from "@/components/container-metrics-panel";
 import { RuntimePortLinks } from "@/components/runtime-port-links";
+import {
+	DataTable,
+	DataTableBody,
+	DataTableCell,
+	DataTableEmpty,
+	DataTableHead,
+	DataTableHeader,
+	DataTableRow,
+} from "@/components/ui/data-table";
+import { EmptyState } from "@/components/ui/empty-state";
+import { LinkButton } from "@/components/ui/link-button";
+import { LogBlock } from "@/components/ui/log-block";
+import { MetricCard } from "@/components/ui/metric-card";
+import { Panel, PanelHeader, PanelTitle } from "@/components/ui/panel";
+import { TabsList, TabsPanel, TabsTrigger } from "@/components/ui/tabs";
 
 type Tab = "overview" | "metrics" | "logs" | "config" | "networks" | "files";
 type ContainerMetrics = {
@@ -72,73 +87,75 @@ export function ContainerDetailTabs({
 	return (
 		<div>
 			{/* Tab navigation */}
-			<div className="tab-nav">
+			<TabsList>
 				{tabs.map((tab) => (
-					<button
+					<TabsTrigger
 						key={tab.id}
-						type="button"
-						data-active={activeTab === tab.id}
+						active={activeTab === tab.id}
 						onClick={() => setActiveTab(tab.id)}
 					>
 						{tab.label}
-					</button>
+					</TabsTrigger>
 				))}
-			</div>
+			</TabsList>
 
 			{/* Tab content */}
-			<div className="mt-6">
+			<TabsPanel>
 				{activeTab === "overview" && (
 					<div className="space-y-4">
 						<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-							<div className="rounded-xl border border-default/10 bg-surface p-4">
-								<p className="text-xs text-muted">Image</p>
-								<p className="mt-2 break-all text-sm font-medium">
-									{String((inspect.Config as Record<string, unknown>)?.Image || "—")}
-								</p>
-							</div>
-							<div className="rounded-xl border border-default/10 bg-surface p-4">
-								<p className="text-xs text-muted">Started at</p>
-								<p className="mt-2 text-sm font-medium">
-									{String((inspect.State as Record<string, unknown>)?.StartedAt || "—")}
-								</p>
-							</div>
-							<div className="rounded-xl border border-default/10 bg-surface p-4">
-								<p className="text-xs text-muted">Restart count</p>
-								<p className="mt-2 text-sm font-medium">
-									{String((inspect as Record<string, unknown>).RestartCount || 0)}
-								</p>
-							</div>
-							<div className="rounded-xl border border-default/10 bg-surface p-4">
-								<p className="text-xs text-muted">Memory / CPU</p>
-								<p className="mt-2 text-sm font-medium">
-									{details
+							<MetricCard
+								label="Image"
+								value={String((inspect.Config as Record<string, unknown>)?.Image || "—")}
+								className="h-full"
+								valueClassName="break-all text-sm"
+							/>
+							<MetricCard
+								label="Started at"
+								value={String((inspect.State as Record<string, unknown>)?.StartedAt || "—")}
+								className="h-full"
+								valueClassName="text-sm"
+							/>
+							<MetricCard
+								label="Restart count"
+								value={String((inspect as Record<string, unknown>).RestartCount || 0)}
+								className="h-full"
+								valueClassName="text-sm"
+							/>
+							<MetricCard
+								label="Memory / CPU"
+								value={
+									details
 										? `${(details as Record<string, Record<string, string>>).stats?.MemUsage || "—"} · ${(details as Record<string, Record<string, string>>).stats?.CPUPerc || "—"}`
-										: "—"}
-								</p>
-							</div>
+										: "—"
+								}
+								className="h-full"
+								valueClassName="text-sm"
+							/>
 						</div>
-						<div className="rounded-xl border border-default/10 bg-surface p-4">
+						<Panel padding="sm">
 							<p className="text-xs text-muted">Published ports</p>
 							<div className="mt-3">
 								<RuntimePortLinks ports={publishedPortSummary} />
 							</div>
-						</div>
+						</Panel>
 						{/* Quick logs preview */}
-						<div className="rounded-xl border border-default/10 bg-surface p-4">
+						<Panel padding="sm">
 							<div className="flex items-center justify-between">
 								<p className="text-sm font-semibold">Recent logs</p>
-								<button
-									type="button"
+								<LinkButton
+									href="#"
+									variant="ghost"
+									size="sm"
 									onClick={() => setActiveTab("logs")}
-									className="text-xs font-medium text-muted transition-colors hover:text-foreground"
 								>
 									View all →
-								</button>
+								</LinkButton>
 							</div>
-							<pre className="log-viewport mt-3 max-h-[260px] rounded-lg bg-[#0a0a0a] p-4 text-xs leading-5 text-white/85">
+							<LogBlock className="mt-3 max-h-[260px] p-4">
 								{String((details as Record<string, unknown>)?.logs || "No logs available.")}
-							</pre>
-						</div>
+							</LogBlock>
+						</Panel>
 					</div>
 				)}
 
@@ -147,69 +164,67 @@ export function ContainerDetailTabs({
 						{metrics ? (
 							<ContainerMetricsPanel metrics={metrics} />
 						) : (
-							<div className="rounded-xl border border-dashed border-default/10 p-12 text-center text-sm text-muted">
-								Metrics are only available for local Docker environments with Prometheus configured.
-							</div>
+							<EmptyState title="Metrics unavailable" description="Metrics are only available for local Docker environments with Prometheus configured." />
 						)}
 					</div>
 				)}
 
 				{activeTab === "logs" && (
-					<div className="rounded-xl border border-default/10 bg-surface p-4">
+					<Panel padding="sm">
 						<div className="flex items-center justify-between">
 							<p className="text-sm font-semibold">Container logs</p>
-							<Link
+							<LinkButton
 								href={`/dashboard/logs?mode=single&container=${containerId}&environment=${environmentId}`}
-								className="text-xs font-medium text-muted transition-colors hover:text-foreground"
+								variant="ghost"
+								size="sm"
 							>
 								Open live workspace →
-							</Link>
+							</LinkButton>
 						</div>
-						<pre className="log-viewport mt-3 max-h-[600px] rounded-lg bg-[#0a0a0a] p-4 text-xs leading-5 text-white/85">
+						<LogBlock className="mt-3 max-h-[600px] p-4">
 							{String((details as Record<string, unknown>)?.logs || "No logs available.")}
-						</pre>
-					</div>
+						</LogBlock>
+					</Panel>
 				)}
 
 				{activeTab === "config" && (
 					<div className="grid gap-4 xl:grid-cols-2">
-						<div className="overflow-hidden rounded-xl border border-default/10">
-							<div className="border-b border-default/10 px-4 py-3">
-								<p className="text-sm font-semibold">Environment variables</p>
-							</div>
+						<Panel className="overflow-hidden">
+							<PanelHeader>
+								<PanelTitle>Environment variables</PanelTitle>
+							</PanelHeader>
 							<CodeEditor value={envVars.join("\n")} language="env" readOnly minHeight="420px" />
-						</div>
-						<div className="overflow-hidden rounded-xl border border-default/10">
-							<div className="border-b border-default/10 px-4 py-3">
-								<p className="text-sm font-semibold">Labels</p>
-							</div>
+						</Panel>
+						<Panel className="overflow-hidden">
+							<PanelHeader>
+								<PanelTitle>Labels</PanelTitle>
+							</PanelHeader>
 							<CodeEditor
 								value={JSON.stringify(labels, null, 2)}
 								language="env"
 								readOnly
 								minHeight="420px"
 							/>
-						</div>
+						</Panel>
 					</div>
 				)}
 
 				{activeTab === "networks" && (
 					<div className="space-y-4">
-						<div className="rounded-xl border border-default/10 bg-surface">
-							<div className="table-scroll">
-								<table className="min-w-full text-left text-sm">
-									<thead>
-										<tr className="border-b border-default/10 text-xs text-muted">
-											<th className="px-4 py-3 font-medium">Network</th>
-											<th className="px-4 py-3 font-medium">IP Address</th>
-											<th className="px-4 py-3 font-medium">Gateway</th>
-										</tr>
-									</thead>
-									<tbody className="divide-y divide-default/5">
+						<Panel>
+							<DataTable>
+								<DataTableHeader>
+									<tr>
+										<DataTableHead>Network</DataTableHead>
+										<DataTableHead>IP Address</DataTableHead>
+										<DataTableHead>Gateway</DataTableHead>
+									</tr>
+								</DataTableHeader>
+								<DataTableBody>
 										{networkEntries.length ? (
 											networkEntries.map(([name, network]) => (
-												<tr key={name} className="transition-colors hover:bg-foreground/[0.02]">
-													<td className="px-4 py-3 font-medium">
+												<DataTableRow key={name}>
+													<DataTableCell className="font-medium">
 														{canOpenRuntimeTopology ? (
 															<Link
 																href={`/dashboard/networks/${encodeURIComponent(name)}?environment=${environmentId}`}
@@ -220,27 +235,22 @@ export function ContainerDetailTabs({
 														) : (
 															name
 														)}
-													</td>
-													<td className="px-4 py-3 text-xs text-muted">
+													</DataTableCell>
+													<DataTableCell className="text-xs text-muted">
 														{network.IPAddress || "—"}
-													</td>
-													<td className="px-4 py-3 text-xs text-muted">{network.Gateway || "—"}</td>
-												</tr>
+													</DataTableCell>
+													<DataTableCell className="text-xs text-muted">{network.Gateway || "—"}</DataTableCell>
+												</DataTableRow>
 											))
 										) : (
-											<tr>
-												<td colSpan={3} className="px-4 py-12 text-center text-sm text-muted">
-													No network attachments.
-												</td>
-											</tr>
+											<DataTableEmpty colSpan={3}>No network attachments.</DataTableEmpty>
 										)}
-									</tbody>
-								</table>
-							</div>
-						</div>
+								</DataTableBody>
+							</DataTable>
+						</Panel>
 
 						{/* Mounts / Storage */}
-						<div className="rounded-xl border border-default/10 bg-surface p-4">
+						<Panel padding="sm">
 							<p className="text-sm font-semibold">Mounts</p>
 							<div className="mt-3 space-y-2 text-sm text-muted">
 								{mounts.length ? (
@@ -259,7 +269,7 @@ export function ContainerDetailTabs({
 									<p>No mounts configured.</p>
 								)}
 							</div>
-						</div>
+						</Panel>
 					</div>
 				)}
 
@@ -271,7 +281,7 @@ export function ContainerDetailTabs({
 						browser={browser}
 					/>
 				)}
-			</div>
+			</TabsPanel>
 		</div>
 	);
 }

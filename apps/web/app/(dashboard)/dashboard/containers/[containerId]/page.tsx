@@ -1,9 +1,10 @@
 import { ArrowLeft, Lock } from "lucide-react";
-import Link from "next/link";
 import { controlContainerAction } from "@/app/(dashboard)/actions";
 import { ContainerDetailTabs } from "@/components/container-detail-tabs";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { StatusBadge } from "@/components/status-badge";
+import { Badge } from "@/components/ui/badge";
+import { LinkButton } from "@/components/ui/link-button";
 import { isPrivilegedRole, requireUserSession } from "@/lib/authorization";
 import {
 	browseContainerPathForEnvironment,
@@ -125,24 +126,18 @@ export default async function ContainerDetailPage({
 			{/* Header with back + actions */}
 			<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 				<div className="flex items-center gap-3">
-					<Link
-						href={`/dashboard/containers?environment=${environment.id}`}
-						className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-default/10 text-muted transition-colors hover:text-foreground"
-					>
+					<LinkButton href={`/dashboard/containers?environment=${environment.id}`} variant="outline" size="icon">
 						<ArrowLeft className="h-4 w-4" />
-					</Link>
+					</LinkButton>
 					<div>
 						<div className="flex items-center gap-2">
 							<h1 className="text-lg font-semibold">{containerName}</h1>
 							<StatusBadge status={inspect.State?.Status || "offline"} />
 							{isProtected ? (
-								<span
-									title={protectedLabel || undefined}
-									className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400"
-								>
+								<Badge title={protectedLabel || undefined} variant="warning">
 									<Lock className="h-2.5 w-2.5" />
 									Locked
-								</span>
+								</Badge>
 							) : null}
 						</div>
 						<p className="text-sm text-muted">
@@ -160,26 +155,26 @@ export default async function ContainerDetailPage({
 								label={action}
 								pendingLabel={`${action}ing...`}
 								disabled={isProtected}
-								className={`inline-flex h-7 items-center rounded-md px-2.5 text-xs font-medium capitalize transition-colors ${
-									action === "remove"
-										? "border border-red-200 bg-red-50 text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400"
-										: "border border-default/10 text-muted hover:text-foreground"
-								} disabled:cursor-not-allowed disabled:opacity-40`}
+								variant={action === "remove" ? "danger" : "outline"}
+								size="xs"
+								className="capitalize"
 							/>
 						</form>
 					))}
-					<Link
+					<LinkButton
 						href={`/dashboard/shell?target=container&containerId=${containerId}&environment=${environment.id}`}
-						className="inline-flex h-7 items-center rounded-md border border-default/10 px-2.5 text-xs font-medium text-muted transition-colors hover:text-foreground"
+						variant="outline"
+						size="xs"
 					>
 						Shell
-					</Link>
-					<Link
+					</LinkButton>
+					<LinkButton
 						href={`/dashboard/logs?mode=single&container=${containerId}&environment=${environment.id}`}
-						className="inline-flex h-7 items-center rounded-md border border-default/10 px-2.5 text-xs font-medium text-muted transition-colors hover:text-foreground"
+						variant="outline"
+						size="xs"
 					>
 						Logs
-					</Link>
+					</LinkButton>
 				</div>
 			</div>
 

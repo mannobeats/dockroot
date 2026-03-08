@@ -1,5 +1,4 @@
 import { ArrowLeft } from "lucide-react";
-import Link from "next/link";
 import {
 	createGitHubStackAction,
 	createStackAction,
@@ -10,6 +9,8 @@ import {
 } from "@/app/(dashboard)/actions";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { ProjectDetailTabs } from "@/components/project-detail-tabs";
+import { LinkButton } from "@/components/ui/link-button";
+import { MetricCard } from "@/components/ui/metric-card";
 import { isGitHubAppConfigured } from "@/lib/github-app";
 import { getProjectById, listEnvironments, listGitHubInstallations } from "@/lib/platform";
 import { getServerSession } from "@/lib/session";
@@ -47,12 +48,9 @@ export default async function ProjectDetailPage({
 			{/* Header */}
 			<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 				<div className="flex items-center gap-3">
-					<Link
-						href="/dashboard/projects"
-						className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-default/10 text-muted transition-colors hover:text-foreground"
-					>
+					<LinkButton href="/dashboard/projects" variant="outline" size="icon">
 						<ArrowLeft className="h-4 w-4" />
-					</Link>
+					</LinkButton>
 					<div>
 						<p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted">
 							Project
@@ -63,29 +61,16 @@ export default async function ProjectDetailPage({
 				<div className="flex flex-wrap gap-2">
 					<form action={deleteProjectAction}>
 						<input type="hidden" name="projectId" value={project.id} />
-						<FormSubmitButton
-							label="Delete project"
-							pendingLabel="Deleting..."
-							className="inline-flex h-7 items-center rounded-md border border-red-200 bg-red-50 px-2.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-100 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/15"
-						/>
+						<FormSubmitButton label="Delete project" pendingLabel="Deleting..." variant="danger" size="xs" />
 					</form>
 				</div>
 			</div>
 
 			{/* Summary stats */}
 			<div className="grid gap-3 sm:grid-cols-3">
-				<div className="rounded-xl border border-default/10 bg-surface p-4">
-					<p className="text-xs text-muted">Stacks</p>
-					<p className="mt-1 text-2xl font-semibold">{project.stacks.length}</p>
-				</div>
-				<div className="rounded-xl border border-default/10 bg-surface p-4">
-					<p className="text-xs text-muted">GitHub Access</p>
-					<p className="mt-1 text-2xl font-semibold">{githubInstallations.length}</p>
-				</div>
-				<div className="rounded-xl border border-default/10 bg-surface p-4">
-					<p className="text-xs text-muted">Environments</p>
-					<p className="mt-1 text-2xl font-semibold">{environments.length}</p>
-				</div>
+				<MetricCard label="Stacks" value={project.stacks.length} />
+				<MetricCard label="GitHub Access" value={githubInstallations.length} />
+				<MetricCard label="Environments" value={environments.length} />
 			</div>
 
 			{/* Tabbed interface: Stacks | Deploy GitHub | Deploy Manual */}

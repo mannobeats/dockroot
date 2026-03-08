@@ -2,6 +2,8 @@
 
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, Tooltip, XAxis, YAxis } from "recharts";
 import { ChartFrame } from "@/components/chart-frame";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Panel } from "@/components/ui/panel";
 
 const PIE_COLORS = ["#22c55e", "#3b82f6", "#eab308", "#ef4444", "#a855f7"];
 
@@ -51,10 +53,7 @@ export function PrometheusOverview({
 }) {
 	if (!metrics.available) {
 		return (
-			<div className="rounded-xl border border-dashed border-default/10 p-8 text-center text-sm text-muted">
-				Prometheus data is not available yet. Start the monitoring stack and the dashboard will
-				switch to scraped metrics automatically.
-			</div>
+			<EmptyState title="Prometheus data unavailable" description="Start the monitoring stack and the dashboard will switch to scraped metrics automatically." className="p-8" />
 		);
 	}
 
@@ -67,7 +66,7 @@ export function PrometheusOverview({
 	return (
 		<div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
 			{/* Host Utilization — Bar Chart */}
-			<div className="rounded-xl border border-default/10 bg-surface p-5">
+			<Panel padding="md">
 				<div className="flex items-center justify-between">
 					<div>
 						<h3 className="text-sm font-semibold">Host utilization</h3>
@@ -79,7 +78,7 @@ export function PrometheusOverview({
 							CPU {metrics.cpuPercent?.toFixed(1) ?? "—"}%
 						</span>
 						<span className="flex items-center gap-1.5">
-							<span className="h-2 w-2 rounded-full bg-emerald-500" />
+							<span className="h-2 w-2 rounded-full bg-success" />
 							MEM {metrics.memoryPercent?.toFixed(1) ?? "—"}%
 						</span>
 					</div>
@@ -112,19 +111,19 @@ export function PrometheusOverview({
 							<Bar
 								dataKey="memory"
 								name="Memory"
-								fill="#22c55e"
+									fill="var(--success)"
 								radius={[3, 3, 0, 0]}
 								maxBarSize={24}
 							/>
 						</BarChart>
-					)}
-				</ChartFrame>
-			</div>
+						)}
+					</ChartFrame>
+				</Panel>
 
 			{/* Right column: Pie + Environment Health */}
 			<div className="grid gap-4">
 				{/* Deployment Mix — Donut */}
-				<div className="rounded-xl border border-default/10 bg-surface p-5">
+				<Panel padding="md">
 					<div className="flex items-center justify-between">
 						<h3 className="text-sm font-semibold">Deployment status</h3>
 						<p className="text-xs text-muted">{metrics.runningContainers ?? 0} running</p>
@@ -152,10 +151,10 @@ export function PrometheusOverview({
 							</PieChart>
 						)}
 					</ChartFrame>
-				</div>
+				</Panel>
 
 				{/* Environment Health */}
-				<div className="rounded-xl border border-default/10 bg-surface p-5">
+				<Panel padding="md">
 					<h3 className="text-sm font-semibold">Environment health</h3>
 					<div className="mt-3 space-y-2">
 						{metrics.environmentStatus.map((entry, index) => (
@@ -174,7 +173,7 @@ export function PrometheusOverview({
 							</div>
 						))}
 					</div>
-				</div>
+				</Panel>
 			</div>
 		</div>
 	);

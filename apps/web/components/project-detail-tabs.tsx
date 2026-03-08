@@ -7,6 +7,18 @@ import { FormSubmitButton } from "@/components/form-submit-button";
 import { StackComposeForm } from "@/components/stack-compose-form";
 import { type InstallationOption, StackGitHubForm } from "@/components/stack-github-form";
 import { StatusBadge } from "@/components/status-badge";
+import { EmptyState } from "@/components/ui/empty-state";
+import {
+	DataTable,
+	DataTableBody,
+	DataTableCell,
+	DataTableHead,
+	DataTableHeader,
+	DataTableRow,
+} from "@/components/ui/data-table";
+import { LinkButton } from "@/components/ui/link-button";
+import { Panel } from "@/components/ui/panel";
+import { TabsList, TabsPanel, TabsTrigger } from "@/components/ui/tabs";
 
 type Tab = "stacks" | "deploy-github" | "deploy-manual";
 
@@ -66,40 +78,38 @@ export function ProjectDetailTabs({
 	return (
 		<div>
 			{/* Tab navigation */}
-			<div className="tab-nav">
+			<TabsList>
 				{tabs.map((tab) => (
-					<button
+					<TabsTrigger
 						key={tab.id}
-						type="button"
-						data-active={activeTab === tab.id}
+						active={activeTab === tab.id}
 						onClick={() => setActiveTab(tab.id)}
 					>
 						{tab.label}
-					</button>
+					</TabsTrigger>
 				))}
-			</div>
+			</TabsList>
 
 			{/* Tab content */}
-			<div className="mt-6">
+			<TabsPanel>
 				{activeTab === "stacks" && (
 					<div>
 						{project.stacks.length ? (
-							<div className="rounded-xl border border-default/10 bg-surface">
-								<div className="table-scroll">
-									<table className="min-w-full text-left text-sm">
-										<thead>
-											<tr className="border-b border-default/10 text-xs text-muted">
-												<th className="px-4 py-3 font-medium">Stack</th>
-												<th className="px-4 py-3 font-medium">Status</th>
-												<th className="px-4 py-3 font-medium">Environment</th>
-												<th className="px-4 py-3 font-medium">Source</th>
-												<th className="px-4 py-3 font-medium">Actions</th>
-											</tr>
-										</thead>
-										<tbody className="divide-y divide-default/5">
+							<Panel>
+								<DataTable>
+									<DataTableHeader>
+										<tr>
+											<DataTableHead>Stack</DataTableHead>
+											<DataTableHead>Status</DataTableHead>
+											<DataTableHead>Environment</DataTableHead>
+											<DataTableHead>Source</DataTableHead>
+											<DataTableHead>Actions</DataTableHead>
+										</tr>
+									</DataTableHeader>
+									<DataTableBody>
 											{project.stacks.map((stack) => (
-												<tr key={stack.id} className="transition-colors hover:bg-foreground/[0.02]">
-													<td className="px-4 py-3">
+												<DataTableRow key={stack.id}>
+													<DataTableCell>
 														<Link
 															href={`/dashboard/projects/${project.id}/stacks/${stack.id}`}
 															className="font-medium transition-colors hover:text-foreground/80"
@@ -109,84 +119,70 @@ export function ProjectDetailTabs({
 														<p className="mt-0.5 text-xs text-muted">
 															{stack.description || stack.slug}
 														</p>
-													</td>
-													<td className="px-4 py-3">
+													</DataTableCell>
+													<DataTableCell>
 														<StatusBadge status={stack.status} />
-													</td>
-													<td className="px-4 py-3 text-xs text-muted">{stack.environment.name}</td>
-													<td className="px-4 py-3 text-xs text-muted">
+													</DataTableCell>
+													<DataTableCell className="text-xs text-muted">{stack.environment.name}</DataTableCell>
+													<DataTableCell className="text-xs text-muted">
 														{stack.sourceType === "github" ? "GitHub" : "Manual"}
-													</td>
-													<td className="px-4 py-3">
+													</DataTableCell>
+													<DataTableCell>
 														<div className="flex gap-1.5">
 															<form action={deployStackAction}>
 																<input type="hidden" name="stackId" value={stack.id} />
-																<FormSubmitButton
-																	label="Deploy"
-																	pendingLabel="..."
-																	className="inline-flex h-7 items-center rounded-md bg-foreground px-2.5 text-xs font-medium text-background transition-opacity hover:opacity-90"
-																/>
+																<FormSubmitButton label="Deploy" pendingLabel="..." size="xs" />
 															</form>
 															<form action={destroyStackAction}>
 																<input type="hidden" name="stackId" value={stack.id} />
-																<FormSubmitButton
-																	label="Destroy"
-																	pendingLabel="..."
-																	className="inline-flex h-7 items-center rounded-md border border-red-200 bg-red-50 px-2.5 text-xs font-medium text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400"
-																/>
+																<FormSubmitButton label="Destroy" pendingLabel="..." variant="danger" size="xs" />
 															</form>
 															<form action={deleteStackAction}>
 																<input type="hidden" name="stackId" value={stack.id} />
 																<input type="hidden" name="projectId" value={project.id} />
-																<FormSubmitButton
-																	label="Delete"
-																	pendingLabel="..."
-																	className="inline-flex h-7 items-center rounded-md border border-default/10 px-2.5 text-xs font-medium text-muted transition-colors hover:text-red-600"
-																/>
+																<FormSubmitButton label="Delete" pendingLabel="..." variant="quietDanger" size="xs" />
 															</form>
-															<Link
+															<LinkButton
 																href={`/dashboard/projects/${project.id}/stacks/${stack.id}`}
-																className="inline-flex h-7 items-center rounded-md border border-default/10 px-2.5 text-xs font-medium text-muted transition-colors hover:text-foreground"
+																variant="outline"
+																size="xs"
 															>
 																Open <ArrowRight className="ml-1 h-3 w-3" />
-															</Link>
+															</LinkButton>
 														</div>
-													</td>
-												</tr>
+													</DataTableCell>
+												</DataTableRow>
 											))}
-										</tbody>
-									</table>
-								</div>
-							</div>
+									</DataTableBody>
+								</DataTable>
+							</Panel>
 						) : (
-							<div className="rounded-xl border border-dashed border-default/10 bg-surface p-12 text-center">
-								<p className="text-sm text-muted">No stacks yet.</p>
-								<p className="mt-1 text-xs text-muted">
-									Deploy from GitHub or create a manual compose stack.
-								</p>
-								<div className="mt-4 flex justify-center gap-2">
-									<button
-										type="button"
-										onClick={() => setActiveTab("deploy-github")}
-										className="inline-flex h-8 items-center rounded-md bg-foreground px-3 text-xs font-medium text-background"
-									>
-										Deploy from GitHub
-									</button>
-									<button
-										type="button"
-										onClick={() => setActiveTab("deploy-manual")}
-										className="inline-flex h-8 items-center rounded-md border border-default/10 px-3 text-xs font-medium text-muted"
-									>
-										Deploy manually
-									</button>
-								</div>
-							</div>
+							<EmptyState
+								title="No stacks yet"
+								description="Deploy from GitHub or create a manual compose stack."
+								actions={
+									<>
+										<LinkButton href="#" size="sm" onClick={(event) => {
+											event.preventDefault();
+											setActiveTab("deploy-github");
+										}}>
+											Deploy from GitHub
+										</LinkButton>
+										<LinkButton href="#" variant="outline" size="sm" onClick={(event) => {
+											event.preventDefault();
+											setActiveTab("deploy-manual");
+										}}>
+											Deploy manually
+										</LinkButton>
+									</>
+								}
+							/>
 						)}
 					</div>
 				)}
 
 				{activeTab === "deploy-github" && (
-					<div className="rounded-xl border border-default/10 bg-surface p-5">
+					<Panel padding="md">
 						<div className="mb-4">
 							<h2 className="text-base font-semibold">Deploy from GitHub</h2>
 							<p className="mt-1 text-sm text-muted">
@@ -201,11 +197,11 @@ export function ProjectDetailTabs({
 							appConfigured={appConfigured}
 							action={createGitHubStackAction}
 						/>
-					</div>
+					</Panel>
 				)}
 
 				{activeTab === "deploy-manual" && (
-					<div className="rounded-xl border border-default/10 bg-surface p-5">
+					<Panel padding="md">
 						<div className="mb-4">
 							<h2 className="text-base font-semibold">Deploy manually</h2>
 							<p className="mt-1 text-sm text-muted">
@@ -217,9 +213,9 @@ export function ProjectDetailTabs({
 							environments={environments}
 							action={createStackAction}
 						/>
-					</div>
+					</Panel>
 				)}
-			</div>
+			</TabsPanel>
 		</div>
 	);
 }

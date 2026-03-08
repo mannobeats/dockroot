@@ -3,6 +3,18 @@ import { createEnvironmentAction, deleteEnvironmentAction } from "@/app/(dashboa
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
+import {
+	DataTable,
+	DataTableBody,
+	DataTableCell,
+	DataTableHead,
+	DataTableHeader,
+	DataTableRow,
+} from "@/components/ui/data-table";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { LinkButton } from "@/components/ui/link-button";
+import { Panel } from "@/components/ui/panel";
 import { listEnvironments } from "@/lib/platform";
 import { getServerSession } from "@/lib/session";
 
@@ -24,25 +36,24 @@ export default async function EnvironmentsPage() {
 			/>
 
 			{/* Compact table view — inspired by competitor's scalable layout */}
-			<div className="rounded-xl border border-default/10 bg-surface">
-				<div className="table-scroll">
-					<table className="min-w-full text-left text-sm">
-						<thead>
-							<tr className="border-b border-default/10 text-xs text-muted">
-								<th className="px-4 py-3 font-medium">Name</th>
-								<th className="px-4 py-3 font-medium">Status</th>
-								<th className="px-4 py-3 font-medium">Kind</th>
-								<th className="px-4 py-3 font-medium">Stacks</th>
-								<th className="px-4 py-3 font-medium">Host</th>
-								<th className="px-4 py-3 font-medium">Actions</th>
-							</tr>
-						</thead>
-						<tbody className="divide-y divide-default/5">
+			<Panel>
+				<DataTable>
+					<DataTableHeader>
+						<tr>
+							<DataTableHead>Name</DataTableHead>
+							<DataTableHead>Status</DataTableHead>
+							<DataTableHead>Kind</DataTableHead>
+							<DataTableHead>Stacks</DataTableHead>
+							<DataTableHead>Host</DataTableHead>
+							<DataTableHead>Actions</DataTableHead>
+						</tr>
+					</DataTableHeader>
+					<DataTableBody>
 							{environments.map((environment) => {
 								const agent = environment.agent[0];
 								return (
-									<tr key={environment.id} className="transition-colors hover:bg-foreground/[0.02]">
-										<td className="px-4 py-3">
+									<DataTableRow key={environment.id}>
+										<DataTableCell>
 											<Link
 												href={`/dashboard/environments/${environment.id}`}
 												className="font-medium transition-colors hover:text-foreground/80"
@@ -52,101 +63,72 @@ export default async function EnvironmentsPage() {
 											<p className="mt-0.5 text-xs text-muted">
 												{environment.description || "No description"}
 											</p>
-										</td>
-										<td className="px-4 py-3">
+										</DataTableCell>
+										<DataTableCell>
 											<StatusBadge status={environment.status} />
-										</td>
-										<td className="px-4 py-3">
+										</DataTableCell>
+										<DataTableCell>
 											<span className="capitalize text-xs text-muted">{environment.kind}</span>
-										</td>
-										<td className="px-4 py-3 text-xs text-muted">{environment.stacks.length}</td>
-										<td className="px-4 py-3 text-xs text-muted">
+										</DataTableCell>
+										<DataTableCell className="text-xs text-muted">{environment.stacks.length}</DataTableCell>
+										<DataTableCell className="text-xs text-muted">
 											{agent?.hostname || "Awaiting registration"}
-										</td>
-										<td className="px-4 py-3">
+										</DataTableCell>
+										<DataTableCell>
 											<div className="flex gap-1.5">
-												<Link
-													href={`/dashboard?environment=${environment.id}`}
-													className="inline-flex h-7 items-center rounded-md bg-foreground px-2.5 text-xs font-medium text-background transition-opacity hover:opacity-90"
-												>
+												<LinkButton href={`/dashboard?environment=${environment.id}`} size="xs">
 													Open
-												</Link>
-												<Link
+												</LinkButton>
+												<LinkButton
 													href={`/dashboard/environments/${environment.id}`}
-													className="inline-flex h-7 items-center rounded-md border border-default/10 px-2.5 text-xs font-medium text-muted transition-colors hover:text-foreground"
+													variant="outline"
+													size="xs"
 												>
 													Details
-												</Link>
+												</LinkButton>
 												{environment.isDefaultLocal ? null : (
 													<form action={deleteEnvironmentAction}>
 														<input type="hidden" name="environmentId" value={environment.id} />
-														<FormSubmitButton
-															label="Delete"
-															pendingLabel="Deleting..."
-															className="inline-flex h-7 items-center rounded-md border border-default/10 px-2.5 text-xs font-medium text-muted transition-colors hover:text-red-600"
-														/>
+														<FormSubmitButton label="Delete" pendingLabel="Deleting..." variant="quietDanger" size="xs" />
 													</form>
 												)}
 											</div>
-										</td>
-									</tr>
+										</DataTableCell>
+									</DataTableRow>
 								);
 							})}
-						</tbody>
-					</table>
-				</div>
-			</div>
+					</DataTableBody>
+				</DataTable>
+			</Panel>
 
 			{/* Add environment form — clean card */}
-			<div className="rounded-xl border border-default/10 bg-surface p-5">
+			<Panel padding="md">
 				<h2 className="text-sm font-semibold">Add environment</h2>
 				<p className="mt-1 text-xs text-muted">
 					Create a remote environment and deploy the Dockroot agent.
 				</p>
 				<form action={createEnvironmentAction} className="mt-4 grid gap-4 sm:grid-cols-3">
-					<div className="space-y-1.5">
-						<label htmlFor="environment-name" className="text-xs font-medium text-muted">
-							Name
-						</label>
-						<input
-							id="environment-name"
-							name="name"
-							required
-							placeholder="prod-fra-01"
-							className="h-9 w-full rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
-						/>
-					</div>
-					<div className="space-y-1.5">
-						<label htmlFor="environment-description" className="text-xs font-medium text-muted">
-							Description
-						</label>
-						<input
+					<Field>
+						<FieldLabel htmlFor="environment-name">Name</FieldLabel>
+						<Input id="environment-name" name="name" required placeholder="prod-fra-01" />
+					</Field>
+					<Field>
+						<FieldLabel htmlFor="environment-description">Description</FieldLabel>
+						<Input
 							id="environment-description"
 							name="description"
 							placeholder="Hetzner VM for production"
-							className="h-9 w-full rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
 						/>
-					</div>
-					<div className="space-y-1.5">
-						<label htmlFor="agent-url" className="text-xs font-medium text-muted">
-							Agent URL
-						</label>
+					</Field>
+					<Field>
+						<FieldLabel htmlFor="agent-url">Agent URL</FieldLabel>
 						<div className="flex gap-2">
-							<input
-								id="agent-url"
-								name="agentUrl"
-								placeholder="http://agent:9095"
-								className="h-9 flex-1 rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
-							/>
-							<FormSubmitButton
-								label="Create"
-								pendingLabel="Creating..."
-								className="inline-flex h-9 items-center rounded-lg bg-foreground px-3 text-sm font-medium text-background transition-opacity hover:opacity-90"
-							/>
+							<Input id="agent-url" name="agentUrl" placeholder="http://agent:9095" />
+							<FormSubmitButton label="Create" pendingLabel="Creating..." />
 						</div>
-					</div>
+					</Field>
 				</form>
-			</div>
+			</Panel>
 		</div>
 	);
 }

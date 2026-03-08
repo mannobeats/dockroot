@@ -8,6 +8,19 @@ import {
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
+import { Button } from "@/components/ui/button";
+import {
+	DataTable,
+	DataTableBody,
+	DataTableCell,
+	DataTableEmpty,
+	DataTableHead,
+	DataTableHeader,
+	DataTableRow,
+} from "@/components/ui/data-table";
+import { Input } from "@/components/ui/input";
+import { LinkButton } from "@/components/ui/link-button";
+import { Panel } from "@/components/ui/panel";
 import { isPrivilegedRole, requireUserSession } from "@/lib/authorization";
 import { listStacks } from "@/lib/platform";
 
@@ -40,47 +53,37 @@ export default async function StacksPage({
 			/>
 
 			{/* Search */}
-			<div className="rounded-xl border border-default/10 bg-surface p-4">
+			<Panel padding="sm">
 				<form className="flex flex-col gap-3 sm:flex-row">
-					<input
-						type="search"
-						name="q"
-						defaultValue={query.q || ""}
-						placeholder="Search stacks, projects, environments..."
-						className="h-9 flex-1 rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
-					/>
-					<button
-						type="submit"
-						className="inline-flex h-9 items-center justify-center rounded-lg border border-default/10 bg-background px-4 text-sm font-medium transition-colors hover:border-default/20"
-					>
+					<Input type="search" name="q" defaultValue={query.q || ""} placeholder="Search stacks, projects, environments..." className="flex-1" />
+					<Button type="submit" variant="secondary">
 						Filter
-					</button>
+					</Button>
 				</form>
-			</div>
+			</Panel>
 
 			{/* Table */}
-			<div className="rounded-xl border border-default/10 bg-surface">
-				<div className="table-scroll">
-					<table className="min-w-full text-left text-sm">
-						<thead>
-							<tr className="border-b border-default/10 text-xs text-muted">
-								<th className="px-4 py-3 font-medium">Name</th>
-								<th className="px-4 py-3 font-medium">Source</th>
-								<th className="px-4 py-3 font-medium">Project</th>
-								<th className="px-4 py-3 font-medium">Environment</th>
-								<th className="px-4 py-3 font-medium">Containers</th>
-								<th className="px-4 py-3 font-medium">Status</th>
-								<th className="px-4 py-3 font-medium">Actions</th>
-							</tr>
-						</thead>
-						<tbody className="divide-y divide-default/5">
+			<Panel>
+				<DataTable>
+					<DataTableHeader>
+						<tr>
+							<DataTableHead>Name</DataTableHead>
+							<DataTableHead>Source</DataTableHead>
+							<DataTableHead>Project</DataTableHead>
+							<DataTableHead>Environment</DataTableHead>
+							<DataTableHead>Containers</DataTableHead>
+							<DataTableHead>Status</DataTableHead>
+							<DataTableHead>Actions</DataTableHead>
+						</tr>
+					</DataTableHeader>
+					<DataTableBody>
 							{filtered.length ? (
 								filtered.map((stack) => (
-									<tr
+									<DataTableRow
 										key={`${stack.type}-${stack.slug}`}
-										className="group transition-colors hover:bg-foreground/[0.02]"
+										className="group"
 									>
-										<td className="px-4 py-3">
+										<DataTableCell>
 											<div className="space-y-0.5">
 												<div className="flex items-center gap-2">
 													<p className="font-medium">{stack.name}</p>
@@ -92,13 +95,13 @@ export default async function StacksPage({
 												</div>
 												<p className="text-xs text-muted">{stack.slug}</p>
 											</div>
-										</td>
-										<td className="px-4 py-3 text-xs text-muted">
+										</DataTableCell>
+										<DataTableCell className="text-xs text-muted">
 											{stack.type === "tracked" ? "Internal" : "Untracked"}
-										</td>
-										<td className="px-4 py-3 text-xs text-muted">{stack.projectName || "—"}</td>
-										<td className="px-4 py-3 text-xs text-muted">{stack.environmentName || "—"}</td>
-										<td className="px-4 py-3">
+										</DataTableCell>
+										<DataTableCell className="text-xs text-muted">{stack.projectName || "—"}</DataTableCell>
+										<DataTableCell className="text-xs text-muted">{stack.environmentName || "—"}</DataTableCell>
+										<DataTableCell>
 											<div className="space-y-0.5">
 												<p className="text-sm font-medium">
 													{stack.runningCount}/{stack.containerCount}
@@ -110,36 +113,29 @@ export default async function StacksPage({
 														.join(", ") || "—"}
 												</p>
 											</div>
-										</td>
-										<td className="px-4 py-3 text-xs text-muted">
+										</DataTableCell>
+										<DataTableCell className="text-xs text-muted">
 											{stack.lastDeployment?.status || stack.status}
-										</td>
-										<td className="px-4 py-3">
+										</DataTableCell>
+										<DataTableCell>
 											<div className="flex flex-wrap gap-1.5">
 												{stack.type === "tracked" ? (
 													<>
 														<form action={deployStackAction}>
 															<input type="hidden" name="stackId" value={stack.stackId || ""} />
-															<FormSubmitButton
-																label="Deploy"
-																pendingLabel="Deploying..."
-																className="inline-flex h-7 items-center rounded-md bg-foreground px-2.5 text-xs font-medium text-background"
-															/>
+															<FormSubmitButton label="Deploy" pendingLabel="Deploying..." size="xs" />
 														</form>
 														<form action={destroyStackAction}>
 															<input type="hidden" name="stackId" value={stack.stackId || ""} />
-															<FormSubmitButton
-																label="Destroy"
-																pendingLabel="Destroying..."
-																className="inline-flex h-7 items-center rounded-md border border-red-200 bg-red-50 px-2.5 text-xs font-medium text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400"
-															/>
+															<FormSubmitButton label="Destroy" pendingLabel="Destroying..." variant="danger" size="xs" />
 														</form>
-														<Link
+														<LinkButton
 															href={`/dashboard/projects/${stack.projectId}/stacks/${stack.stackId}`}
-															className="inline-flex h-7 items-center rounded-md border border-default/10 px-2.5 text-xs font-medium text-muted transition-colors hover:text-foreground"
+															variant="outline"
+															size="xs"
 														>
 															Open
-														</Link>
+														</LinkButton>
 													</>
 												) : includeUntracked ? (
 													(["start", "stop", "restart", "destroy"] as const).map((action) => (
@@ -157,7 +153,8 @@ export default async function StacksPage({
 															<FormSubmitButton
 																label={action}
 																pendingLabel={`${action}ing...`}
-																className="inline-flex h-7 items-center rounded-md border border-default/10 px-2.5 text-xs font-medium text-muted transition-colors hover:text-foreground"
+																variant="outline"
+																size="xs"
 															/>
 														</form>
 													))
@@ -176,25 +173,20 @@ export default async function StacksPage({
 														<FormSubmitButton
 															label="Adopt"
 															pendingLabel="Adopting..."
-															className="inline-flex h-7 items-center rounded-md bg-foreground px-2.5 text-xs font-medium text-background"
+															size="xs"
 														/>
 													</form>
 												) : null}
 											</div>
-										</td>
-									</tr>
+										</DataTableCell>
+									</DataTableRow>
 								))
 							) : (
-								<tr>
-									<td colSpan={7} className="px-4 py-12 text-center text-sm text-muted">
-										No stacks found.
-									</td>
-								</tr>
+								<DataTableEmpty colSpan={7}>No stacks found.</DataTableEmpty>
 							)}
-						</tbody>
-					</table>
-				</div>
-			</div>
+					</DataTableBody>
+				</DataTable>
+			</Panel>
 		</div>
 	);
 }

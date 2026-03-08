@@ -1,5 +1,4 @@
 import { ArrowLeft } from "lucide-react";
-import Link from "next/link";
 import {
 	controlContainerAction,
 	deleteStackAction,
@@ -11,6 +10,9 @@ import { FormSubmitButton } from "@/components/form-submit-button";
 import { LiveStackFeed } from "@/components/live-stack-feed";
 import { StackServicesAccordion } from "@/components/stack-services-accordion";
 import { StatusBadge } from "@/components/status-badge";
+import { Badge } from "@/components/ui/badge";
+import { LinkButton } from "@/components/ui/link-button";
+import { Panel } from "@/components/ui/panel";
 import { getStackById } from "@/lib/platform";
 import { getContainerDetails, listStackContainers } from "@/lib/platform/docker";
 import { getServerSession } from "@/lib/session";
@@ -57,12 +59,9 @@ export default async function StackWorkspacePage({
 			{/* Header */}
 			<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 				<div className="flex items-center gap-3">
-					<Link
-						href={`/dashboard/projects/${projectId}`}
-						className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-default/10 text-muted transition-colors hover:text-foreground"
-					>
+					<LinkButton href={`/dashboard/projects/${projectId}`} variant="outline" size="icon">
 						<ArrowLeft className="h-4 w-4" />
-					</Link>
+					</LinkButton>
 					<div>
 						<div className="flex items-center gap-2">
 							<p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted">
@@ -76,44 +75,32 @@ export default async function StackWorkspacePage({
 				<div className="flex flex-wrap gap-2">
 					<form action={deployStackAction}>
 						<input type="hidden" name="stackId" value={stack.id} />
-						<FormSubmitButton
-							label="Deploy"
-							pendingLabel="Deploying..."
-							className="inline-flex h-8 items-center rounded-md bg-foreground px-3 text-xs font-medium text-background transition-opacity hover:opacity-90"
-						/>
+						<FormSubmitButton label="Deploy" pendingLabel="Deploying..." size="sm" />
 					</form>
 					<form action={destroyStackAction}>
 						<input type="hidden" name="stackId" value={stack.id} />
-						<FormSubmitButton
-							label="Destroy"
-							pendingLabel="..."
-							className="inline-flex h-8 items-center rounded-md border border-red-200 bg-red-50 px-3 text-xs font-medium text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400"
-						/>
+						<FormSubmitButton label="Destroy" pendingLabel="..." variant="danger" size="sm" />
 					</form>
 					<form action={deleteStackAction}>
 						<input type="hidden" name="stackId" value={stack.id} />
 						<input type="hidden" name="projectId" value={projectId} />
-						<FormSubmitButton
-							label="Delete"
-							pendingLabel="..."
-							className="inline-flex h-8 items-center rounded-md border border-default/10 px-3 text-xs font-medium text-muted transition-colors hover:text-red-600"
-						/>
+						<FormSubmitButton label="Delete" pendingLabel="..." variant="quietDanger" size="sm" />
 					</form>
 				</div>
 			</div>
 
 			{/* Source info */}
 			<div className="flex flex-wrap gap-3 text-xs text-muted">
-				<span className="rounded-md bg-foreground/[0.04] px-2 py-1">
+				<Badge className="px-2 py-1 text-xs">
 					{stack.sourceType === "github" ? "GitHub" : "Manual"}
-				</span>
+				</Badge>
 				{stack.sourceType === "github" && stack.githubOwner && stack.githubRepository ? (
-					<span className="rounded-md bg-foreground/[0.04] px-2 py-1">
+					<Badge className="px-2 py-1 text-xs">
 						{stack.githubOwner}/{stack.githubRepository}
-					</span>
+					</Badge>
 				) : null}
 				{stack.sourceType === "github" && stack.githubBranch ? (
-					<span className="rounded-md bg-foreground/[0.04] px-2 py-1">{stack.githubBranch}</span>
+					<Badge className="px-2 py-1 text-xs">{stack.githubBranch}</Badge>
 				) : null}
 			</div>
 
@@ -122,7 +109,7 @@ export default async function StackWorkspacePage({
 				{/* Left: Source + Services */}
 				<div className="space-y-5">
 					{/* Compose files */}
-					<div className="grid gap-0 overflow-hidden rounded-xl border border-default/10 xl:grid-cols-[1.4fr_0.6fr]">
+					<Panel className="grid gap-0 overflow-hidden xl:grid-cols-[1.4fr_0.6fr]">
 						<div className="border-b border-default/10 xl:border-b-0 xl:border-r">
 							<div className="border-b border-default/5 bg-surface px-4 py-2">
 								<p className="text-xs font-medium">{stack.composeFileName}</p>
@@ -140,7 +127,7 @@ export default async function StackWorkspacePage({
 								minHeight="320px"
 							/>
 						</div>
-					</div>
+					</Panel>
 
 					{/* Services accordion */}
 					<StackServicesAccordion

@@ -1,5 +1,6 @@
 import { FolderKanban, HardDrive, Server, ShieldCheck } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
+import { Panel } from "@/components/ui/panel";
 import { requirePrivilegedPageSession } from "@/lib/authorization";
 import { getGlobalSettings } from "@/lib/platform";
 
@@ -40,10 +41,7 @@ export default async function SettingsPage() {
 			<PageHeader kicker="Admin" title="Settings" description="Global manager configuration" />
 			<div className="grid gap-4 sm:grid-cols-2">
 				{cards.map((card) => (
-					<div
-						key={card.title}
-						className="rounded-xl border border-default/10 bg-surface p-5 transition-all hover:border-default/20"
-					>
+					<Panel key={card.title} padding="md" className="transition-all hover:border-default/20">
 						<div className="flex items-center gap-3">
 							<div className="flex h-9 w-9 items-center justify-center rounded-lg bg-foreground/[0.04]">
 								<card.icon className="h-4 w-4 text-muted" />
@@ -54,7 +52,7 @@ export default async function SettingsPage() {
 							</div>
 						</div>
 						<p className="mt-4 break-all text-sm font-medium">{card.value}</p>
-					</div>
+					</Panel>
 				))}
 			</div>
 		</div>

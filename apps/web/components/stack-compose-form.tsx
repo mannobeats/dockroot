@@ -3,6 +3,10 @@
 import { useState } from "react";
 import { CodeEditor } from "@/components/code-editor";
 import { FormSubmitButton } from "@/components/form-submit-button";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Panel } from "@/components/ui/panel";
+import { Select } from "@/components/ui/select";
 
 export function StackComposeForm({
 	projectId,
@@ -26,52 +30,43 @@ export function StackComposeForm({
 			<input type="hidden" name="envFileContent" value={envFileContent} />
 
 			<div className="grid gap-3 sm:grid-cols-2">
-				<div className="space-y-1">
-					<label htmlFor="stack-name" className="text-xs text-muted">
-						Stack name
-					</label>
-					<input
+				<Field>
+					<FieldLabel htmlFor="stack-name">Stack name</FieldLabel>
+					<Input
 						id="stack-name"
 						name="name"
 						required
 						value={stackName}
 						onChange={(event) => setStackName(event.target.value)}
 						placeholder="my-stack"
-						className="h-9 w-full rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
 					/>
-				</div>
-				<div className="space-y-1">
-					<label htmlFor="environmentId" className="text-xs text-muted">
-						Target environment
-					</label>
-					<select
+				</Field>
+				<Field>
+					<FieldLabel htmlFor="environmentId">Target environment</FieldLabel>
+					<Select
 						id="environmentId"
 						name="environmentId"
 						required
-						className="h-9 w-full rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors focus:border-foreground/20"
 					>
 						{environments.map((environment) => (
 							<option key={environment.id} value={environment.id}>
 								{environment.name} ({environment.kind})
 							</option>
 						))}
-					</select>
-				</div>
+					</Select>
+				</Field>
 			</div>
 
-			<div className="space-y-1">
-				<label htmlFor="stack-description" className="text-xs text-muted">
-					Description
-				</label>
-				<input
+			<Field>
+				<FieldLabel htmlFor="stack-description">Description</FieldLabel>
+				<Input
 					id="stack-description"
 					name="description"
 					placeholder="Frontend + API + worker"
-					className="h-9 w-full rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
 				/>
-			</div>
+			</Field>
 
-			<div className="grid gap-0 overflow-hidden rounded-xl border border-default/10 xl:grid-cols-[1.4fr_0.6fr]">
+			<Panel className="grid gap-0 overflow-hidden xl:grid-cols-[1.4fr_0.6fr]">
 				<div className="border-b border-default/10 xl:border-b-0 xl:border-r">
 					<div className="border-b border-default/5 bg-surface px-4 py-2">
 						<p className="text-xs font-medium">
@@ -98,14 +93,10 @@ export function StackComposeForm({
 						placeholder={"APP_ENV=production\nAPP_PORT=8080"}
 					/>
 				</div>
-			</div>
+			</Panel>
 
 			<div className="flex justify-end">
-				<FormSubmitButton
-					label="Create stack"
-					pendingLabel="Creating..."
-					className="inline-flex h-8 items-center rounded-md bg-foreground px-3 text-xs font-medium text-background transition-opacity hover:opacity-90"
-				/>
+				<FormSubmitButton label="Create stack" pendingLabel="Creating..." size="sm" />
 			</div>
 		</form>
 	);

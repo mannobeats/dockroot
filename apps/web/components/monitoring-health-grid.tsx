@@ -1,4 +1,5 @@
 import { StatusBadge } from "@/components/status-badge";
+import { Panel } from "@/components/ui/panel";
 
 export function MonitoringHealthGrid({
 	targets,
@@ -11,7 +12,7 @@ export function MonitoringHealthGrid({
 	}>;
 }) {
 	return (
-		<div className="rounded-xl border border-default/10 bg-surface p-5">
+		<Panel padding="md">
 			<div className="flex items-center justify-between">
 				<h3 className="text-sm font-semibold">Scrape targets</h3>
 				<p className="text-xs text-muted">{targets.length} targets</p>
@@ -33,6 +34,6 @@ export function MonitoringHealthGrid({
 					</div>
 				))}
 			</div>
-		</div>
+		</Panel>
 	);
 }

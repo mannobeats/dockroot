@@ -2,6 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { LinkButton } from "@/components/ui/link-button";
+import { LogBlock } from "@/components/ui/log-block";
+import { Panel } from "@/components/ui/panel";
 import { getSocket } from "@/lib/socket-client";
 
 interface LogContainer {
@@ -190,7 +194,7 @@ export function LiveLogsWorkspace({
 	return (
 		<div className="grid gap-4 xl:grid-cols-[280px_1fr]">
 			{/* Container selector */}
-			<div className="rounded-xl border border-default/10 bg-surface p-4">
+			<Panel padding="sm">
 				<div className="flex items-center justify-between">
 					<p className="text-sm font-semibold">Containers</p>
 					<div className="flex items-center gap-1 rounded-lg border border-default/10 bg-background p-0.5">
@@ -262,10 +266,10 @@ export function LiveLogsWorkspace({
 						);
 					})}
 				</div>
-			</div>
+			</Panel>
 
 			{/* Log viewer */}
-			<div className="rounded-xl border border-default/10 bg-surface p-4">
+			<Panel padding="sm">
 				<div className="flex items-center justify-between">
 					<div>
 						<p className="text-sm font-semibold">
@@ -278,13 +282,14 @@ export function LiveLogsWorkspace({
 						</p>
 					</div>
 					<div className="flex flex-wrap items-center gap-1.5">
-						<button
+						<Button
 							type="button"
 							onClick={() => setPaused((current) => !current)}
-							className="inline-flex h-7 items-center rounded-md border border-default/10 px-2.5 text-xs font-medium text-muted transition-colors hover:text-foreground"
+							variant="outline"
+							size="xs"
 						>
 							{paused ? "Resume" : "Pause"}
-						</button>
+						</Button>
 						<button
 							type="button"
 							onClick={() => setAutoScroll((current) => !current)}
@@ -296,34 +301,32 @@ export function LiveLogsWorkspace({
 						>
 							Auto-scroll
 						</button>
-						<button
-							type="button"
+						<Button
 							onClick={() =>
 								setLogsByContainer((current) =>
 									Object.fromEntries(Object.keys(current).map((key) => [key, ""])),
 								)
 							}
-							className="inline-flex h-7 items-center rounded-md border border-default/10 px-2.5 text-xs font-medium text-muted transition-colors hover:text-foreground"
+							variant="outline"
+							size="xs"
 						>
 							Clear
-						</button>
+						</Button>
 						{selectedIds[0] ? (
-							<Link
+							<LinkButton
 								href={`/dashboard/shell?target=container&containerId=${selectedIds[0]}`}
-								className="inline-flex h-7 items-center rounded-md border border-default/10 px-2.5 text-xs font-medium text-muted transition-colors hover:text-foreground"
+								variant="outline"
+								size="xs"
 							>
 								Shell
-							</Link>
+							</LinkButton>
 						) : null}
 					</div>
 				</div>
-				<pre
-					ref={logViewportRef}
-					className="log-viewport mt-3 h-[680px] rounded-lg bg-[#0a0a0a] p-4 text-xs leading-5 text-white/85"
-				>
+				<LogBlock ref={logViewportRef} className="mt-3 h-[680px] p-4">
 					{combinedLogs || "No logs available."}
-				</pre>
-			</div>
+				</LogBlock>
+			</Panel>
 		</div>
 	);
 }

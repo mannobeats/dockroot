@@ -1,7 +1,10 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
+import type { VariantProps } from "class-variance-authority";
 import { useFormStatus } from "react-dom";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/cn";
 
 export function FormSubmitButton({
 	label,
@@ -9,13 +12,16 @@ export function FormSubmitButton({
 	className,
 	disabled = false,
 	title,
+	variant,
+	size,
+	fullWidth,
 }: {
 	label: string;
 	pendingLabel?: string;
 	className?: string;
 	disabled?: boolean;
 	title?: string;
-}) {
+} & VariantProps<typeof buttonVariants>) {
 	const { pending } = useFormStatus();
 
 	return (
@@ -23,10 +29,7 @@ export function FormSubmitButton({
 			type="submit"
 			disabled={pending || disabled}
 			title={title}
-			className={
-				className ||
-				"inline-flex h-9 items-center justify-center rounded-lg bg-foreground px-4 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-			}
+			className={cn(buttonVariants({ variant, size, fullWidth }), className)}
 		>
 			{pending ? (
 				<>

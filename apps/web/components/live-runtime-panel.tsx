@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Tooltip, XAxis, YAxis } from "recharts";
 import { io, type Socket } from "socket.io-client";
 import { ChartFrame } from "@/components/chart-frame";
+import { Badge } from "@/components/ui/badge";
+import { Panel } from "@/components/ui/panel";
 
 let socket: Socket | null = null;
 
@@ -99,24 +101,24 @@ export function LiveRuntimePanel() {
 	const latest = useMemo(() => history.at(-1), [history]);
 
 	return (
-		<div className="rounded-xl border border-default/10 bg-surface p-5">
+		<Panel padding="md">
 			<div className="flex items-center justify-between">
 				<div>
 					<div className="flex items-center gap-2">
 						<h3 className="text-sm font-semibold">Live telemetry</h3>
-						<span className="h-1.5 w-1.5 rounded-full bg-emerald-500 pulse-dot" />
+						<span className="h-1.5 w-1.5 rounded-full bg-success pulse-dot" />
 					</div>
 					<p className="mt-0.5 text-xs text-muted">Real-time container resource usage</p>
 				</div>
 				<div className="flex items-center gap-4 text-xs">
-					<span className="flex items-center gap-1.5">
+					<Badge className="bg-transparent px-0 py-0 text-xs text-muted">
 						<span className="h-2 w-2 rounded-full bg-foreground" />
 						CPU {latest?.cpu ?? 0}%
-					</span>
-					<span className="flex items-center gap-1.5">
-						<span className="h-2 w-2 rounded-full bg-emerald-500" />
+					</Badge>
+					<Badge className="bg-transparent px-0 py-0 text-xs text-muted">
+						<span className="h-2 w-2 rounded-full bg-success" />
 						MEM {latest?.memory ?? 0}%
-					</span>
+					</Badge>
 				</div>
 			</div>
 			<ChartFrame className="mt-4 h-56">
@@ -145,17 +147,11 @@ export function LiveRuntimePanel() {
 									radius={[3, 3, 0, 0]}
 									maxBarSize={24}
 								/>
-								<Bar
-									dataKey="memory"
-									name="Memory"
-									fill="#22c55e"
-									radius={[3, 3, 0, 0]}
-									maxBarSize={24}
-								/>
+								<Bar dataKey="memory" name="Memory" fill="var(--success)" radius={[3, 3, 0, 0]} maxBarSize={24} />
 							</BarChart>
 						)
 					: () => null}
 			</ChartFrame>
-		</div>
+		</Panel>
 	);
 }

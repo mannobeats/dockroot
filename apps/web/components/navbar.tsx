@@ -5,6 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { Button } from "@/components/ui/button";
+import { LinkButton } from "@/components/ui/link-button";
+import { Panel } from "@/components/ui/panel";
 import { signOut, useSession } from "@/lib/auth-client";
 import { publicEnv } from "@/lib/public-env";
 
@@ -46,7 +49,10 @@ export function Navbar() {
 							<summary className="flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-full bg-accent/10 text-xs font-semibold text-accent transition-colors hover:bg-accent/20">
 								{session.user.name?.charAt(0)?.toUpperCase() || "U"}
 							</summary>
-							<div className="absolute right-0 top-10 z-50 min-w-52 rounded-xl border border-default/40 bg-surface p-1 shadow-lg">
+							<Panel
+								tone="subtle"
+								className="absolute right-0 top-10 z-50 min-w-52 p-1 shadow-lg"
+							>
 								<div className="px-3 py-2">
 									<p className="text-[13px] font-semibold">{session.user.name}</p>
 									<p className="text-[11px] text-muted">{session.user.email}</p>
@@ -72,38 +78,30 @@ export function Navbar() {
 								>
 									<LogOut className="h-3.5 w-3.5" /> Sign Out
 								</button>
-							</div>
+							</Panel>
 						</details>
 					) : (
 						<>
-							<button
-								type="button"
-								onClick={() => router.push("/sign-in")}
-								className="rounded-lg px-3 py-1.5 text-[13px] font-medium text-muted transition-colors hover:text-foreground"
-							>
+							<Button variant="ghost" size="sm" onClick={() => router.push("/sign-in")}>
 								Sign In
-							</button>
-							<button
-								type="button"
-								onClick={() => router.push("/sign-up")}
-								className="rounded-lg bg-accent px-3 py-1.5 text-[13px] font-medium text-white transition-colors hover:bg-accent/90"
-							>
+							</Button>
+							<Button size="sm" onClick={() => router.push("/sign-up")}>
 								Get Started
-							</button>
+							</Button>
 						</>
 					)}
 				</div>
 
 				<div className="flex items-center gap-2 sm:hidden">
 					<ThemeToggle />
-					<button
-						type="button"
+					<Button
 						onClick={() => setMobileOpen(!mobileOpen)}
 						aria-label="Toggle menu"
-						className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-default/50"
+						variant="ghost"
+						size="icon"
 					>
 						{mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-					</button>
+					</Button>
 				</div>
 			</div>
 
@@ -143,13 +141,15 @@ export function Navbar() {
 								>
 									Sign In
 								</Link>
-								<Link
+								<LinkButton
 									href="/sign-up"
-									className="rounded-lg px-3 py-2 text-[13px] font-medium text-accent hover:bg-accent/10"
+									variant="secondary"
+									size="md"
+									className="justify-start"
 									onClick={() => setMobileOpen(false)}
 								>
 									Get Started
-								</Link>
+								</LinkButton>
 							</>
 						)}
 					</div>

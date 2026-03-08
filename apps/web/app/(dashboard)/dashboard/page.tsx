@@ -6,6 +6,19 @@ import { PageHeader } from "@/components/page-header";
 import { PrometheusOverview } from "@/components/prometheus-overview";
 import { StatCard } from "@/components/stat-card";
 import { StatusBadge } from "@/components/status-badge";
+import {
+	DataTable,
+	DataTableBody,
+	DataTableCell,
+	DataTableEmpty,
+	DataTableHead,
+	DataTableHeader,
+	DataTableRow,
+} from "@/components/ui/data-table";
+import { EmptyState } from "@/components/ui/empty-state";
+import { LinkButton } from "@/components/ui/link-button";
+import { Panel } from "@/components/ui/panel";
+import { Badge } from "@/components/ui/badge";
 import { isPrivilegedRole, requireUserSession } from "@/lib/authorization";
 import {
 	getRuntimeSnapshotForEnvironment,
@@ -49,18 +62,12 @@ export default async function DashboardPage({
 				description={`${environment.name} environment`}
 				actions={
 					<>
-						<Link
-							href="/dashboard/projects"
-							className="inline-flex h-9 items-center justify-center rounded-lg border border-default/10 bg-surface px-4 text-sm font-medium transition-colors hover:border-default/20"
-						>
+						<LinkButton href="/dashboard/projects" variant="secondary">
 							Projects
-						</Link>
-						<Link
-							href="/dashboard/stacks"
-							className="inline-flex h-9 items-center justify-center rounded-lg bg-foreground px-4 text-sm font-medium text-background transition-opacity hover:opacity-90"
-						>
+						</LinkButton>
+						<LinkButton href="/dashboard/stacks">
 							Deploy Stack
-						</Link>
+						</LinkButton>
 					</>
 				}
 			/>
@@ -100,7 +107,7 @@ export default async function DashboardPage({
 			{/* Host Overview + Recent Projects */}
 			<div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
 				{includeRuntime && runtime ? (
-					<div className="rounded-xl border border-default/10 bg-surface p-5">
+					<Panel padding="md">
 						<div className="flex items-center justify-between">
 							<div>
 								<h2 className="text-sm font-semibold">{runtime.snapshot.host.hostname}</h2>
@@ -126,18 +133,18 @@ export default async function DashboardPage({
 								<p className="mt-1.5 break-all text-xs font-medium">{data.dataDir}</p>
 							</div>
 						</div>
-					</div>
+					</Panel>
 				) : (
-					<div className="rounded-xl border border-default/10 bg-surface p-5">
+					<Panel padding="md">
 						<h2 className="text-sm font-semibold">Workspace overview</h2>
 						<p className="mt-2 max-w-lg text-sm text-muted">
 							Scoped to owned projects, environments, stacks, and containers. Host telemetry
 							restricted to privileged operators.
 						</p>
-					</div>
+					</Panel>
 				)}
 
-				<div className="rounded-xl border border-default/10 bg-surface p-5">
+				<Panel padding="md">
 					<div className="flex items-center justify-between">
 						<h2 className="text-sm font-semibold">Recent projects</h2>
 						<Link
@@ -162,19 +169,17 @@ export default async function DashboardPage({
 												{project.description || "No description"}
 											</p>
 										</div>
-										<span className="shrink-0 rounded-md bg-foreground/[0.04] px-2 py-0.5 text-xs font-medium text-muted">
+										<Badge className="shrink-0 px-2 py-0.5 text-xs">
 											{project.stacks.length} stacks
-										</span>
+										</Badge>
 									</div>
 								</Link>
 							))
 						) : (
-							<div className="rounded-lg border border-dashed border-default/10 p-6 text-center text-sm text-muted">
-								No projects yet
-							</div>
+							<EmptyState title="No projects yet" className="p-6" />
 						)}
 					</div>
-				</div>
+				</Panel>
 			</div>
 
 			{/* Charts */}
@@ -183,7 +188,7 @@ export default async function DashboardPage({
 			{includeRuntime && environment.kind === "local" ? <LiveRuntimePanel /> : null}
 
 			{/* Latest Activity */}
-			<div className="rounded-xl border border-default/10 bg-surface p-5">
+			<Panel padding="md">
 				<div className="flex items-center justify-between">
 					<h2 className="text-sm font-semibold">Latest deployments</h2>
 					<Link
@@ -193,39 +198,35 @@ export default async function DashboardPage({
 						View all
 					</Link>
 				</div>
-				<div className="table-scroll mt-4">
-					<table className="min-w-full text-left text-sm">
-						<thead>
-							<tr className="border-b border-default/10 text-xs text-muted">
-								<th className="pb-3 pr-4 font-medium">Stack</th>
-								<th className="pb-3 pr-4 font-medium">Environment</th>
-								<th className="pb-3 pr-4 font-medium">Version</th>
-								<th className="pb-3 font-medium">Status</th>
+				<div className="mt-4">
+					<DataTable>
+						<DataTableHeader>
+							<tr>
+								<DataTableHead className="px-0">Stack</DataTableHead>
+								<DataTableHead className="px-0">Environment</DataTableHead>
+								<DataTableHead className="px-0">Version</DataTableHead>
+								<DataTableHead className="px-0">Status</DataTableHead>
 							</tr>
-						</thead>
-						<tbody className="divide-y divide-default/5">
+						</DataTableHeader>
+						<DataTableBody>
 							{data.recentDeployments.length ? (
 								data.recentDeployments.map((deployment) => (
-									<tr key={deployment.id} className="group">
-										<td className="py-3 pr-4 font-medium">{deployment.stack.name}</td>
-										<td className="py-3 pr-4 text-muted">{deployment.environment.name}</td>
-										<td className="py-3 pr-4 font-mono text-xs text-muted">{deployment.version}</td>
-										<td className="py-3">
+									<DataTableRow key={deployment.id} className="group">
+										<DataTableCell className="px-0 pr-4 font-medium">{deployment.stack.name}</DataTableCell>
+										<DataTableCell className="px-0 pr-4 text-muted">{deployment.environment.name}</DataTableCell>
+										<DataTableCell className="px-0 pr-4 font-mono text-xs text-muted">{deployment.version}</DataTableCell>
+										<DataTableCell className="px-0">
 											<StatusBadge status={deployment.status} />
-										</td>
-									</tr>
+										</DataTableCell>
+									</DataTableRow>
 								))
 							) : (
-								<tr>
-									<td colSpan={4} className="py-8 text-center text-sm text-muted">
-										No deployments yet
-									</td>
-								</tr>
+								<DataTableEmpty colSpan={4}>No deployments yet</DataTableEmpty>
 							)}
-						</tbody>
-					</table>
+						</DataTableBody>
+					</DataTable>
 				</div>
-			</div>
+			</Panel>
 		</div>
 	);
 }

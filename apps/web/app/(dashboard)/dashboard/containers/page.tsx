@@ -6,6 +6,22 @@ import { LiveRuntimePanel } from "@/components/live-runtime-panel";
 import { PageHeader } from "@/components/page-header";
 import { RuntimePortLinks } from "@/components/runtime-port-links";
 import { StatusBadge } from "@/components/status-badge";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+	DataTable,
+	DataTableBody,
+	DataTableCell,
+	DataTableEmpty,
+	DataTableHead,
+	DataTableHeader,
+	DataTableRow,
+} from "@/components/ui/data-table";
+import { Input } from "@/components/ui/input";
+import { LinkButton } from "@/components/ui/link-button";
+import { MetricCard } from "@/components/ui/metric-card";
+import { Panel } from "@/components/ui/panel";
+import { Select } from "@/components/ui/select";
 import { isPrivilegedRole, requireUserSession } from "@/lib/authorization";
 import { resolveRuntimeEnvironment } from "@/lib/environment-runtime";
 import { listAccessibleContainersForUser } from "@/lib/runtime-access";
@@ -50,68 +66,43 @@ export default async function ContainersPage({
 
 			{/* Stats */}
 			<div className="grid gap-4 sm:grid-cols-3">
-				<div className="rounded-xl border border-default/10 bg-surface p-4">
-					<p className="text-xs text-muted">Total</p>
-					<p className="mt-1 text-2xl font-semibold">{filtered.length}</p>
-				</div>
-				<div className="rounded-xl border border-default/10 bg-surface p-4">
-					<p className="text-xs text-muted">Running</p>
-					<p className="mt-1 text-2xl font-semibold text-emerald-600 dark:text-emerald-400">
-						{runningCount}
-					</p>
-				</div>
-				<div className="rounded-xl border border-default/10 bg-surface p-4">
-					<p className="text-xs text-muted">Published ports</p>
-					<p className="mt-1 text-2xl font-semibold">{publishedCount}</p>
-				</div>
+				<MetricCard label="Total" value={filtered.length} />
+				<MetricCard label="Running" value={runningCount} valueClassName="text-success" />
+				<MetricCard label="Published ports" value={publishedCount} />
 			</div>
 
 			{/* Filter */}
-			<div className="rounded-xl border border-default/10 bg-surface p-4">
+			<Panel padding="sm">
 				<form className="flex flex-col gap-3 sm:flex-row">
-					<input
-						type="search"
-						name="q"
-						defaultValue={params.q || ""}
-						placeholder="Search containers..."
-						className="h-9 flex-1 rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
-					/>
-					<select
-						name="status"
-						defaultValue={status}
-						className="h-9 rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors focus:border-foreground/20"
-					>
+					<Input type="search" name="q" defaultValue={params.q || ""} placeholder="Search containers..." className="flex-1" />
+					<Select name="status" defaultValue={status}>
 						<option value="all">All statuses</option>
 						<option value="running">Running</option>
 						<option value="exited">Exited</option>
 						<option value="created">Created</option>
 						<option value="paused">Paused</option>
-					</select>
-					<button
-						type="submit"
-						className="inline-flex h-9 items-center justify-center rounded-lg bg-foreground px-4 text-sm font-medium text-background"
-					>
+					</Select>
+					<Button type="submit">
 						Filter
-					</button>
+					</Button>
 				</form>
-			</div>
+			</Panel>
 
 			{/* Table */}
-			<div className="rounded-xl border border-default/10 bg-surface">
-				<div className="table-scroll">
-					<table className="min-w-full text-left text-sm">
-						<thead>
-							<tr className="border-b border-default/10 text-xs text-muted">
-								<th className="px-4 py-3 font-medium">Name</th>
-								<th className="px-4 py-3 font-medium">Image</th>
-								<th className="px-4 py-3 font-medium">State</th>
-								<th className="px-4 py-3 font-medium">Status</th>
-								<th className="px-4 py-3 font-medium">Ports</th>
-								<th className="px-4 py-3 font-medium">Size</th>
-								<th className="px-4 py-3 font-medium">Actions</th>
-							</tr>
-						</thead>
-						<tbody className="divide-y divide-default/5">
+			<Panel>
+				<DataTable>
+					<DataTableHeader>
+						<tr>
+							<DataTableHead>Name</DataTableHead>
+							<DataTableHead>Image</DataTableHead>
+							<DataTableHead>State</DataTableHead>
+							<DataTableHead>Status</DataTableHead>
+							<DataTableHead>Ports</DataTableHead>
+							<DataTableHead>Size</DataTableHead>
+							<DataTableHead>Actions</DataTableHead>
+						</tr>
+					</DataTableHeader>
+					<DataTableBody>
 							{filtered.length ? (
 								filtered.map((container: Record<string, string>) => {
 									const isProtected =
@@ -120,11 +111,8 @@ export default async function ContainersPage({
 										environment.kind === "local" ? getProtectedContainerLabel(container) : "";
 
 									return (
-										<tr
-											key={`${container.ID}-${container.Names}`}
-											className="group transition-colors hover:bg-foreground/[0.02]"
-										>
-											<td className="px-4 py-3">
+										<DataTableRow key={`${container.ID}-${container.Names}`} className="group">
+											<DataTableCell>
 												<div className="space-y-0.5">
 													<div className="flex items-center gap-2">
 														<Link
@@ -134,13 +122,10 @@ export default async function ContainersPage({
 															{container.Names}
 														</Link>
 														{isProtected ? (
-															<span
-																title={protectedLabel || undefined}
-																className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400"
-															>
+															<Badge title={protectedLabel || undefined} variant="warning">
 																<Lock className="h-2.5 w-2.5" />
 																Locked
-															</span>
+															</Badge>
 														) : null}
 													</div>
 													{container.Labels?.includes("com.docker.compose.project=") ? (
@@ -153,24 +138,24 @@ export default async function ContainersPage({
 														</p>
 													) : null}
 												</div>
-											</td>
-											<td className="px-4 py-3 text-xs text-muted">{container.Image}</td>
-											<td className="px-4 py-3">
+											</DataTableCell>
+											<DataTableCell className="text-xs text-muted">{container.Image}</DataTableCell>
+											<DataTableCell>
 												<StatusBadge status={(container.State || "offline").toLowerCase()} />
-											</td>
-											<td className="px-4 py-3 text-xs text-muted">{container.Status || "—"}</td>
-											<td className="px-4 py-3">
+											</DataTableCell>
+											<DataTableCell className="text-xs text-muted">{container.Status || "—"}</DataTableCell>
+											<DataTableCell>
 												<RuntimePortLinks ports={container.Ports} compact />
-											</td>
-											<td className="px-4 py-3 text-xs text-muted">{container.Size || "—"}</td>
-											<td className="px-4 py-3">
+											</DataTableCell>
+											<DataTableCell className="text-xs text-muted">{container.Size || "—"}</DataTableCell>
+											<DataTableCell>
 												<div className="flex flex-wrap gap-1.5">
-													<Link
+													<LinkButton
 														href={`/dashboard/containers/${container.ID}?environment=${environment.id}`}
-														className="inline-flex h-7 items-center rounded-md bg-foreground px-2.5 text-xs font-medium text-background transition-opacity hover:opacity-90"
+														size="xs"
 													>
 														Open
-													</Link>
+													</LinkButton>
 													{(["start", "stop", "restart", "remove"] as const).map((action) => (
 														<form key={action} action={controlContainerAction}>
 															<input type="hidden" name="containerId" value={container.ID} />
@@ -181,38 +166,36 @@ export default async function ContainersPage({
 																pendingLabel={`${action}ing...`}
 																disabled={isProtected}
 																title={isProtected ? "Protected container" : undefined}
-																className="inline-flex h-7 items-center rounded-md border border-default/10 bg-background px-2.5 text-xs font-medium text-muted transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+																variant="outline"
+																size="xs"
 															/>
 														</form>
 													))}
-													<Link
+													<LinkButton
 														href={`/dashboard/shell?target=container&containerId=${container.ID}&environment=${environment.id}`}
-														className="inline-flex h-7 items-center rounded-md border border-default/10 bg-background px-2.5 text-xs font-medium text-muted transition-colors hover:text-foreground"
+														variant="outline"
+														size="xs"
 													>
 														Shell
-													</Link>
-													<Link
+													</LinkButton>
+													<LinkButton
 														href={`/dashboard/logs?mode=single&container=${container.ID}&environment=${environment.id}`}
-														className="inline-flex h-7 items-center rounded-md border border-default/10 bg-background px-2.5 text-xs font-medium text-muted transition-colors hover:text-foreground"
+														variant="outline"
+														size="xs"
 													>
 														Logs
-													</Link>
+													</LinkButton>
 												</div>
-											</td>
-										</tr>
+											</DataTableCell>
+										</DataTableRow>
 									);
 								})
 							) : (
-								<tr>
-									<td colSpan={7} className="px-4 py-12 text-center text-sm text-muted">
-										No containers matched the current filters.
-									</td>
-								</tr>
+								<DataTableEmpty colSpan={7}>No containers matched the current filters.</DataTableEmpty>
 							)}
-						</tbody>
-					</table>
-				</div>
-			</div>
+					</DataTableBody>
+				</DataTable>
+			</Panel>
 		</div>
 	);
 }

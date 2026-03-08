@@ -3,6 +3,21 @@ import Link from "next/link";
 import { pruneImagesAction, pullImageAction, removeImageAction } from "@/app/(dashboard)/actions";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { PageHeader } from "@/components/page-header";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+	DataTable,
+	DataTableBody,
+	DataTableCell,
+	DataTableEmpty,
+	DataTableHead,
+	DataTableHeader,
+	DataTableRow,
+} from "@/components/ui/data-table";
+import { Input } from "@/components/ui/input";
+import { LinkButton } from "@/components/ui/link-button";
+import { MetricCard } from "@/components/ui/metric-card";
+import { Panel } from "@/components/ui/panel";
 import { requirePrivilegedPageSession } from "@/lib/authorization";
 import {
 	listContainersForEnvironment,
@@ -48,102 +63,60 @@ export default async function ImagesPage({
 			/>
 
 			{/* Actions bar */}
-			<div className="rounded-xl border border-default/10 bg-surface p-4">
+			<Panel padding="sm">
 				<div className="flex flex-col gap-3 lg:flex-row lg:items-end">
 					<form className="flex flex-1 gap-3">
-						<input
-							type="search"
-							name="q"
-							defaultValue={params.q || ""}
-							placeholder="Search images..."
-							className="h-9 flex-1 rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
-						/>
-						<button
-							type="submit"
-							className="inline-flex h-9 items-center rounded-lg border border-default/10 px-3 text-sm font-medium"
-						>
+						<Input type="search" name="q" defaultValue={params.q || ""} placeholder="Search images..." className="flex-1" />
+						<Button type="submit" variant="secondary">
 							Filter
-						</button>
+						</Button>
 					</form>
 					<form action={pullImageAction} className="flex gap-3">
 						<input type="hidden" name="environmentId" value={environment.id} />
-						<input
-							type="text"
-							name="imageRef"
-							required
-							placeholder="ghcr.io/owner/image:tag"
-							className="h-9 rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
-						/>
-						<FormSubmitButton
-							label="Pull"
-							pendingLabel="Pulling..."
-							className="inline-flex h-9 items-center rounded-lg bg-foreground px-3 text-sm font-medium text-background"
-						/>
+						<Input type="text" name="imageRef" required placeholder="ghcr.io/owner/image:tag" />
+						<FormSubmitButton label="Pull" pendingLabel="Pulling..." />
 					</form>
 					<div className="flex gap-2">
 						<form action={pruneImagesAction}>
 							<input type="hidden" name="environmentId" value={environment.id} />
-							<FormSubmitButton
-								label="Prune dangling"
-								pendingLabel="Pruning..."
-								className="inline-flex h-9 items-center rounded-lg border border-default/10 px-3 text-sm font-medium text-muted transition-colors hover:text-foreground"
-							/>
+							<FormSubmitButton label="Prune dangling" pendingLabel="Pruning..." variant="outline" />
 						</form>
 						<form action={pruneImagesAction}>
 							<input type="hidden" name="environmentId" value={environment.id} />
 							<input type="hidden" name="mode" value="all" />
-							<FormSubmitButton
-								label="Prune unused"
-								pendingLabel="Pruning..."
-								className="inline-flex h-9 items-center rounded-lg border border-amber-200 bg-amber-50 px-3 text-sm font-medium text-amber-600 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400"
-							/>
+							<FormSubmitButton label="Prune unused" pendingLabel="Pruning..." variant="warning" />
 						</form>
 					</div>
 				</div>
-			</div>
+			</Panel>
 
 			{/* Stats */}
 			<div className="grid gap-4 sm:grid-cols-3">
-				<div className="rounded-xl border border-default/10 bg-surface p-4">
-					<p className="text-xs text-muted">Total images</p>
-					<p className="mt-1 text-2xl font-semibold">{filtered.length}</p>
-				</div>
-				<div className="rounded-xl border border-default/10 bg-surface p-4">
-					<p className="text-xs text-muted">Tagged</p>
-					<p className="mt-1 text-2xl font-semibold">{taggedCount}</p>
-				</div>
-				<div className="rounded-xl border border-default/10 bg-surface p-4">
-					<p className="text-xs text-muted">In use</p>
-					<p className="mt-1 text-2xl font-semibold text-emerald-600 dark:text-emerald-400">
-						{inUseCount}
-					</p>
-				</div>
+				<MetricCard label="Total images" value={filtered.length} />
+				<MetricCard label="Tagged" value={taggedCount} />
+				<MetricCard label="In use" value={inUseCount} valueClassName="text-success" />
 			</div>
 
 			{/* Table */}
-			<div className="rounded-xl border border-default/10 bg-surface">
-				<div className="table-scroll">
-					<table className="min-w-full text-left text-sm">
-						<thead>
-							<tr className="border-b border-default/10 text-xs text-muted">
-								<th className="px-4 py-3 font-medium">Image</th>
-								<th className="px-4 py-3 font-medium">Tag</th>
-								<th className="px-4 py-3 font-medium">Size</th>
-								<th className="px-4 py-3 font-medium">Updated</th>
-								<th className="px-4 py-3 font-medium">Actions</th>
-							</tr>
-						</thead>
-						<tbody className="divide-y divide-default/5">
+			<Panel>
+				<DataTable>
+					<DataTableHeader>
+						<tr>
+							<DataTableHead>Image</DataTableHead>
+							<DataTableHead>Tag</DataTableHead>
+							<DataTableHead>Size</DataTableHead>
+							<DataTableHead>Updated</DataTableHead>
+							<DataTableHead>Actions</DataTableHead>
+						</tr>
+					</DataTableHeader>
+					<DataTableBody>
 							{filtered.length ? (
 								filtered.map((image: Record<string, string>) => {
 									const imageRef = `${image.Repository}:${image.Tag}`;
 									const isProtected = protectedImageRefs.has(imageRef);
 									return (
-										<tr
-											key={`${image.ID}-${imageRef}`}
-											className="transition-colors hover:bg-foreground/[0.02]"
-										>
-											<td className="px-4 py-3">
+										<DataTableRow key={`${image.ID}-${imageRef}`}>
+											<DataTableCell>
 												<div className="flex items-center gap-2">
 													<Link
 														href={`/dashboard/images/${encodeURIComponent(imageRef)}?environment=${environment.id}`}
@@ -152,24 +125,25 @@ export default async function ImagesPage({
 														{image.Repository}
 													</Link>
 													{isProtected ? (
-														<span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+														<Badge variant="warning">
 															<Lock className="h-2.5 w-2.5" />
 															Locked
-														</span>
+														</Badge>
 													) : null}
 												</div>
-											</td>
-											<td className="px-4 py-3 text-xs text-muted">{image.Tag}</td>
-											<td className="px-4 py-3 text-xs text-muted">{image.Size}</td>
-											<td className="px-4 py-3 text-xs text-muted">{image.CreatedSince}</td>
-											<td className="px-4 py-3">
+											</DataTableCell>
+											<DataTableCell className="text-xs text-muted">{image.Tag}</DataTableCell>
+											<DataTableCell className="text-xs text-muted">{image.Size}</DataTableCell>
+											<DataTableCell className="text-xs text-muted">{image.CreatedSince}</DataTableCell>
+											<DataTableCell>
 												<div className="flex gap-1.5">
-													<Link
+													<LinkButton
 														href={`/dashboard/images/${encodeURIComponent(imageRef)}?environment=${environment.id}`}
-														className="inline-flex h-7 items-center rounded-md border border-default/10 px-2.5 text-xs font-medium text-muted transition-colors hover:text-foreground"
+														variant="outline"
+														size="xs"
 													>
 														Details
-													</Link>
+													</LinkButton>
 													<form action={removeImageAction}>
 														<input type="hidden" name="imageRef" value={imageRef} />
 														<input type="hidden" name="environmentId" value={environment.id} />
@@ -177,25 +151,21 @@ export default async function ImagesPage({
 															label="Delete"
 															pendingLabel="Deleting..."
 															disabled={isProtected}
-															className="inline-flex h-7 items-center rounded-md border border-red-200 bg-red-50 px-2.5 text-xs font-medium text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400"
+															variant="danger"
+															size="xs"
 														/>
 													</form>
 												</div>
-											</td>
-										</tr>
+											</DataTableCell>
+										</DataTableRow>
 									);
 								})
 							) : (
-								<tr>
-									<td colSpan={5} className="px-4 py-12 text-center text-sm text-muted">
-										No images found.
-									</td>
-								</tr>
+								<DataTableEmpty colSpan={5}>No images found.</DataTableEmpty>
 							)}
-						</tbody>
-					</table>
-				</div>
-			</div>
+					</DataTableBody>
+				</DataTable>
+			</Panel>
 		</div>
 	);
 }

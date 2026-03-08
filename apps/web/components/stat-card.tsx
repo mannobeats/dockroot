@@ -1,4 +1,5 @@
 import type { LucideIcon } from "lucide-react";
+import { Panel } from "@/components/ui/panel";
 
 export function StatCard({
 	label,
@@ -12,7 +13,7 @@ export function StatCard({
 	icon: LucideIcon;
 }) {
 	return (
-		<div className="group rounded-xl border border-default/10 bg-surface p-5 transition-all hover:border-default/20 hover:shadow-sm">
+		<Panel className="group p-5 transition-all hover:border-default/20 hover:shadow-sm">
 			<div className="flex items-center justify-between">
 				<span className="text-xs font-medium text-muted">{label}</span>
 				<div className="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground/[0.04] text-muted transition-colors group-hover:bg-foreground/[0.06]">
@@ -23,6 +24,6 @@ export function StatCard({
 				<p className="text-2xl font-semibold tracking-tight">{value}</p>
 				<p className="mt-1 text-sm text-muted">{detail}</p>
 			</div>
-		</div>
+		</Panel>
 	);
 }

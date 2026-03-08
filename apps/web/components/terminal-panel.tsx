@@ -3,6 +3,8 @@
 import "xterm/css/xterm.css";
 
 import { useEffect, useRef, useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Panel } from "@/components/ui/panel";
 import { getSocket } from "@/lib/socket-client";
 
 export function TerminalPanel({
@@ -286,19 +288,19 @@ export function TerminalPanel({
 	}, [containerId, environmentId, label, target, transport]);
 
 	return (
-		<div className="rounded-xl border border-default/10 bg-surface p-4">
+		<Panel padding="sm">
 			<div className="flex items-center justify-between">
 				<div>
 					<p className="text-sm font-semibold">Terminal</p>
 					<p className="text-xs text-muted">{status}</p>
 				</div>
-				<span className="rounded-md bg-foreground/[0.04] px-2.5 py-1 text-xs font-medium text-muted">
+				<Badge className="px-2.5 py-1 text-xs">
 					{label}
-				</span>
+				</Badge>
 			</div>
-			<div className="mt-3 overflow-hidden rounded-lg border border-default/10 bg-[#0a0a0a]">
+			<div className="mt-3 overflow-hidden rounded-lg border border-default/10 bg-console">
 				<div ref={terminalRef} className="h-[600px] w-full p-3" />
 			</div>
-		</div>
+		</Panel>
 	);
 }
