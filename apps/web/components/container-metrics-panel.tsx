@@ -37,7 +37,7 @@ export function ContainerMetricsPanel({
 }) {
 	if (!metrics.available) {
 		return (
-			<div className="rounded-2xl border border-dashed border-default/20 bg-surface p-6 text-sm text-muted">
+			<div className="rounded-xl border border-dashed border-default/10 bg-surface p-6 text-sm text-muted">
 				Prometheus container metrics are not available yet for this container.
 			</div>
 		);
@@ -46,26 +46,26 @@ export function ContainerMetricsPanel({
 	return (
 		<div className="space-y-5">
 			<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-				<div className="rounded-xl border border-default/15 bg-surface p-4">
+				<div className="rounded-xl border border-default/10 bg-surface p-4">
 					<p className="text-xs text-muted">CPU</p>
 					<p className="mt-2 text-2xl font-semibold">{metrics.cpuPercent?.toFixed(1) ?? "—"}%</p>
 				</div>
-				<div className="rounded-xl border border-default/15 bg-surface p-4">
+				<div className="rounded-xl border border-default/10 bg-surface p-4">
 					<p className="text-xs text-muted">Working set memory</p>
 					<p className="mt-2 text-2xl font-semibold">{formatBytes(metrics.memoryBytes)}</p>
 				</div>
-				<div className="rounded-xl border border-default/15 bg-surface p-4">
+				<div className="rounded-xl border border-default/10 bg-surface p-4">
 					<p className="text-xs text-muted">RX / sec</p>
 					<p className="mt-2 text-2xl font-semibold">{formatBytes(metrics.rxBytes)}</p>
 				</div>
-				<div className="rounded-xl border border-default/15 bg-surface p-4">
+				<div className="rounded-xl border border-default/10 bg-surface p-4">
 					<p className="text-xs text-muted">TX / sec</p>
 					<p className="mt-2 text-2xl font-semibold">{formatBytes(metrics.txBytes)}</p>
 				</div>
 			</div>
 
 			<div className="grid gap-5 xl:grid-cols-2">
-				<div className="rounded-2xl border border-default/15 bg-surface p-5">
+				<div className="rounded-xl border border-default/10 bg-surface p-5">
 					<p className="text-sm font-semibold">CPU and memory</p>
 					<ChartFrame className="mt-4 h-64">
 						{({ width, height }) => (
@@ -109,7 +109,7 @@ export function ContainerMetricsPanel({
 					</ChartFrame>
 				</div>
 
-				<div className="rounded-2xl border border-default/15 bg-surface p-5">
+				<div className="rounded-xl border border-default/10 bg-surface p-5">
 					<p className="text-sm font-semibold">Network throughput</p>
 					<ChartFrame className="mt-4 h-64">
 						{({ width, height }) => (

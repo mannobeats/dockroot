@@ -59,7 +59,7 @@ export function LiveStackFeed({
 	}, [events, initialLog]);
 
 	return (
-		<div className="rounded-2xl border border-default/15 bg-[#050914] p-4">
+		<div className="rounded-xl border border-default/10 bg-[#0a0a0a] p-4">
 			<div className="flex items-center justify-between">
 				<div>
 					<p className="text-sm font-semibold text-white">Live logs</p>

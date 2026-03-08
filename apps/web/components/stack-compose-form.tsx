@@ -20,97 +20,94 @@ export function StackComposeForm({
 	const [envFileContent, setEnvFileContent] = useState("");
 
 	return (
-		<form
-			action={action}
-			className="overflow-hidden rounded-2xl border border-default/15 bg-surface"
-		>
+		<form action={action} className="space-y-4">
 			<input type="hidden" name="projectId" value={projectId} />
 			<input type="hidden" name="composeYaml" value={composeYaml} />
 			<input type="hidden" name="envFileContent" value={envFileContent} />
-			<div className="border-b border-default/15 px-5 py-4">
-				<div className="flex flex-col gap-4 xl:flex-row xl:items-end">
-					<div className="flex-1 space-y-1.5">
-						<label htmlFor="stack-name" className="text-sm font-medium">
-							Stack name
-						</label>
-						<input
-							id="stack-name"
-							name="name"
-							required
-							value={stackName}
-							onChange={(event) => setStackName(event.target.value)}
-							placeholder="my-stack"
-							className="h-11 w-full rounded-xl border border-default/15 bg-background px-4 text-sm outline-none transition-colors focus:border-accent"
-						/>
-					</div>
-					<div className="min-w-[220px] space-y-1.5">
-						<label htmlFor="environmentId" className="text-sm font-medium">
-							Target environment
-						</label>
-						<select
-							id="environmentId"
-							name="environmentId"
-							required
-							className="h-11 w-full rounded-xl border border-default/15 bg-background px-4 text-sm outline-none transition-colors focus:border-accent"
-						>
-							{environments.map((environment) => (
-								<option key={environment.id} value={environment.id}>
-									{environment.name} ({environment.kind})
-								</option>
-							))}
-						</select>
-					</div>
-				</div>
-				<div className="mt-4 space-y-1.5">
-					<label htmlFor="stack-description" className="text-sm font-medium">
-						Description
+
+			<div className="grid gap-3 sm:grid-cols-2">
+				<div className="space-y-1">
+					<label htmlFor="stack-name" className="text-xs text-muted">
+						Stack name
 					</label>
 					<input
-						id="stack-description"
-						name="description"
-						placeholder="Frontend + API + worker"
-						className="h-11 w-full rounded-xl border border-default/15 bg-background px-4 text-sm outline-none transition-colors focus:border-accent"
+						id="stack-name"
+						name="name"
+						required
+						value={stackName}
+						onChange={(event) => setStackName(event.target.value)}
+						placeholder="my-stack"
+						className="h-9 w-full rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
 					/>
 				</div>
+				<div className="space-y-1">
+					<label htmlFor="environmentId" className="text-xs text-muted">
+						Target environment
+					</label>
+					<select
+						id="environmentId"
+						name="environmentId"
+						required
+						className="h-9 w-full rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors focus:border-foreground/20"
+					>
+						{environments.map((environment) => (
+							<option key={environment.id} value={environment.id}>
+								{environment.name} ({environment.kind})
+							</option>
+						))}
+					</select>
+				</div>
 			</div>
-			<div className="grid gap-0 xl:grid-cols-[1.45fr_0.8fr]">
-				<div className="border-b border-default/15 xl:border-b-0 xl:border-r">
-					<div className="flex items-center justify-between border-b border-default/10 px-4 py-3">
-						<div>
-							<p className="text-sm font-semibold">Compose file</p>
-							<p className="text-xs text-muted">
-								{stackName ? `${stackName}.compose.yaml` : "Enter a stack name above"}
-							</p>
-						</div>
+
+			<div className="space-y-1">
+				<label htmlFor="stack-description" className="text-xs text-muted">
+					Description
+				</label>
+				<input
+					id="stack-description"
+					name="description"
+					placeholder="Frontend + API + worker"
+					className="h-9 w-full rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
+				/>
+			</div>
+
+			<div className="grid gap-0 overflow-hidden rounded-xl border border-default/10 xl:grid-cols-[1.4fr_0.6fr]">
+				<div className="border-b border-default/10 xl:border-b-0 xl:border-r">
+					<div className="border-b border-default/5 bg-surface px-4 py-2">
+						<p className="text-xs font-medium">
+							{stackName ? `${stackName}.compose.yaml` : "compose.yaml"}
+						</p>
 					</div>
 					<CodeEditor
 						value={composeYaml}
 						onChange={setComposeYaml}
 						language="yaml"
-						minHeight="520px"
+						minHeight="360px"
 						placeholder="services:\n  app:\n    image: nginx:alpine"
 					/>
 				</div>
 				<div>
-					<div className="flex items-center justify-between border-b border-default/10 px-4 py-3">
-						<div>
-							<p className="text-sm font-semibold">Env file</p>
-							<p className="text-xs text-muted">
-								{stackName ? `${stackName}.env` : "Optional environment variables"}
-							</p>
-						</div>
+					<div className="border-b border-default/5 bg-surface px-4 py-2">
+						<p className="text-xs font-medium">
+							{stackName ? `${stackName}.env` : ".env"}
+						</p>
 					</div>
 					<CodeEditor
 						value={envFileContent}
 						onChange={setEnvFileContent}
 						language="env"
-						minHeight="520px"
+						minHeight="360px"
 						placeholder={"APP_ENV=production\nAPP_PORT=8080"}
 					/>
 				</div>
 			</div>
-			<div className="flex items-center justify-end gap-3 border-t border-default/15 px-5 py-4">
-				<FormSubmitButton label="Create stack" pendingLabel="Creating stack..." />
+
+			<div className="flex justify-end">
+				<FormSubmitButton
+					label="Create stack"
+					pendingLabel="Creating..."
+					className="inline-flex h-8 items-center rounded-md bg-foreground px-3 text-xs font-medium text-background transition-opacity hover:opacity-90"
+				/>
 			</div>
 		</form>
 	);

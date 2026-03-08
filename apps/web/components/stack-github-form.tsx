@@ -1,11 +1,10 @@
 "use client";
 
-import { RefreshCw, Search, Sparkles } from "lucide-react";
+import { RefreshCw, Search, Sparkles, ChevronDown, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { CodeEditor } from "@/components/code-editor";
 import { FormSubmitButton } from "@/components/form-submit-button";
-import { StatusBadge } from "@/components/status-badge";
 
 interface InstallationRepository {
 	id: number;
@@ -61,6 +60,7 @@ export function StackGitHubForm({
 	const [headSha, setHeadSha] = useState("");
 	const [isLoaded, setIsLoaded] = useState(false);
 	const [isPending, startTransition] = useTransition();
+	const [showEditor, setShowEditor] = useState(false);
 
 	const activeInstallation = installationOptions.find(
 		(installation) => installation.id === installationId,
@@ -167,6 +167,7 @@ export function StackGitHubForm({
 				setEnvFileContent(payload.envFileContent || "");
 				setHeadSha(payload.headSha || "");
 				setIsLoaded(true);
+				setShowEditor(true);
 			} catch (error) {
 				setLoadError(error instanceof Error ? error.message : "Unable to load repository files.");
 				setIsLoaded(false);
@@ -268,38 +269,38 @@ export function StackGitHubForm({
 
 	if (!installationOptions.length) {
 		return (
-			<div className="rounded-2xl border border-dashed border-default/20 bg-background/60 p-6">
+			<div className="rounded-xl border border-dashed border-default/10 p-8 text-center">
 				<p className="text-sm font-medium">
 					{appConfigured
 						? "No GitHub App installations connected yet."
 						: "GitHub App environment variables are not configured yet."}
 				</p>
-				<p className="mt-2 text-sm text-muted">
+				<p className="mt-2 text-xs text-muted">
 					{appConfigured
-						? "Install the GitHub App once, then you can deploy public or private repositories without pasting tokens."
-						: "Set GITHUB_APP_ID, GITHUB_APP_SLUG, GITHUB_APP_PRIVATE_KEY, and GITHUB_APP_WEBHOOK_SECRET before connecting repositories."}
+						? "Install the GitHub App once, then deploy repositories without pasting tokens."
+						: "Set GITHUB_APP_ID, GITHUB_APP_SLUG, GITHUB_APP_PRIVATE_KEY, and GITHUB_APP_WEBHOOK_SECRET."}
 				</p>
 				{appConfigured ? (
-					<div className="mt-4 flex flex-wrap items-center gap-3">
+					<div className="mt-4 flex justify-center gap-2">
 						<Link
 							href={`/api/github/install?redirectTo=${encodeURIComponent(redirectTo)}`}
 							prefetch={false}
-							className="inline-flex h-11 items-center justify-center rounded-xl bg-accent px-4 text-sm font-medium text-white transition-opacity hover:opacity-90"
+							className="inline-flex h-8 items-center rounded-md bg-foreground px-3 text-xs font-medium text-background"
 						>
 							Connect GitHub App
 						</Link>
 						<button
 							type="button"
 							onClick={() => void refreshInstallations()}
-							className="inline-flex h-11 items-center justify-center rounded-xl border border-default/15 bg-surface px-4 text-sm font-medium transition-colors hover:border-accent/30 hover:text-accent"
+							className="inline-flex h-8 items-center rounded-md border border-default/10 px-3 text-xs font-medium text-muted transition-colors hover:text-foreground"
 						>
-							<RefreshCw className="mr-2 h-4 w-4" />
-							Refresh access
+							<RefreshCw className="mr-1.5 h-3 w-3" />
+							Refresh
 						</button>
 					</div>
 				) : null}
 				{installationStateMessage ? (
-					<p className="mt-3 text-sm text-muted">{installationStateMessage}</p>
+					<p className="mt-3 text-xs text-muted">{installationStateMessage}</p>
 				) : null}
 			</div>
 		);
@@ -320,385 +321,260 @@ export function StackGitHubForm({
 			<input type="hidden" name="composeYaml" value={composeYaml} />
 			<input type="hidden" name="envFileContent" value={envFileContent} />
 
-			<div className="rounded-2xl border border-default/15 bg-background/60 p-4">
-				<div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-					<div>
-						<p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted">
-							GitHub Source
-						</p>
-						<h3 className="mt-2 text-lg font-semibold tracking-tight">
-							Load repository into the compose editor
-						</h3>
-						<p className="mt-1 max-w-2xl text-sm text-muted">
-							Search the repositories this installation can access, choose a branch and file path,
-							then load the compose source before creating the stack.
-						</p>
+			{/* Step 1: Select repository */}
+			<div className="rounded-xl border border-default/10 bg-surface p-4">
+				<div className="flex items-center justify-between">
+					<div className="flex items-center gap-2">
+						<span className="flex h-5 w-5 items-center justify-center rounded-full bg-foreground text-[10px] font-bold text-background">1</span>
+						<p className="text-sm font-semibold">Select repository</p>
 					</div>
-					<div className="flex flex-wrap items-center gap-2">
-						<StatusBadge status="healthy" />
-						<span className="rounded-full bg-default/10 px-3 py-1 text-xs font-medium text-muted">
-							{repositories.length} repositories available
-						</span>
+					<div className="flex items-center gap-2">
+						<select
+							value={installationId}
+							onChange={(event) => {
+								setInstallationId(event.target.value);
+								setRepositoryQuery("");
+								setRepositoryId("");
+								setIsLoaded(false);
+								setComposePath("");
+								setComposeYaml("");
+								setEnvFileContent("");
+								setHeadSha("");
+								setLoadError("");
+							}}
+							className="h-7 rounded-md border border-default/10 bg-background px-2 text-xs outline-none"
+						>
+							{installations.map((installation) => (
+								<option key={installation.id} value={installation.id}>
+									{installation.accountLogin}
+								</option>
+							))}
+						</select>
 						<button
 							type="button"
 							onClick={() => void refreshInstallations()}
-							className="inline-flex h-9 items-center justify-center rounded-full border border-default/15 bg-surface px-3 text-xs font-medium transition-colors hover:border-accent/30 hover:text-accent"
+							className="inline-flex h-7 items-center rounded-md border border-default/10 px-2 text-xs text-muted transition-colors hover:text-foreground"
 						>
-							<RefreshCw className="mr-2 h-3.5 w-3.5" />
-							Refresh access
+							<RefreshCw className="h-3 w-3" />
 						</button>
 					</div>
 				</div>
+				<div className="relative mt-3">
+					<Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
+					<input
+						value={repositoryQuery}
+						onChange={(event) => setRepositoryQuery(event.target.value)}
+						placeholder="Search repositories..."
+						className="h-9 w-full rounded-lg border border-default/10 bg-background pl-9 pr-3 text-sm outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
+					/>
+				</div>
+				<div className="mt-2 max-h-48 overflow-auto rounded-lg border border-default/10">
+					{filteredRepositories.length ? (
+						filteredRepositories.map((repository) => {
+							const active = String(repository.id) === repositoryId;
+							return (
+								<button
+									key={repository.id}
+									type="button"
+									onClick={() => {
+										setRepositoryId(String(repository.id));
+										setStackName(repository.name);
+										setBranch(repository.default_branch || "main");
+										setComposePath("");
+										setComposeYaml("");
+										setEnvFileContent("");
+										setHeadSha("");
+										setLoadError("");
+										setIsLoaded(false);
+									}}
+									className={`flex w-full items-center justify-between border-b border-default/5 px-3 py-2 text-left text-xs last:border-b-0 ${active ? "bg-foreground/[0.06] text-foreground" : "text-muted hover:bg-foreground/[0.03] hover:text-foreground"}`}
+								>
+									<span className="font-medium">{repository.full_name}</span>
+									<span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${repository.private ? "bg-amber-500/10 text-amber-600 dark:text-amber-400" : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"}`}>
+										{repository.private ? "private" : "public"}
+									</span>
+								</button>
+							);
+						})
+					) : (
+						<p className="px-3 py-4 text-xs text-muted">No repositories match.</p>
+					)}
+				</div>
+				{activeInstallation?.repositoryError ? (
+					<p className="mt-2 text-xs text-red-500">{activeInstallation.repositoryError}</p>
+				) : null}
 			</div>
 
-			<div className="grid gap-5 2xl:grid-cols-[0.92fr_1.08fr]">
-				<section className="space-y-5">
-					<div className="rounded-2xl border border-default/15 bg-background/60 p-4">
-						<div className="space-y-1.5">
-							<label htmlFor="installationId-select" className="text-sm font-medium">
-								GitHub App installation
-							</label>
-							<select
-								id="installationId-select"
-								value={installationId}
-								onChange={(event) => {
-									setInstallationId(event.target.value);
-									setRepositoryQuery("");
-									setRepositoryId("");
-									setIsLoaded(false);
-									setComposePath("");
-									setComposeYaml("");
-									setEnvFileContent("");
-									setHeadSha("");
-									setLoadError("");
-								}}
-								className="h-11 w-full rounded-xl border border-default/15 bg-background px-4 text-sm outline-none transition-colors focus:border-accent"
-							>
-								{installations.map((installation) => (
-									<option key={installation.id} value={installation.id}>
-										{installation.accountLogin}
-										{installation.accountType ? ` (${installation.accountType})` : ""}
-									</option>
-								))}
-							</select>
-							{activeInstallation?.repositoryError ? (
-								<p className="text-sm text-danger">{activeInstallation.repositoryError}</p>
-							) : null}
-							{installationStateMessage ? (
-								<p
-									className={`text-sm ${installationState === "error" ? "text-danger" : "text-muted"}`}
-								>
-									{installationStateMessage}
-								</p>
-							) : null}
-						</div>
-
-						<div className="mt-4 space-y-3">
-							<label htmlFor="repository-search" className="text-sm font-medium">
-								Repository search
-							</label>
-							<div className="relative">
-								<Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-								<input
-									id="repository-search"
-									value={repositoryQuery}
-									onChange={(event) => setRepositoryQuery(event.target.value)}
-									placeholder="Search repositories by name"
-									className="h-11 w-full rounded-xl border border-default/15 bg-background pl-10 pr-4 text-sm outline-none transition-colors focus:border-accent"
-								/>
-							</div>
-							<div className="max-h-72 overflow-auto rounded-xl border border-default/15 bg-surface/70">
-								{filteredRepositories.length ? (
-									filteredRepositories.map((repository) => {
-										const active = String(repository.id) === repositoryId;
-										return (
-											<button
-												key={repository.id}
-												type="button"
-												onClick={() => {
-													setRepositoryId(String(repository.id));
-													setStackName(repository.name);
-													setBranch(repository.default_branch || "main");
-													setComposePath("");
-													setComposeYaml("");
-													setEnvFileContent("");
-													setHeadSha("");
-													setLoadError("");
-													setIsLoaded(false);
-												}}
-												className={`flex w-full items-center justify-between gap-3 border-b border-default/10 px-4 py-3 text-left last:border-b-0 ${active ? "bg-accent/10" : "hover:bg-default/5"}`}
-											>
-												<div>
-													<p className="text-sm font-medium">{repository.full_name}</p>
-													<p className="mt-1 text-xs text-muted">
-														Default branch: {repository.default_branch}
-													</p>
-												</div>
-												<div className="flex items-center gap-2">
-													{repository.private ? (
-														<span className="rounded-full bg-warning/10 px-2.5 py-1 text-[11px] font-semibold text-warning">
-															private
-														</span>
-													) : (
-														<span className="rounded-full bg-success/10 px-2.5 py-1 text-[11px] font-semibold text-success">
-															public
-														</span>
-													)}
-													{active ? <StatusBadge status="deploying" /> : null}
-												</div>
-											</button>
-										);
-									})
-								) : (
-									<div className="px-4 py-6 text-sm text-muted">
-										No repositories match this search.
-									</div>
-								)}
-							</div>
-						</div>
-					</div>
-
-					<div className="rounded-2xl border border-default/15 bg-background/60 p-4">
-						<div className="grid gap-4 md:grid-cols-2">
-							<div className="space-y-1.5">
-								<label htmlFor="github-stack-name" className="text-sm font-medium">
-									Stack name
-								</label>
-								<input
-									id="github-stack-name"
-									value={stackName}
-									onChange={(event) => setStackName(event.target.value)}
-									placeholder="customer-portal"
-									className="h-11 w-full rounded-xl border border-default/15 bg-background px-4 text-sm outline-none transition-colors focus:border-accent"
-								/>
-							</div>
-							<div className="space-y-1.5">
-								<label htmlFor="github-environment" className="text-sm font-medium">
-									Target environment
-								</label>
-								<select
-									id="github-environment"
-									name="environmentId"
-									required
-									className="h-11 w-full rounded-xl border border-default/15 bg-background px-4 text-sm outline-none transition-colors focus:border-accent"
-								>
-									{environments.map((environment) => (
-										<option key={environment.id} value={environment.id}>
-											{environment.name} ({environment.kind})
-										</option>
-									))}
-								</select>
-							</div>
-						</div>
-
-						<div className="mt-4 space-y-1.5">
-							<label htmlFor="github-description" className="text-sm font-medium">
-								Description
-							</label>
-							<input
-								id="github-description"
-								value={description}
-								onChange={(event) => setDescription(event.target.value)}
-								placeholder="Frontend + API + worker"
-								className="h-11 w-full rounded-xl border border-default/15 bg-background px-4 text-sm outline-none transition-colors focus:border-accent"
-							/>
-						</div>
-
-						<div className="mt-4 grid gap-4 md:grid-cols-2">
-							<div className="space-y-1.5">
-								<label htmlFor="branch" className="text-sm font-medium">
-									Branch
-								</label>
-								<input
-									id="branch"
-									value={branch}
-									onChange={(event) => {
-										setBranch(event.target.value);
-										setIsLoaded(false);
-									}}
-									className="h-11 w-full rounded-xl border border-default/15 bg-background px-4 text-sm outline-none transition-colors focus:border-accent"
-								/>
-							</div>
-							<div className="space-y-1.5">
-								<label htmlFor="composePath" className="text-sm font-medium">
-									Compose file path
-								</label>
-								<input
-									id="composePath"
-									value={composePath}
-									onChange={(event) => {
-										setComposePath(event.target.value);
-										setIsLoaded(false);
-										setLoadError("");
-									}}
-									placeholder="deploy/compose.prod.yaml"
-									className="h-11 w-full rounded-xl border border-default/15 bg-background px-4 text-sm outline-none transition-colors focus:border-accent"
-								/>
-							</div>
-						</div>
-
-						{pathSuggestions.length ? (
-							<div className="mt-4">
-								<p className="text-xs font-medium uppercase tracking-[0.18em] text-muted">
-									Detected compose files
-								</p>
-								<div className="mt-3 flex flex-wrap gap-2">
-									{pathSuggestions.map((path) => (
-										<button
-											key={path}
-											type="button"
-											onClick={() => {
-												setComposePath(path);
-												setIsLoaded(false);
-												void loadRepositoryFiles(path);
-											}}
-											className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${composePath === path ? "border-accent/40 bg-accent/10 text-accent" : "border-default/15 bg-surface text-muted hover:text-foreground"}`}
-										>
-											{path}
-										</button>
-									))}
-								</div>
-							</div>
-						) : (
-							<div className="mt-4 rounded-xl border border-dashed border-default/15 bg-surface/50 px-4 py-3 text-sm text-muted">
-								No compose files were detected automatically for this branch yet. Enter a path
-								manually, then load the repository.
-							</div>
-						)}
-
-						<div className="mt-4 grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
-							<div className="space-y-1.5">
-								<label htmlFor="envPath" className="text-sm font-medium">
-									Env file path
-								</label>
-								<input
-									id="envPath"
-									value={envPath}
-									onChange={(event) => {
-										setEnvPath(event.target.value);
-										setIsLoaded(false);
-										setLoadError("");
-									}}
-									placeholder="deploy/.env.production"
-									className="h-11 w-full rounded-xl border border-default/15 bg-background px-4 text-sm outline-none transition-colors focus:border-accent"
-								/>
-							</div>
-							<button
-								type="button"
-								onClick={() => void loadRepositoryFiles()}
-								disabled={!selectedRepository || isPending}
-								className="inline-flex h-11 items-center justify-center rounded-xl bg-accent px-4 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-							>
-								{isPending ? "Loading repository..." : "Load repository"}
-							</button>
-						</div>
-
-						<div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-default/15 bg-surface/70 px-4 py-3">
-							<div>
-								<p className="text-sm font-medium">
-									{selectedRepository?.full_name || "Choose a repository"}
-								</p>
-								<p className="mt-1 text-xs text-muted">
-									{headSha
-										? `Loaded commit ${headSha.slice(0, 12)}`
-										: composePath
-											? "Selected file is ready to load into the editor."
-											: "Choose a compose file path to load source into the editor."}
-								</p>
-							</div>
-							<div className="flex flex-wrap items-center gap-2">
-								<Link
-									href={`/api/github/install?redirectTo=${encodeURIComponent(redirectTo)}`}
-									prefetch={false}
-									className="text-sm font-medium text-accent"
-								>
-									Manage GitHub App
-								</Link>
-								<span className="rounded-full bg-default/10 px-3 py-1 text-xs font-medium text-muted">
-									{selectedRepository?.private ? "Private repo access" : "Public repo access"}
-								</span>
-							</div>
-						</div>
-
-						{loadError ? <p className="mt-3 text-sm text-danger">{loadError}</p> : null}
-					</div>
-				</section>
-
-				<section className="overflow-hidden rounded-2xl border border-default/15 bg-surface">
-					<div className="border-b border-default/15 px-5 py-4">
-						<div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-							<div>
-								<p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted">
-									Compose Workspace
-								</p>
-								<h3 className="mt-2 text-lg font-semibold tracking-tight">
-									Review and edit before deployment
-								</h3>
-							</div>
-							<div className="flex items-center gap-2">
-								{isLoaded ? (
-									<span className="inline-flex items-center gap-2 rounded-full bg-success/10 px-3 py-1 text-xs font-semibold text-success">
-										<Sparkles className="h-3.5 w-3.5" />
-										Repository loaded
-									</span>
-								) : (
-									<span className="rounded-full bg-default/10 px-3 py-1 text-xs font-semibold text-muted">
-										Waiting for repository load
-									</span>
-								)}
-							</div>
-						</div>
-					</div>
-
-					<div className="grid gap-0 xl:grid-cols-[1.45fr_0.8fr]">
-						<div className="border-b border-default/15 xl:border-b-0 xl:border-r">
-							<div className="flex items-center justify-between border-b border-default/10 px-4 py-3">
-								<div>
-									<p className="text-sm font-semibold">Compose file</p>
-									<p className="text-xs text-muted">
-										{composePath || "Set a compose file path to load source"}
-									</p>
-								</div>
-							</div>
-							<CodeEditor
-								value={composeYaml}
-								onChange={setComposeYaml}
-								language="yaml"
-								minHeight="560px"
-								placeholder="Load a repository to populate this editor."
-							/>
-						</div>
-
-						<div>
-							<div className="flex items-center justify-between border-b border-default/10 px-4 py-3">
-								<div>
-									<p className="text-sm font-semibold">Env file</p>
-									<p className="text-xs text-muted">
-										{envPath || "Optional environment variables"}
-									</p>
-								</div>
-							</div>
-							<CodeEditor
-								value={envFileContent}
-								onChange={setEnvFileContent}
-								language="env"
-								minHeight="560px"
-								placeholder="Load an optional env file or leave empty."
-							/>
-						</div>
-					</div>
-
-					<div className="flex items-center justify-between gap-3 border-t border-default/15 px-5 py-4">
-						<p className="text-sm text-muted">
-							Deploys use the compose content saved here. Future GitHub pushes can refresh it.
-						</p>
-						<FormSubmitButton
-							label="Create GitHub stack"
-							pendingLabel="Creating stack..."
-							className="inline-flex h-11 items-center justify-center rounded-xl bg-accent px-4 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+			{/* Step 2: Configuration */}
+			<div className="rounded-xl border border-default/10 bg-surface p-4">
+				<div className="flex items-center gap-2">
+					<span className="flex h-5 w-5 items-center justify-center rounded-full bg-foreground text-[10px] font-bold text-background">2</span>
+					<p className="text-sm font-semibold">Configure stack</p>
+				</div>
+				<div className="mt-3 grid gap-3 sm:grid-cols-2">
+					<div className="space-y-1">
+						<label className="text-xs text-muted">Stack name</label>
+						<input
+							value={stackName}
+							onChange={(event) => setStackName(event.target.value)}
+							placeholder="my-app"
+							className="h-9 w-full rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
 						/>
 					</div>
-				</section>
+					<div className="space-y-1">
+						<label className="text-xs text-muted">Environment</label>
+						<select
+							name="environmentId"
+							required
+							className="h-9 w-full rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors focus:border-foreground/20"
+						>
+							{environments.map((environment) => (
+								<option key={environment.id} value={environment.id}>
+									{environment.name} ({environment.kind})
+								</option>
+							))}
+						</select>
+					</div>
+				</div>
+				<div className="mt-3 space-y-1">
+					<label className="text-xs text-muted">Description</label>
+					<input
+						value={description}
+						onChange={(event) => setDescription(event.target.value)}
+						placeholder="Frontend + API + worker"
+						className="h-9 w-full rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
+					/>
+				</div>
+				<div className="mt-3 grid gap-3 sm:grid-cols-3">
+					<div className="space-y-1">
+						<label className="text-xs text-muted">Branch</label>
+						<input
+							value={branch}
+							onChange={(event) => {
+								setBranch(event.target.value);
+								setIsLoaded(false);
+							}}
+							className="h-9 w-full rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors focus:border-foreground/20"
+						/>
+					</div>
+					<div className="space-y-1">
+						<label className="text-xs text-muted">Compose file path</label>
+						<input
+							value={composePath}
+							onChange={(event) => {
+								setComposePath(event.target.value);
+								setIsLoaded(false);
+								setLoadError("");
+							}}
+							placeholder="compose.yaml"
+							className="h-9 w-full rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
+						/>
+					</div>
+					<div className="space-y-1">
+						<label className="text-xs text-muted">Env file path</label>
+						<input
+							value={envPath}
+							onChange={(event) => {
+								setEnvPath(event.target.value);
+								setIsLoaded(false);
+								setLoadError("");
+							}}
+							placeholder=".env.production"
+							className="h-9 w-full rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
+						/>
+					</div>
+				</div>
+				{pathSuggestions.length ? (
+					<div className="mt-3 flex flex-wrap gap-1.5">
+						<span className="text-[10px] text-muted uppercase tracking-wider mr-1 self-center">Detected:</span>
+						{pathSuggestions.map((path) => (
+							<button
+								key={path}
+								type="button"
+								onClick={() => {
+									setComposePath(path);
+									setIsLoaded(false);
+									void loadRepositoryFiles(path);
+								}}
+								className={`rounded-md px-2 py-1 text-xs transition-colors ${composePath === path ? "bg-foreground/[0.08] text-foreground" : "text-muted hover:text-foreground"}`}
+							>
+								{path}
+							</button>
+						))}
+					</div>
+				) : null}
+				<div className="mt-3 flex items-center gap-2">
+					<button
+						type="button"
+						onClick={() => void loadRepositoryFiles()}
+						disabled={!selectedRepository || isPending}
+						className="inline-flex h-8 items-center rounded-md bg-foreground px-3 text-xs font-medium text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+					>
+						{isPending ? "Loading..." : "Load repository"}
+					</button>
+					{isLoaded ? (
+						<span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+							<Sparkles className="h-3 w-3" />
+							Loaded · {headSha?.slice(0, 8)}
+						</span>
+					) : null}
+					{loadError ? <p className="text-xs text-red-500">{loadError}</p> : null}
+				</div>
+			</div>
+
+			{/* Step 3: Review & Create */}
+			<div className="rounded-xl border border-default/10 bg-surface">
+				<button
+					type="button"
+					onClick={() => setShowEditor(!showEditor)}
+					className="flex w-full items-center justify-between px-4 py-3"
+				>
+					<div className="flex items-center gap-2">
+						<span className="flex h-5 w-5 items-center justify-center rounded-full bg-foreground text-[10px] font-bold text-background">3</span>
+						<p className="text-sm font-semibold">Review source</p>
+					</div>
+					{showEditor ? <ChevronDown className="h-4 w-4 text-muted" /> : <ChevronRight className="h-4 w-4 text-muted" />}
+				</button>
+				{showEditor ? (
+					<>
+						<div className="grid gap-0 border-t border-default/10 xl:grid-cols-[1.4fr_0.6fr]">
+							<div className="border-b border-default/10 xl:border-b-0 xl:border-r">
+								<div className="border-b border-default/5 px-4 py-2">
+									<p className="text-xs font-medium">{composePath || "compose.yaml"}</p>
+								</div>
+								<CodeEditor
+									value={composeYaml}
+									onChange={setComposeYaml}
+									language="yaml"
+									minHeight="360px"
+									placeholder="Load a repository to populate this editor."
+								/>
+							</div>
+							<div>
+								<div className="border-b border-default/5 px-4 py-2">
+									<p className="text-xs font-medium">{envPath || ".env"}</p>
+								</div>
+								<CodeEditor
+									value={envFileContent}
+									onChange={setEnvFileContent}
+									language="env"
+									minHeight="360px"
+									placeholder="Optional env file."
+								/>
+							</div>
+						</div>
+					</>
+				) : null}
+				<div className="flex items-center justify-between border-t border-default/10 px-4 py-3">
+					<p className="text-xs text-muted">
+						{selectedRepository?.full_name ? `${selectedRepository.full_name}` : "Select a repository above"}
+					</p>
+					<FormSubmitButton
+						label="Create stack"
+						pendingLabel="Creating..."
+						className="inline-flex h-8 items-center rounded-md bg-foreground px-3 text-xs font-medium text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+					/>
+				</div>
 			</div>
 		</form>
 	);

@@ -1,6 +1,5 @@
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
-import { PageHeader } from "@/components/page-header";
 import { requirePrivilegedPageSession } from "@/lib/authorization";
 import {
 	getVolumeDetailsForEnvironment,
@@ -30,48 +29,47 @@ export default async function VolumeDetailPage({
 	}
 
 	return (
-		<div className="space-y-6">
-			<PageHeader
-				kicker="Runtime"
-				title={decodedName}
-				description={`Inspect volume mount data and low-level Docker metadata on ${environment.name}.`}
-				actions={
-					<Link
-						href={`/dashboard/volumes?environment=${environment.id}`}
-						className="inline-flex h-11 items-center justify-center rounded-xl border border-default/20 bg-surface px-4 text-sm font-medium transition-colors hover:border-accent/30 hover:text-accent"
-					>
-						<ArrowLeft className="mr-2 h-4 w-4" />
-						Back
-					</Link>
-				}
-			/>
+		<div className="animate-in space-y-6">
+			{/* Header */}
+			<div className="flex items-center gap-3">
+				<Link
+					href={`/dashboard/volumes?environment=${environment.id}`}
+					className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-default/10 text-muted transition-colors hover:text-foreground"
+				>
+					<ArrowLeft className="h-4 w-4" />
+				</Link>
+				<div>
+					<p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted">Volume</p>
+					<h1 className="text-lg font-semibold">{decodedName}</h1>
+				</div>
+			</div>
 
-			<div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
-				<section className="rounded-2xl border border-default/15 bg-surface p-5">
-					<div className="grid gap-3 sm:grid-cols-2">
-						<div className="rounded-xl border border-default/15 bg-background/60 p-4">
-							<p className="text-xs text-muted">Driver</p>
-							<p className="mt-2 text-sm font-medium">{String(volume.Driver || "local")}</p>
-						</div>
-						<div className="rounded-xl border border-default/15 bg-background/60 p-4">
-							<p className="text-xs text-muted">Mount point</p>
-							<p className="mt-2 break-all text-sm font-medium">
-								{String(volume.Mountpoint || "Managed by Docker")}
-							</p>
-						</div>
-					</div>
-					<div className="mt-5 rounded-xl border border-default/15 bg-background/60 p-4">
-						<p className="text-xs text-muted">Scope</p>
-						<p className="mt-2 text-sm font-medium">{String(volume.Scope || "local")}</p>
-					</div>
-				</section>
+			{/* Info grid */}
+			<div className="grid gap-3 sm:grid-cols-3">
+				<div className="rounded-xl border border-default/10 bg-surface p-4">
+					<p className="text-xs text-muted">Driver</p>
+					<p className="mt-1 text-sm font-medium">{String(volume.Driver || "local")}</p>
+				</div>
+				<div className="rounded-xl border border-default/10 bg-surface p-4">
+					<p className="text-xs text-muted">Mount point</p>
+					<p className="mt-1 break-all text-sm font-medium">
+						{String(volume.Mountpoint || "Managed by Docker")}
+					</p>
+				</div>
+				<div className="rounded-xl border border-default/10 bg-surface p-4">
+					<p className="text-xs text-muted">Scope</p>
+					<p className="mt-1 text-sm font-medium">{String(volume.Scope || "local")}</p>
+				</div>
+			</div>
 
-				<section className="rounded-2xl border border-default/15 bg-surface p-5">
-					<h2 className="text-lg font-semibold tracking-tight">Inspect payload</h2>
-					<pre className="log-viewport mt-4 max-h-[720px] rounded-xl bg-[#050914] p-4 text-xs leading-6 text-white/85">
-						{JSON.stringify(volume, null, 2)}
-					</pre>
-				</section>
+			{/* Inspect payload */}
+			<div className="rounded-xl border border-default/10 bg-surface">
+				<div className="border-b border-default/10 px-4 py-3">
+					<h2 className="text-sm font-semibold">Inspect payload</h2>
+				</div>
+				<pre className="log-viewport max-h-[600px] p-4 text-xs leading-6 text-muted">
+					{JSON.stringify(volume, null, 2)}
+				</pre>
 			</div>
 		</div>
 	);

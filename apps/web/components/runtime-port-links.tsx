@@ -12,10 +12,7 @@ type PublishedPort = {
 	description: string;
 };
 
-const browserFriendlyPorts = new Set([
-	80, 81, 3000, 3001, 3080, 4173, 4200, 4321, 5000, 5173, 5174, 5601, 6006, 7000, 7080, 8000, 8080,
-	8081, 8088, 8089, 8181, 8443, 8888, 9000, 9090, 9091,
-]);
+
 
 function normalizeHost(host: string) {
 	const stripped = host.replaceAll("[", "").replaceAll("]", "");
@@ -32,21 +29,17 @@ function buildBrowserHref(host: string, hostPort: string, protocol: string) {
 	}
 
 	const numericPort = Number(hostPort);
-	if (!Number.isFinite(numericPort)) {
+	if (!Number.isFinite(numericPort) || numericPort <= 0) {
 		return null;
 	}
 
-	const scheme =
-		numericPort === 443 || numericPort === 8443
-			? "https"
-			: browserFriendlyPorts.has(numericPort)
-				? "http"
-				: null;
-
-	if (!scheme) {
+	// Make all reasonable TCP ports clickable — only exclude well-known non-HTTP ports
+	const nonHttpPorts = new Set([22, 25, 53, 110, 143, 389, 465, 587, 636, 993, 995]);
+	if (nonHttpPorts.has(numericPort)) {
 		return null;
 	}
 
+	const scheme = numericPort === 443 || numericPort === 8443 ? "https" : "http";
 	return `${scheme}://${normalizeHost(host)}:${hostPort}`;
 }
 

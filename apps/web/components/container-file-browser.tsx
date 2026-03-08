@@ -108,7 +108,7 @@ export function ContainerFileBrowser({
 	}
 
 	return (
-		<section className="rounded-2xl border border-default/15 bg-surface p-5">
+		<section className="rounded-xl border border-default/10 bg-surface p-5">
 			<div className="flex items-center justify-between gap-4">
 				<h2 className="text-lg font-semibold tracking-tight">Container files</h2>
 				<form
@@ -128,7 +128,7 @@ export function ContainerFileBrowser({
 						name="path"
 						defaultValue={path}
 						placeholder="/"
-						className="h-10 rounded-xl border border-default/15 bg-background px-3 text-sm outline-none transition-colors focus:border-accent"
+						className="h-10 rounded-xl border border-default/10 bg-background px-3 text-sm outline-none transition-colors focus:border-accent"
 					/>
 					<button
 						type="submit"
@@ -138,7 +138,7 @@ export function ContainerFileBrowser({
 					</button>
 				</form>
 			</div>
-			<div className="mt-4 rounded-xl border border-default/15 bg-background/60 p-4">
+			<div className="mt-4 rounded-xl border border-default/10 bg-background/60 p-4">
 				<p className="text-xs text-muted">Path</p>
 				<p className="mt-2 font-mono text-sm">{browser.path}</p>
 			</div>
@@ -147,7 +147,7 @@ export function ContainerFileBrowser({
 			{browser.kind === "directory" ? (
 				<div className="mt-4 space-y-3">
 					<form
-						className="flex flex-wrap items-center gap-3 rounded-xl border border-default/15 bg-background/60 p-4"
+						className="flex flex-wrap items-center gap-3 rounded-xl border border-default/10 bg-background/60 p-4"
 						onSubmit={(event) => {
 							event.preventDefault();
 							void uploadFile(new FormData(event.currentTarget));
@@ -171,7 +171,7 @@ export function ContainerFileBrowser({
 					{browser.path !== "/" ? (
 						<Link
 							href={`/dashboard/containers/${containerId}?path=${encodeURIComponent(browser.path.split("/").slice(0, -1).join("/") || "/")}${environmentId ? `&environment=${encodeURIComponent(environmentId)}` : ""}`}
-							className="block rounded-xl border border-default/15 bg-background/60 px-4 py-3 text-sm font-medium"
+							className="block rounded-xl border border-default/10 bg-background/60 px-4 py-3 text-sm font-medium"
 						>
 							..
 						</Link>
@@ -184,7 +184,7 @@ export function ContainerFileBrowser({
 						return (
 							<div
 								key={`${entry.kind}-${entry.name}`}
-								className="flex items-center justify-between gap-3 rounded-xl border border-default/15 bg-background/60 px-4 py-3"
+								className="flex items-center justify-between gap-3 rounded-xl border border-default/10 bg-background/60 px-4 py-3"
 							>
 								<Link
 									href={`/dashboard/containers/${containerId}?path=${encodeURIComponent(nextPath)}${environmentId ? `&environment=${encodeURIComponent(environmentId)}` : ""}`}
@@ -205,7 +205,7 @@ export function ContainerFileBrowser({
 					})}
 				</div>
 			) : browser.kind === "file" ? (
-				<div className="mt-4 overflow-hidden rounded-xl border border-default/15">
+				<div className="mt-4 overflow-hidden rounded-xl border border-default/10">
 					<div className="flex items-center justify-between border-b border-default/10 px-4 py-3">
 						<p className="text-sm font-semibold">{browser.path}</p>
 						<div className="flex gap-2">
