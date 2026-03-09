@@ -22,6 +22,7 @@ export default async function StackWorkspacePage({
 }: {
 	params: Promise<{ projectId: string; stackId: string }>;
 }) {
+	const editorHeight = "min(60vh, 640px)";
 	const session = await getServerSession();
 
 	if (!session?.user.id) {
@@ -53,6 +54,13 @@ export default async function StackWorkspacePage({
 		}
 	}
 	const latestDeployment = stack.deployments[0];
+	const hasRunningContainers = containers.some((container) => container.State === "running");
+	const shouldRedeploy =
+		hasRunningContainers ||
+		String(stack.status || "")
+			.toLowerCase()
+			.includes("running") ||
+		latestDeployment?.status === "succeeded";
 
 	return (
 		<div className="animate-in space-y-6">
@@ -75,7 +83,11 @@ export default async function StackWorkspacePage({
 				<div className="flex flex-wrap gap-2">
 					<form action={deployStackAction}>
 						<input type="hidden" name="stackId" value={stack.id} />
-						<FormSubmitButton label="Deploy" pendingLabel="Deploying..." size="sm" />
+						<FormSubmitButton
+							label={shouldRedeploy ? "Redeploy" : "Deploy"}
+							pendingLabel={shouldRedeploy ? "Redeploying..." : "Deploying..."}
+							size="sm"
+						/>
 					</form>
 					<form action={destroyStackAction}>
 						<input type="hidden" name="stackId" value={stack.id} />
@@ -110,13 +122,20 @@ export default async function StackWorkspacePage({
 				<div className="space-y-5">
 					{/* Compose files */}
 					<Panel className="grid gap-0 overflow-hidden xl:grid-cols-[1.4fr_0.6fr]">
-						<div className="border-b border-default/10 xl:border-b-0 xl:border-r">
+						<div className="min-h-0 border-b border-default/10 xl:border-b-0 xl:border-r">
 							<div className="border-b border-default/5 bg-surface px-4 py-2">
 								<p className="text-xs font-medium">{stack.composeFileName}</p>
 							</div>
-							<CodeEditor value={stack.composeYaml} language="yaml" readOnly minHeight="320px" />
+							<CodeEditor
+								value={stack.composeYaml}
+								language="yaml"
+								readOnly
+								minHeight="320px"
+								maxHeight={editorHeight}
+								height={editorHeight}
+							/>
 						</div>
-						<div>
+						<div className="min-h-0">
 							<div className="border-b border-default/5 bg-surface px-4 py-2">
 								<p className="text-xs font-medium">{stack.envFileName || ".env"}</p>
 							</div>
@@ -125,6 +144,8 @@ export default async function StackWorkspacePage({
 								language="env"
 								readOnly
 								minHeight="320px"
+								maxHeight={editorHeight}
+								height={editorHeight}
 							/>
 						</div>
 					</Panel>
@@ -134,12 +155,17 @@ export default async function StackWorkspacePage({
 						containers={containers}
 						containerDetailsMap={containerDetailsMap}
 						controlContainerAction={controlContainerAction}
+						environmentId={stack.environment.id}
 					/>
 				</div>
 
 				{/* Right: Live logs */}
 				<div className="space-y-5">
-					<LiveStackFeed stackId={stack.id} initialLog={latestDeployment?.log} />
+					<LiveStackFeed
+						stackId={stack.id}
+						initialLog={latestDeployment?.log}
+						height={editorHeight}
+					/>
 				</div>
 			</div>
 		</div>

@@ -7,7 +7,6 @@ import { FormSubmitButton } from "@/components/form-submit-button";
 import { StackComposeForm } from "@/components/stack-compose-form";
 import { type InstallationOption, StackGitHubForm } from "@/components/stack-github-form";
 import { StatusBadge } from "@/components/status-badge";
-import { EmptyState } from "@/components/ui/empty-state";
 import {
 	DataTable,
 	DataTableBody,
@@ -16,6 +15,7 @@ import {
 	DataTableHeader,
 	DataTableRow,
 } from "@/components/ui/data-table";
+import { EmptyState } from "@/components/ui/empty-state";
 import { LinkButton } from "@/components/ui/link-button";
 import { Panel } from "@/components/ui/panel";
 import { TabsList, TabsPanel, TabsTrigger } from "@/components/ui/tabs";
@@ -45,6 +45,19 @@ type Project = {
 };
 
 type FormAction = (formData: FormData) => void | Promise<void>;
+
+function shouldShowRedeploy(stack: Stack) {
+	const normalizedStatus = String(stack.status || "").toLowerCase();
+	if (
+		["running", "healthy", "online", "active", "succeeded"].some((value) =>
+			normalizedStatus.includes(value),
+		)
+	) {
+		return true;
+	}
+
+	return stack.deployments.some((deployment) => deployment.status === "succeeded");
+}
 
 export function ProjectDetailTabs({
 	project,
@@ -107,52 +120,68 @@ export function ProjectDetailTabs({
 										</tr>
 									</DataTableHeader>
 									<DataTableBody>
-											{project.stacks.map((stack) => (
-												<DataTableRow key={stack.id}>
-													<DataTableCell>
-														<Link
-															href={`/dashboard/projects/${project.id}/stacks/${stack.id}`}
-															className="font-medium transition-colors hover:text-foreground/80"
-														>
-															{stack.name}
-														</Link>
-														<p className="mt-0.5 text-xs text-muted">
-															{stack.description || stack.slug}
-														</p>
-													</DataTableCell>
-													<DataTableCell>
-														<StatusBadge status={stack.status} />
-													</DataTableCell>
-													<DataTableCell className="text-xs text-muted">{stack.environment.name}</DataTableCell>
-													<DataTableCell className="text-xs text-muted">
-														{stack.sourceType === "github" ? "GitHub" : "Manual"}
-													</DataTableCell>
-													<DataTableCell>
-														<div className="flex gap-1.5">
-															<form action={deployStackAction}>
-																<input type="hidden" name="stackId" value={stack.id} />
-																<FormSubmitButton label="Deploy" pendingLabel="..." size="xs" />
-															</form>
-															<form action={destroyStackAction}>
-																<input type="hidden" name="stackId" value={stack.id} />
-																<FormSubmitButton label="Destroy" pendingLabel="..." variant="danger" size="xs" />
-															</form>
-															<form action={deleteStackAction}>
-																<input type="hidden" name="stackId" value={stack.id} />
-																<input type="hidden" name="projectId" value={project.id} />
-																<FormSubmitButton label="Delete" pendingLabel="..." variant="quietDanger" size="xs" />
-															</form>
-															<LinkButton
-																href={`/dashboard/projects/${project.id}/stacks/${stack.id}`}
-																variant="outline"
+										{project.stacks.map((stack) => (
+											<DataTableRow key={stack.id}>
+												<DataTableCell>
+													<Link
+														href={`/dashboard/projects/${project.id}/stacks/${stack.id}`}
+														className="font-medium transition-colors hover:text-foreground/80"
+													>
+														{stack.name}
+													</Link>
+													<p className="mt-0.5 text-xs text-muted">
+														{stack.description || stack.slug}
+													</p>
+												</DataTableCell>
+												<DataTableCell>
+													<StatusBadge status={stack.status} />
+												</DataTableCell>
+												<DataTableCell className="text-xs text-muted">
+													{stack.environment.name}
+												</DataTableCell>
+												<DataTableCell className="text-xs text-muted">
+													{stack.sourceType === "github" ? "GitHub" : "Manual"}
+												</DataTableCell>
+												<DataTableCell>
+													<div className="flex gap-1.5">
+														<form action={deployStackAction}>
+															<input type="hidden" name="stackId" value={stack.id} />
+															<FormSubmitButton
+																label={shouldShowRedeploy(stack) ? "Redeploy" : "Deploy"}
+																pendingLabel={shouldShowRedeploy(stack) ? "Redeploying..." : "..."}
 																size="xs"
-															>
-																Open <ArrowRight className="ml-1 h-3 w-3" />
-															</LinkButton>
-														</div>
-													</DataTableCell>
-												</DataTableRow>
-											))}
+															/>
+														</form>
+														<form action={destroyStackAction}>
+															<input type="hidden" name="stackId" value={stack.id} />
+															<FormSubmitButton
+																label="Destroy"
+																pendingLabel="..."
+																variant="danger"
+																size="xs"
+															/>
+														</form>
+														<form action={deleteStackAction}>
+															<input type="hidden" name="stackId" value={stack.id} />
+															<input type="hidden" name="projectId" value={project.id} />
+															<FormSubmitButton
+																label="Delete"
+																pendingLabel="..."
+																variant="quietDanger"
+																size="xs"
+															/>
+														</form>
+														<LinkButton
+															href={`/dashboard/projects/${project.id}/stacks/${stack.id}`}
+															variant="outline"
+															size="xs"
+														>
+															Open <ArrowRight className="ml-1 h-3 w-3" />
+														</LinkButton>
+													</div>
+												</DataTableCell>
+											</DataTableRow>
+										))}
 									</DataTableBody>
 								</DataTable>
 							</Panel>
@@ -162,16 +191,25 @@ export function ProjectDetailTabs({
 								description="Deploy from GitHub or create a manual compose stack."
 								actions={
 									<>
-										<LinkButton href="#" size="sm" onClick={(event) => {
-											event.preventDefault();
-											setActiveTab("deploy-github");
-										}}>
+										<LinkButton
+											href="#"
+											size="sm"
+											onClick={(event) => {
+												event.preventDefault();
+												setActiveTab("deploy-github");
+											}}
+										>
 											Deploy from GitHub
 										</LinkButton>
-										<LinkButton href="#" variant="outline" size="sm" onClick={(event) => {
-											event.preventDefault();
-											setActiveTab("deploy-manual");
-										}}>
+										<LinkButton
+											href="#"
+											variant="outline"
+											size="sm"
+											onClick={(event) => {
+												event.preventDefault();
+												setActiveTab("deploy-manual");
+											}}
+										>
 											Deploy manually
 										</LinkButton>
 									</>

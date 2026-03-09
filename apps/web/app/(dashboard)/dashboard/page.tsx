@@ -44,19 +44,24 @@ export default async function DashboardPage({
 		includeRuntime && environment.kind === "local" ? getPrometheusDashboardMetrics() : null,
 		includeRuntime && environment.kind === "local" ? getPrometheusTargetHealth() : null,
 	]);
-	const memoryUsed =
+	const hostTotalMemoryGb = includeRuntime && runtime ? runtime.snapshot.host.totalMemoryGb : null;
+	const fallbackUsedMemoryGb =
 		includeRuntime && runtime
-			? (runtime.snapshot.host.totalMemoryGb - runtime.snapshot.host.freeMemoryGb).toFixed(1)
+			? runtime.snapshot.host.totalMemoryGb - runtime.snapshot.host.freeMemoryGb
 			: null;
+	const prometheusMemoryPercent = metrics?.memoryPercent ?? null;
 	const memoryUsedPercent =
-		includeRuntime && runtime
+		hostTotalMemoryGb !== null
 			? Number(
 					(
-						((runtime.snapshot.host.totalMemoryGb - runtime.snapshot.host.freeMemoryGb) /
-							Math.max(runtime.snapshot.host.totalMemoryGb, 1)) *
-						100
+						prometheusMemoryPercent ??
+						((fallbackUsedMemoryGb || 0) / Math.max(hostTotalMemoryGb, 1)) * 100
 					).toFixed(1),
 				)
+			: null;
+	const memoryUsed =
+		hostTotalMemoryGb !== null && memoryUsedPercent !== null
+			? Number(((hostTotalMemoryGb * memoryUsedPercent) / 100).toFixed(1))
 			: null;
 
 	const greeting = (() => {
@@ -139,7 +144,7 @@ export default async function DashboardPage({
 								<p className="text-xs text-muted">Resources</p>
 								<p className="mt-1.5 text-sm font-medium">{runtime.snapshot.host.cpus} CPU</p>
 								<p className="text-xs text-muted">
-									{memoryUsed} / {runtime.snapshot.host.totalMemoryGb} GB
+									{memoryUsed ?? "—"} / {runtime.snapshot.host.totalMemoryGb} GB
 								</p>
 								<div className="mt-2">
 									<UtilizationBar

@@ -6,6 +6,7 @@ import { FormSubmitButton } from "@/components/form-submit-button";
 import { RuntimePortLinks } from "@/components/runtime-port-links";
 import { StatusBadge } from "@/components/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
+import { LinkButton } from "@/components/ui/link-button";
 import { LogBlock } from "@/components/ui/log-block";
 
 type Container = Record<string, string>;
@@ -21,10 +22,12 @@ export function StackServicesAccordion({
 	containers,
 	containerDetailsMap,
 	controlContainerAction,
+	environmentId,
 }: {
 	containers: Container[];
 	containerDetailsMap: Record<string, ContainerDetails>;
 	controlContainerAction: FormAction;
+	environmentId?: string;
 }) {
 	const [openIds, setOpenIds] = useState<Set<string>>(new Set());
 
@@ -42,7 +45,11 @@ export function StackServicesAccordion({
 
 	if (!containers.length) {
 		return (
-			<EmptyState title="No runtime containers found" description="Deploy to see services here." className="p-8" />
+			<EmptyState
+				title="No runtime containers found"
+				description="Deploy to see services here."
+				className="p-8"
+			/>
 		);
 	}
 
@@ -114,13 +121,18 @@ export function StackServicesAccordion({
 											/>
 										</form>
 									))}
+									<LinkButton
+										href={`/dashboard/containers/${container.ID}${environmentId ? `?environment=${environmentId}` : ""}`}
+										variant="outline"
+										size="xs"
+									>
+										Open container
+									</LinkButton>
 								</div>
 
 								{/* Container logs preview */}
 								{details?.logs ? (
-									<LogBlock className="max-h-[200px] p-3">
-										{details.logs}
-									</LogBlock>
+									<LogBlock className="max-h-[200px] p-3">{details.logs}</LogBlock>
 								) : (
 									<p className="text-xs text-muted">No logs yet.</p>
 								)}

@@ -45,13 +45,17 @@ export default async function ImagesPage({
 	const { containers } = await listContainersForEnvironment(session.userId, environment.id);
 	const protectedImageRefs =
 		environment.kind === "local" ? getProtectedImageRefs(containers) : new Set<string>();
+	const containerImageRefs = new Set(
+		containers.map((container: Record<string, string>) => container.Image).filter(Boolean),
+	);
 	const taggedCount = filtered.filter(
 		(image: Record<string, string>) => image.Tag && image.Tag !== "<none>",
 	).length;
 	const inUseCount = filtered.filter((image: Record<string, string>) =>
-		containers.some(
-			(container: Record<string, string>) => container.Image === `${image.Repository}:${image.Tag}`,
-		),
+		containerImageRefs.has(`${image.Repository}:${image.Tag}`),
+	).length;
+	const danglingCount = filtered.filter(
+		(image: Record<string, string>) => image.Repository === "<none>" || image.Tag === "<none>",
 	).length;
 
 	return (
@@ -66,7 +70,13 @@ export default async function ImagesPage({
 			<Panel padding="sm">
 				<div className="flex flex-col gap-3 lg:flex-row lg:items-end">
 					<form className="flex flex-1 gap-3">
-						<Input type="search" name="q" defaultValue={params.q || ""} placeholder="Search images..." className="flex-1" />
+						<Input
+							type="search"
+							name="q"
+							defaultValue={params.q || ""}
+							placeholder="Search images..."
+							className="flex-1"
+						/>
 						<Button type="submit" variant="secondary">
 							Filter
 						</Button>
@@ -79,7 +89,11 @@ export default async function ImagesPage({
 					<div className="flex gap-2">
 						<form action={pruneImagesAction}>
 							<input type="hidden" name="environmentId" value={environment.id} />
-							<FormSubmitButton label="Prune dangling" pendingLabel="Pruning..." variant="outline" />
+							<FormSubmitButton
+								label="Prune dangling"
+								pendingLabel="Pruning..."
+								variant="outline"
+							/>
 						</form>
 						<form action={pruneImagesAction}>
 							<input type="hidden" name="environmentId" value={environment.id} />
@@ -93,8 +107,13 @@ export default async function ImagesPage({
 			{/* Stats */}
 			<div className="grid gap-4 sm:grid-cols-3">
 				<MetricCard label="Total images" value={filtered.length} />
-				<MetricCard label="Tagged" value={taggedCount} />
-				<MetricCard label="In use" value={inUseCount} valueClassName="text-success" />
+				<MetricCard label="Tagged" value={taggedCount} description={`${danglingCount} dangling`} />
+				<MetricCard
+					label="In use"
+					value={inUseCount}
+					description={`${Math.max(filtered.length - inUseCount, 0)} unused`}
+					valueClassName="text-success"
+				/>
 			</div>
 
 			{/* Table */}
@@ -110,59 +129,67 @@ export default async function ImagesPage({
 						</tr>
 					</DataTableHeader>
 					<DataTableBody>
-							{filtered.length ? (
-								filtered.map((image: Record<string, string>) => {
-									const imageRef = `${image.Repository}:${image.Tag}`;
-									const isProtected = protectedImageRefs.has(imageRef);
-									return (
-										<DataTableRow key={`${image.ID}-${imageRef}`}>
-											<DataTableCell>
-												<div className="flex items-center gap-2">
-													<Link
-														href={`/dashboard/images/${encodeURIComponent(imageRef)}?environment=${environment.id}`}
-														className="font-medium transition-colors hover:text-foreground/80"
-													>
-														{image.Repository}
-													</Link>
-													{isProtected ? (
-														<Badge variant="warning">
-															<Lock className="h-2.5 w-2.5" />
-															Locked
-														</Badge>
-													) : null}
-												</div>
-											</DataTableCell>
-											<DataTableCell className="text-xs text-muted">{image.Tag}</DataTableCell>
-											<DataTableCell className="text-xs text-muted">{image.Size}</DataTableCell>
-											<DataTableCell className="text-xs text-muted">{image.CreatedSince}</DataTableCell>
-											<DataTableCell>
-												<div className="flex gap-1.5">
-													<LinkButton
-														href={`/dashboard/images/${encodeURIComponent(imageRef)}?environment=${environment.id}`}
-														variant="outline"
+						{filtered.length ? (
+							filtered.map((image: Record<string, string>) => {
+								const imageRef = `${image.Repository}:${image.Tag}`;
+								const isProtected = protectedImageRefs.has(imageRef);
+								const isInUse = containerImageRefs.has(imageRef);
+								const isDangling = image.Repository === "<none>" || image.Tag === "<none>";
+								return (
+									<DataTableRow key={`${image.ID}-${imageRef}`}>
+										<DataTableCell>
+											<div className="flex items-center gap-2">
+												<Link
+													href={`/dashboard/images/${encodeURIComponent(imageRef)}?environment=${environment.id}`}
+													className="font-medium transition-colors hover:text-foreground/80"
+												>
+													{image.Repository}
+												</Link>
+												{isProtected ? (
+													<Badge variant="warning">
+														<Lock className="h-2.5 w-2.5" />
+														Locked
+													</Badge>
+												) : null}
+												<Badge variant={isInUse ? "success" : "default"}>
+													{isInUse ? "In use" : "Unused"}
+												</Badge>
+												{isDangling ? <Badge variant="warning">Dangling</Badge> : null}
+											</div>
+										</DataTableCell>
+										<DataTableCell className="text-xs text-muted">{image.Tag}</DataTableCell>
+										<DataTableCell className="text-xs text-muted">{image.Size}</DataTableCell>
+										<DataTableCell className="text-xs text-muted">
+											{image.CreatedSince}
+										</DataTableCell>
+										<DataTableCell>
+											<div className="flex gap-1.5">
+												<LinkButton
+													href={`/dashboard/images/${encodeURIComponent(imageRef)}?environment=${environment.id}`}
+													variant="outline"
+													size="xs"
+												>
+													Details
+												</LinkButton>
+												<form action={removeImageAction}>
+													<input type="hidden" name="imageRef" value={imageRef} />
+													<input type="hidden" name="environmentId" value={environment.id} />
+													<FormSubmitButton
+														label="Delete"
+														pendingLabel="Deleting..."
+														disabled={isProtected}
+														variant="danger"
 														size="xs"
-													>
-														Details
-													</LinkButton>
-													<form action={removeImageAction}>
-														<input type="hidden" name="imageRef" value={imageRef} />
-														<input type="hidden" name="environmentId" value={environment.id} />
-														<FormSubmitButton
-															label="Delete"
-															pendingLabel="Deleting..."
-															disabled={isProtected}
-															variant="danger"
-															size="xs"
-														/>
-													</form>
-												</div>
-											</DataTableCell>
-										</DataTableRow>
-									);
-								})
-							) : (
-								<DataTableEmpty colSpan={5}>No images found.</DataTableEmpty>
-							)}
+													/>
+												</form>
+											</div>
+										</DataTableCell>
+									</DataTableRow>
+								);
+							})
+						) : (
+							<DataTableEmpty colSpan={5}>No images found.</DataTableEmpty>
+						)}
 					</DataTableBody>
 				</DataTable>
 			</Panel>

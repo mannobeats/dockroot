@@ -17,9 +17,11 @@ interface StackEvent {
 export function LiveStackFeed({
 	stackId,
 	initialLog,
+	height = "min(60vh, 640px)",
 }: {
 	stackId: string;
 	initialLog?: string | null;
+	height?: string;
 }) {
 	const [events, setEvents] = useState<StackEvent[]>([]);
 
@@ -72,9 +74,11 @@ export function LiveStackFeed({
 					Live
 				</Badge>
 			</div>
-			<LogBlock className="mt-4 max-h-[480px] border-0 bg-transparent p-0 text-console-foreground/90">
-				{feed || "No logs yet."}
-			</LogBlock>
+			<div className="mt-4 min-h-[320px]" style={{ height, maxHeight: height }}>
+				<LogBlock className="h-full border-0 bg-transparent p-0 text-console-foreground/90">
+					{feed || "No logs yet."}
+				</LogBlock>
+			</div>
 		</Panel>
 	);
 }

@@ -30,6 +30,11 @@ interface RuntimePayload {
 		CPUPerc?: string;
 		MemPerc?: string;
 	}>;
+	host?: {
+		source?: "prometheus";
+		cpuPercent?: number | null;
+		memoryPercent?: number | null;
+	};
 }
 
 type ChartTooltipEntry = {
@@ -64,19 +69,27 @@ const CustomTooltip = ({ active, payload, label }: ChartTooltipProps) => {
 
 export function LiveRuntimePanel() {
 	const [mounted, setMounted] = useState(false);
-	const [history, setHistory] = useState<Array<{ time: string; cpu: number; memory: number }>>([]);
+	const [history, setHistory] = useState<
+		Array<{ time: string; cpu: number; memory: number; source: "prometheus" | "docker" }>
+	>([]);
 
 	useEffect(() => {
 		setMounted(true);
 		const client = getSocket();
 
 		const onMetrics = (payload: RuntimePayload) => {
-			const cpu =
+			const fallbackCpu =
 				payload.containers.reduce((sum, item) => sum + parsePercent(item.CPUPerc), 0) /
 				Math.max(payload.containers.length, 1);
-			const memory =
+			const fallbackMemory =
 				payload.containers.reduce((sum, item) => sum + parsePercent(item.MemPerc), 0) /
 				Math.max(payload.containers.length, 1);
+			const hostCpu = payload.host?.cpuPercent;
+			const hostMemory = payload.host?.memoryPercent;
+			const cpu = Number.isFinite(hostCpu) ? Number(hostCpu) : fallbackCpu;
+			const memory = Number.isFinite(hostMemory) ? Number(hostMemory) : fallbackMemory;
+			const source: "prometheus" | "docker" =
+				payload.host?.source === "prometheus" ? "prometheus" : "docker";
 
 			setHistory((current) => [
 				...current.slice(-11),
@@ -87,6 +100,7 @@ export function LiveRuntimePanel() {
 					}),
 					cpu: Number(cpu.toFixed(1)),
 					memory: Number(memory.toFixed(1)),
+					source,
 				},
 			]);
 		};
@@ -99,6 +113,10 @@ export function LiveRuntimePanel() {
 	}, []);
 
 	const latest = useMemo(() => history.at(-1), [history]);
+	const helperLabel =
+		latest?.source === "prometheus"
+			? "Host utilization from Prometheus"
+			: "Average across running containers";
 
 	return (
 		<Panel padding="md">
@@ -116,13 +134,17 @@ export function LiveRuntimePanel() {
 					label="CPU"
 					valueLabel={`${latest?.cpu ?? 0}%`}
 					percent={latest?.cpu ?? 0}
-					helper="Average across running containers"
+					helper={helperLabel}
 				/>
 				<UtilizationBar
 					label="Memory"
 					valueLabel={`${latest?.memory ?? 0}%`}
 					percent={latest?.memory ?? 0}
-					helper="Average usage against container limits"
+					helper={
+						latest?.source === "prometheus"
+							? "Host memory pressure from Prometheus"
+							: "Average usage against container limits"
+					}
 				/>
 			</div>
 			<ChartFrame className="mt-4 h-56">

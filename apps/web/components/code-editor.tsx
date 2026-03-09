@@ -18,7 +18,7 @@ export function CodeEditor({
 	placeholder,
 	readOnly = false,
 	minHeight = "420px",
-	maxHeight,
+	maxHeight = "min(60vh, 640px)",
 	height = "100%",
 }: {
 	value: string;
@@ -47,7 +47,7 @@ export function CodeEditor({
 					fontFamily:
 						"ui-monospace, SFMono-Regular, SF Mono, Menlo, Monaco, Consolas, Liberation Mono, monospace",
 					minHeight,
-					maxHeight: maxHeight || "none",
+					maxHeight,
 					overflow: "auto",
 				},
 				".cm-content": {

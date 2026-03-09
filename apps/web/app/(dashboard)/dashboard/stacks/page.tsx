@@ -139,10 +139,20 @@ export default async function StacksPage({
 												{stack.runningCount}/{stack.containerCount}
 											</p>
 											<p className="text-xs text-muted">
-												{stack.containers
-													.slice(0, 2)
-													.map((c) => c.Names)
-													.join(", ") || "—"}
+												{stack.containers.length
+													? stack.containers.slice(0, 2).map((container, index) => (
+															<span key={container.ID}>
+																{index ? ", " : null}
+																<LinkButton
+																	href={`/dashboard/containers/${container.ID}`}
+																	variant="ghost"
+																	size="xs"
+																>
+																	{container.Names}
+																</LinkButton>
+															</span>
+														))
+													: "—"}
 											</p>
 										</div>
 									</DataTableCell>
@@ -156,8 +166,16 @@ export default async function StacksPage({
 													<form action={deployStackAction}>
 														<input type="hidden" name="stackId" value={stack.stackId || ""} />
 														<FormSubmitButton
-															label="Deploy"
-															pendingLabel="Deploying..."
+															label={
+																isRunningStack(stack.status, stack.runningCount)
+																	? "Redeploy"
+																	: "Deploy"
+															}
+															pendingLabel={
+																isRunningStack(stack.status, stack.runningCount)
+																	? "Redeploying..."
+																	: "Deploying..."
+															}
 															size="xs"
 														/>
 													</form>

@@ -35,6 +35,7 @@ export function ContainerFileBrowser({
 	browser,
 	environmentId,
 }: ContainerFileBrowserProps & { environmentId?: string }) {
+	const editorHeight = "min(70vh, 760px)";
 	const router = useRouter();
 	const [isPending, startTransition] = useTransition();
 	const [editorValue, setEditorValue] = useState(browser.kind === "file" ? browser.content : "");
@@ -127,7 +128,14 @@ export function ContainerFileBrowser({
 						);
 					}}
 				>
-					<Input type="text" name="path" defaultValue={path} placeholder="/" inputSize="md" className="rounded-xl" />
+					<Input
+						type="text"
+						name="path"
+						defaultValue={path}
+						placeholder="/"
+						inputSize="md"
+						className="rounded-xl"
+					/>
 					<Button type="submit" size="lg" className="rounded-xl">
 						Browse
 					</Button>
@@ -155,7 +163,13 @@ export function ContainerFileBrowser({
 							required
 							className="block text-sm text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-accent/10 file:px-3 file:py-2 file:text-accent"
 						/>
-						<Button type="submit" disabled={isPending} variant="outline" size="lg" className="rounded-xl">
+						<Button
+							type="submit"
+							disabled={isPending}
+							variant="outline"
+							size="lg"
+							className="rounded-xl"
+						>
 							Upload
 						</Button>
 					</form>
@@ -184,7 +198,12 @@ export function ContainerFileBrowser({
 									<p className="truncate font-medium">{entry.name}</p>
 									<p className="mt-1 text-xs text-muted">{entry.kind}</p>
 								</Link>
-								<Button type="button" onClick={() => void deletePath(nextPath)} variant="danger" size="md">
+								<Button
+									type="button"
+									onClick={() => void deletePath(nextPath)}
+									variant="danger"
+									size="md"
+								>
 									Delete
 								</Button>
 							</div>
@@ -196,7 +215,12 @@ export function ContainerFileBrowser({
 					<div className="flex items-center justify-between border-b border-default/10 px-4 py-3">
 						<p className="text-sm font-semibold">{browser.path}</p>
 						<div className="flex gap-2">
-							<Button type="button" onClick={() => void deletePath(browser.path)} variant="danger" size="md">
+							<Button
+								type="button"
+								onClick={() => void deletePath(browser.path)}
+								variant="danger"
+								size="md"
+							>
 								Delete
 							</Button>
 							<Button type="button" onClick={() => void saveFile()} disabled={isPending} size="md">
@@ -209,6 +233,8 @@ export function ContainerFileBrowser({
 						onChange={setEditorValue}
 						language={browser.path.match(/\.(ya?ml)$/) ? "yaml" : "env"}
 						minHeight="460px"
+						maxHeight={editorHeight}
+						height={editorHeight}
 					/>
 				</div>
 			) : (

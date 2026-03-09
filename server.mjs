@@ -44,6 +44,7 @@ const dockerBinary = resolveExecutable(process.env.DOCKER_BIN, [
 ]);
 const supportedShells = new Set(["sh", "bash", "ash", "zsh"]);
 const defaultShellOrder = ["sh", "bash", "ash", "zsh"];
+const prometheusUrl = process.env.PROMETHEUS_URL || "http://localhost:9090";
 function resolveExecutable(primaryCandidate, fallbackCandidates) {
 	for (const candidate of [primaryCandidate, ...fallbackCandidates]) {
 		if (!candidate) {
@@ -268,14 +269,82 @@ function emitRuntimeMetrics() {
 			if (socket.data?.role && isPrivilegedRole(socket.data.role)) {
 				io.to(socketId).emit("runtime:metrics", {
 					at: Date.now(),
-					containers: metrics,
+					containers: metrics.containers,
+					host: metrics.host,
 				});
 			}
 		}
 	};
 }
 
+function clampPercent(value) {
+	if (!Number.isFinite(value)) {
+		return null;
+	}
+
+	return Math.max(0, Math.min(100, Number(value)));
+}
+
+async function queryPrometheusInstant(query) {
+	try {
+		const response = await fetch(
+			`${prometheusUrl}/api/v1/query?query=${encodeURIComponent(query)}`,
+			{
+				cache: "no-store",
+			},
+		);
+
+		if (!response.ok) {
+			return null;
+		}
+
+		const payload = await response.json();
+		const value = payload?.data?.result?.[0]?.value?.[1];
+		if (!value) {
+			return null;
+		}
+
+		const parsed = Number.parseFloat(value);
+		return Number.isFinite(parsed) ? parsed : null;
+	} catch {
+		return null;
+	}
+}
+
+async function getPrometheusHostMetrics() {
+	const [cpuPercent, memoryPercent] = await Promise.all([
+		queryPrometheusInstant(
+			`100 * (1 - avg(rate(node_cpu_seconds_total{job="node_exporter",mode="idle"}[2m])))`,
+		),
+		queryPrometheusInstant(
+			`100 * (1 - (avg(node_memory_MemAvailable_bytes{job="node_exporter"}) / avg(node_memory_MemTotal_bytes{job="node_exporter"})))`,
+		),
+	]);
+
+	if (cpuPercent === null && memoryPercent === null) {
+		return null;
+	}
+
+	return {
+		source: "prometheus",
+		cpuPercent: clampPercent(cpuPercent),
+		memoryPercent: clampPercent(memoryPercent),
+	};
+}
+
 async function getRuntimeMetrics() {
+	const [containers, host] = await Promise.all([
+		getDockerRuntimeMetrics(),
+		getPrometheusHostMetrics(),
+	]);
+
+	return {
+		containers,
+		host,
+	};
+}
+
+async function getDockerRuntimeMetrics() {
 	try {
 		const { stdout } = await execFileAsync(
 			dockerBinary,

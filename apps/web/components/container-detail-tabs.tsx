@@ -98,6 +98,7 @@ export function ContainerDetailTabs({
 	targetPath: string;
 	initialTab?: string;
 }) {
+	const editorHeight = "min(60vh, 640px)";
 	const [activeTab, setActiveTab] = useState<Tab>(safeTab(initialTab));
 
 	const runtimeStats = (details?.stats || {}) as Record<string, string>;
@@ -226,7 +227,14 @@ export function ContainerDetailTabs({
 							<PanelHeader>
 								<PanelTitle>Environment variables</PanelTitle>
 							</PanelHeader>
-							<CodeEditor value={sortedEnv.join("\n")} language="env" readOnly minHeight="420px" />
+							<CodeEditor
+								value={sortedEnv.join("\n")}
+								language="env"
+								readOnly
+								minHeight="420px"
+								maxHeight={editorHeight}
+								height={editorHeight}
+							/>
 						</Panel>
 						<Panel className="overflow-hidden">
 							<PanelHeader>
@@ -237,6 +245,8 @@ export function ContainerDetailTabs({
 								language="env"
 								readOnly
 								minHeight="420px"
+								maxHeight={editorHeight}
+								height={editorHeight}
 							/>
 						</Panel>
 					</div>
