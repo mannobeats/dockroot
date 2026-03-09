@@ -13,6 +13,21 @@ const defaultShellOrder = ["sh", "bash", "ash", "zsh"];
 const execFileAsync = promisify(execFile);
 let ptyHelperPermissionsChecked = false;
 
+/** Maximum concurrent terminal sessions across all users. */
+const MAX_TOTAL_SESSIONS = 20;
+
+/** Maximum concurrent terminal sessions per user. */
+const MAX_SESSIONS_PER_USER = 5;
+
+/** Auto-close sessions after 10 minutes of inactivity. */
+const IDLE_TIMEOUT_MS = 10 * 60 * 1000;
+
+/** Maximum events kept in the ring buffer per session. */
+const MAX_EVENT_BUFFER = 512;
+
+/** Delay before purging a closed session from the map. */
+const CLOSED_SESSION_TTL_MS = 60_000;
+
 function ensurePtySpawnHelperExecutable() {
 	if (ptyHelperPermissionsChecked) {
 		return;
@@ -192,7 +207,75 @@ function createTerminalProcess(command, cols, rows) {
 	}
 }
 
+/** Count active (non-closed) sessions for a given userId. */
+function countUserSessions(userId) {
+	let count = 0;
+	for (const session of terminalSessions.values()) {
+		if (session.userId === userId && !session.closed) {
+			count += 1;
+		}
+	}
+	return count;
+}
+
+/** Count all active (non-closed) sessions. */
+function countActiveSessions() {
+	let count = 0;
+	for (const session of terminalSessions.values()) {
+		if (!session.closed) {
+			count += 1;
+		}
+	}
+	return count;
+}
+
+/** Reset the idle timeout for a session. */
+function resetIdleTimeout(session) {
+	if (session.idleTimer) {
+		clearTimeout(session.idleTimer);
+		session.idleTimer = null;
+	}
+
+	if (session.closed) {
+		return;
+	}
+
+	session.idleTimer = setTimeout(() => {
+		if (!session.closed) {
+			session.process.kill();
+			session.closed = true;
+			session.exitCode = -1;
+			const pendingWaiters = session.waiters.splice(0, session.waiters.length);
+			for (const waiter of pendingWaiters) {
+				waiter();
+			}
+			// Schedule cleanup from map
+			setTimeout(() => {
+				for (const [sessionId, s] of terminalSessions.entries()) {
+					if (s === session) {
+						terminalSessions.delete(sessionId);
+						break;
+					}
+				}
+			}, CLOSED_SESSION_TTL_MS).unref?.();
+		}
+	}, IDLE_TIMEOUT_MS);
+	session.idleTimer.unref?.();
+}
+
 export async function createLocalTerminalSession(payload) {
+	const userId = payload?.userId || null;
+
+	// Enforce global session limit
+	if (countActiveSessions() >= MAX_TOTAL_SESSIONS) {
+		throw new Error("Maximum concurrent terminal sessions reached. Close an existing session first.");
+	}
+
+	// Enforce per-user session limit
+	if (userId && countUserSessions(userId) >= MAX_SESSIONS_PER_USER) {
+		throw new Error("You have too many active terminal sessions. Close an existing session first.");
+	}
+
 	const command = await buildCommand(payload);
 	const cols = Math.max(40, Math.min(300, Number(payload?.cols || 120)));
 	const rows = Math.max(12, Math.min(120, Number(payload?.rows || 36)));
@@ -201,11 +284,13 @@ export async function createLocalTerminalSession(payload) {
 	const sessionId = globalThis.crypto.randomUUID();
 	const session = {
 		process: processHandle,
+		userId,
 		events: [],
 		nextCursor: 1,
 		closed: false,
 		exitCode: null,
 		waiters: [],
+		idleTimer: null,
 	};
 
 	if (compatibilityMode) {
@@ -222,9 +307,13 @@ export async function createLocalTerminalSession(payload) {
 			data: String(chunk || ""),
 		});
 		session.nextCursor += 1;
-		if (session.events.length > 512) {
-			session.events.shift();
+
+		// Ring buffer: drop oldest events when exceeding limit (O(1) with splice)
+		if (session.events.length > MAX_EVENT_BUFFER) {
+			const excess = session.events.length - MAX_EVENT_BUFFER;
+			session.events.splice(0, excess);
 		}
+
 		const pendingWaiters = session.waiters.splice(0, session.waiters.length);
 		for (const waiter of pendingWaiters) {
 			waiter();
@@ -235,6 +324,10 @@ export async function createLocalTerminalSession(payload) {
 	processHandle.onExit(({ exitCode }) => {
 		session.closed = true;
 		session.exitCode = exitCode ?? 0;
+		if (session.idleTimer) {
+			clearTimeout(session.idleTimer);
+			session.idleTimer = null;
+		}
 		const pendingWaiters = session.waiters.splice(0, session.waiters.length);
 		for (const waiter of pendingWaiters) {
 			waiter();
@@ -242,6 +335,7 @@ export async function createLocalTerminalSession(payload) {
 	});
 
 	terminalSessions.set(sessionId, session);
+	resetIdleTimeout(session);
 	return { sessionId };
 }
 
@@ -302,6 +396,7 @@ export function writeLocalTerminalInput(sessionId, data) {
 	}
 
 	session.process.write(String(data || "").slice(0, 8192));
+	resetIdleTimeout(session);
 	return { ok: true };
 }
 
@@ -326,12 +421,29 @@ export function closeLocalTerminalSession(sessionId) {
 
 	session.process.kill();
 	session.closed = true;
+	if (session.idleTimer) {
+		clearTimeout(session.idleTimer);
+		session.idleTimer = null;
+	}
 	const pendingWaiters = session.waiters.splice(0, session.waiters.length);
 	for (const waiter of pendingWaiters) {
 		waiter();
 	}
 	setTimeout(() => {
 		terminalSessions.delete(sessionId);
-	}, 60_000).unref?.();
+	}, CLOSED_SESSION_TTL_MS).unref?.();
 	return { ok: true };
+}
+
+/** Verify a session belongs to the specified user. Returns true if valid. */
+export function verifySessionOwnership(sessionId, userId) {
+	const session = terminalSessions.get(sessionId);
+	if (!session) {
+		return false;
+	}
+	// If the session has no userId recorded (legacy), allow access
+	if (!session.userId) {
+		return true;
+	}
+	return session.userId === userId;
 }

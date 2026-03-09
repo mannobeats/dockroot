@@ -331,6 +331,7 @@ export async function createTerminalSessionForEnvironment(input: {
 			body: JSON.stringify({
 				target: input.target,
 				containerId: input.containerId,
+				userId: input.userId,
 				shell: input.shell,
 				customShell: input.customShell,
 				cols: input.cols,

@@ -110,6 +110,8 @@ export function ShellWorkspace({
 		containers.find((container) => container.id === containerId) || filteredContainers[0] || null;
 	const selectedContainerId = selectedContainer?.id || "";
 	const selectedContainerName = selectedContainer?.name || "Container";
+	const containerNameRef = useRef(selectedContainerName);
+	containerNameRef.current = selectedContainerName;
 
 	/* ── select a container and navigate ── */
 	function selectContainer(id: string) {
@@ -145,7 +147,7 @@ export function ShellWorkspace({
 		let disposed = false;
 		let cleanup = () => {};
 		const containerId = selectedContainerId;
-		const label = selectedContainerName;
+		const label = containerNameRef.current;
 
 		void (async () => {
 			const [{ FitAddon }, { WebLinksAddon }, { Terminal }] = await Promise.all([
@@ -227,6 +229,8 @@ export function ShellWorkspace({
 			resizeObserver.observe(terminalRef.current);
 
 			if (environmentId) {
+				const abortController = new AbortController();
+
 				const createResponse = await fetch("/api/runtime/terminal", {
 					method: "POST",
 					headers: {
@@ -241,7 +245,14 @@ export function ShellWorkspace({
 						cols: terminal.cols,
 						rows: terminal.rows,
 					}),
+					signal: abortController.signal,
 				});
+
+				if (abortController.signal.aborted) {
+					resizeObserver.disconnect();
+					return;
+				}
+
 				const createPayload = (await createResponse.json()) as {
 					sessionId?: string;
 					error?: string;
@@ -260,14 +271,14 @@ export function ShellWorkspace({
 				let writeQueueClosed = false;
 
 				const disposable = terminal.onData((data) => {
-					if (!sessionIdRef.current || !environmentId) {
+					if (!sessionIdRef.current || !environmentId || abortController.signal.aborted) {
 						return;
 					}
 
 					const activeSessionId = sessionIdRef.current;
 					writeQueue = writeQueue
 						.then(async () => {
-							if (writeQueueClosed || sessionIdRef.current !== activeSessionId) {
+							if (writeQueueClosed || abortController.signal.aborted || sessionIdRef.current !== activeSessionId) {
 								return;
 							}
 							await fetch(
@@ -281,6 +292,7 @@ export function ShellWorkspace({
 										type: "input",
 										data,
 									}),
+									signal: abortController.signal,
 								},
 							);
 						})
@@ -288,7 +300,7 @@ export function ShellWorkspace({
 				});
 
 				const poll = async () => {
-					if (!sessionIdRef.current || !environmentId) {
+					if (abortController.signal.aborted || !sessionIdRef.current || !environmentId) {
 						return;
 					}
 
@@ -297,8 +309,14 @@ export function ShellWorkspace({
 							`/api/runtime/terminal/${encodeURIComponent(sessionIdRef.current)}?environmentId=${encodeURIComponent(environmentId)}&cursor=${cursorRef.current}&waitMs=1200`,
 							{
 								cache: "no-store",
+								signal: abortController.signal,
 							},
 						);
+
+						if (abortController.signal.aborted) {
+							return;
+						}
+
 						const payload = (await response.json()) as {
 							chunks?: string[];
 							cursor?: number;
@@ -323,16 +341,21 @@ export function ShellWorkspace({
 							return;
 						}
 
-						const hasNewData = (payload.chunks?.length || 0) > 0;
-						pollTimerRef.current = window.setTimeout(poll, hasNewData ? 40 : 140);
+						if (!abortController.signal.aborted) {
+							const hasNewData = (payload.chunks?.length || 0) > 0;
+							pollTimerRef.current = window.setTimeout(poll, hasNewData ? 40 : 140);
+						}
 					} catch {
-						setStatus("Shell disconnected.");
+						if (!abortController.signal.aborted) {
+							setStatus("Shell disconnected.");
+						}
 					}
 				};
 
 				pollTimerRef.current = window.setTimeout(poll, 100);
 
 				cleanup = () => {
+					abortController.abort();
 					writeQueueClosed = true;
 					disposable.dispose();
 					resizeObserver.disconnect();
@@ -447,7 +470,7 @@ export function ShellWorkspace({
 			disposed = true;
 			cleanup();
 		};
-	}, [attached, selectedContainerId, selectedContainerName, customShell, environmentId, shell]);
+	}, [attached, selectedContainerId, customShell, environmentId, shell]);
 
 	return (
 		<div className="grid gap-5 xl:grid-cols-[300px_1fr]">

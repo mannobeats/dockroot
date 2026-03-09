@@ -160,32 +160,38 @@ export function LiveLogsWorkspace({
 		}
 
 		let cancelled = false;
+		const abortController = new AbortController();
 
 		const refreshLogs = async () => {
-			if (paused) {
+			if (paused || abortController.signal.aborted) {
 				return;
 			}
 
-			const entries = await Promise.all(
-				selectedIds.map(async (containerId) => {
-					const params = new URLSearchParams({
-						environmentId,
-						containerId,
-						tail: "150",
-					});
-					const response = await fetch(`/api/runtime/logs?${params.toString()}`, {
-						cache: "no-store",
-					});
-					const text = await response.text();
-					return [containerId, text] as const;
-				}),
-			);
+			try {
+				const entries = await Promise.all(
+					selectedIds.map(async (containerId) => {
+						const params = new URLSearchParams({
+							environmentId,
+							containerId,
+							tail: "150",
+						});
+						const response = await fetch(`/api/runtime/logs?${params.toString()}`, {
+							cache: "no-store",
+							signal: abortController.signal,
+						});
+						const text = await response.text();
+						return [containerId, text] as const;
+					}),
+				);
 
-			if (!cancelled) {
-				setLogsByContainer((current) => ({
-					...current,
-					...Object.fromEntries(entries),
-				}));
+				if (!cancelled && !abortController.signal.aborted) {
+					setLogsByContainer((current) => ({
+						...current,
+						...Object.fromEntries(entries),
+					}));
+				}
+			} catch {
+				// Swallow AbortError and fetch failures during cleanup
 			}
 		};
 
@@ -196,6 +202,7 @@ export function LiveLogsWorkspace({
 
 		return () => {
 			cancelled = true;
+			abortController.abort();
 			window.clearInterval(interval);
 		};
 	}, [environmentId, paused, selectedIds, transport]);

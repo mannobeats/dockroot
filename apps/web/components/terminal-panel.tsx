@@ -141,6 +141,8 @@ export function TerminalPanel({
 			resizeObserver.observe(terminalRef.current);
 
 			if (environmentId) {
+				const abortController = new AbortController();
+
 				const createResponse = await fetch("/api/runtime/terminal", {
 					method: "POST",
 					headers: {
@@ -155,7 +157,14 @@ export function TerminalPanel({
 						cols: terminal.cols,
 						rows: terminal.rows,
 					}),
+					signal: abortController.signal,
 				});
+
+				if (abortController.signal.aborted) {
+					resizeObserver.disconnect();
+					return;
+				}
+
 				const createPayload = (await createResponse.json()) as {
 					sessionId?: string;
 					error?: string;
@@ -174,14 +183,14 @@ export function TerminalPanel({
 				let writeQueueClosed = false;
 
 				const disposable = terminal.onData((data) => {
-					if (!sessionIdRef.current || !environmentId) {
+					if (!sessionIdRef.current || !environmentId || abortController.signal.aborted) {
 						return;
 					}
 
 					const activeSessionId = sessionIdRef.current;
 					writeQueue = writeQueue
 						.then(async () => {
-							if (writeQueueClosed || sessionIdRef.current !== activeSessionId) {
+							if (writeQueueClosed || abortController.signal.aborted || sessionIdRef.current !== activeSessionId) {
 								return;
 							}
 							await fetch(
@@ -195,6 +204,7 @@ export function TerminalPanel({
 										type: "input",
 										data,
 									}),
+									signal: abortController.signal,
 								},
 							);
 						})
@@ -202,7 +212,7 @@ export function TerminalPanel({
 				});
 
 				const poll = async () => {
-					if (!sessionIdRef.current || !environmentId) {
+					if (abortController.signal.aborted || !sessionIdRef.current || !environmentId) {
 						return;
 					}
 
@@ -211,8 +221,14 @@ export function TerminalPanel({
 							`/api/runtime/terminal/${encodeURIComponent(sessionIdRef.current)}?environmentId=${encodeURIComponent(environmentId)}&cursor=${cursorRef.current}&waitMs=1200`,
 							{
 								cache: "no-store",
+								signal: abortController.signal,
 							},
 						);
+
+						if (abortController.signal.aborted) {
+							return;
+						}
+
 						const payload = (await response.json()) as {
 							chunks?: string[];
 							cursor?: number;
@@ -237,16 +253,21 @@ export function TerminalPanel({
 							return;
 						}
 
-						const hasNewData = (payload.chunks?.length || 0) > 0;
-						pollTimerRef.current = window.setTimeout(poll, hasNewData ? 40 : 140);
+						if (!abortController.signal.aborted) {
+							const hasNewData = (payload.chunks?.length || 0) > 0;
+							pollTimerRef.current = window.setTimeout(poll, hasNewData ? 40 : 140);
+						}
 					} catch {
-						setStatus("Shell disconnected.");
+						if (!abortController.signal.aborted) {
+							setStatus("Shell disconnected.");
+						}
 					}
 				};
 
 				pollTimerRef.current = window.setTimeout(poll, 100);
 
 				cleanup = () => {
+					abortController.abort();
 					writeQueueClosed = true;
 					disposable.dispose();
 					resizeObserver.disconnect();

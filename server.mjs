@@ -14,6 +14,7 @@ import {
 	createLocalTerminalSession,
 	readLocalTerminalSessionAsync,
 	resizeLocalTerminalSession,
+	verifySessionOwnership,
 	writeLocalTerminalInput,
 } from "./local-terminal.mjs";
 import { getDatabaseUrl } from "./scripts/database-url.mjs";
@@ -48,6 +49,12 @@ const supportedShells = new Set(["sh", "bash", "ash", "zsh"]);
 const defaultShellOrder = ["sh", "bash", "ash", "zsh"];
 const prometheusUrl = process.env.PROMETHEUS_URL || "http://localhost:9090";
 let ptyHelperPermissionsChecked = false;
+
+/** Maximum concurrent socket terminal sessions per user. */
+const MAX_SOCKET_SESSIONS_PER_USER = 5;
+
+/** Auto-close socket terminal sessions after 10 minutes of inactivity. */
+const SOCKET_IDLE_TIMEOUT_MS = 10 * 60 * 1000;
 
 function ensurePtySpawnHelperExecutable() {
 	if (ptyHelperPermissionsChecked) {
@@ -506,6 +513,10 @@ io.on("connection", (socket) => {
 			return;
 		}
 
+		if (session.idleTimer) {
+			clearTimeout(session.idleTimer);
+			session.idleTimer = null;
+		}
 		session.kill();
 		terminalSessions.delete(sessionId);
 	}
@@ -553,6 +564,21 @@ io.on("connection", (socket) => {
 				});
 				return;
 			}
+
+			// Enforce per-user socket session limit
+			let userSessionCount = 0;
+			for (const session of terminalSessions.values()) {
+				if (session.socketId === socket.id || (session.userId && session.userId === socket.data.userId)) {
+					userSessionCount += 1;
+				}
+			}
+			if (userSessionCount >= MAX_SOCKET_SESSIONS_PER_USER) {
+				callback?.({
+					error: "Too many active terminal sessions. Close an existing session first.",
+				});
+				return;
+			}
+
 			const shellCandidates = resolveShellCandidates(payload);
 			const shell = await resolveContainerShell(payload.containerId, shellCandidates);
 
@@ -617,6 +643,22 @@ io.on("connection", (socket) => {
 				};
 			}
 
+			// Set up idle timeout for this socket session
+			let idleTimer = null;
+			const resetIdle = () => {
+				if (idleTimer) {
+					clearTimeout(idleTimer);
+				}
+				idleTimer = setTimeout(() => {
+					socket.emit("terminal:exit", {
+						sessionId,
+						exitCode: -1,
+					});
+					closeTerminalSession(sessionId);
+				}, SOCKET_IDLE_TIMEOUT_MS);
+				idleTimer.unref?.();
+			};
+
 			const terminalSession = {
 				kind: "pty",
 				write: (data) => socketProcess.write(data),
@@ -630,6 +672,8 @@ io.on("connection", (socket) => {
 			terminalSessions.set(sessionId, {
 				...terminalSession,
 				socketId: socket.id,
+				userId: socket.data.userId,
+				idleTimer,
 			});
 
 			let handshakeComplete = false;
@@ -647,6 +691,11 @@ io.on("connection", (socket) => {
 			});
 
 			terminalSession.onExit(({ exitCode }) => {
+				const session = terminalSessions.get(sessionId);
+				if (session?.idleTimer) {
+					clearTimeout(session.idleTimer);
+					session.idleTimer = null;
+				}
 				socket.emit("terminal:exit", {
 					sessionId,
 					exitCode,
@@ -662,6 +711,7 @@ io.on("connection", (socket) => {
 				initialOutput.unshift("Terminal is running in compatibility mode.\r\n");
 			}
 
+			resetIdle();
 			callback?.({
 				sessionId,
 				initialData: initialOutput.join(""),
@@ -677,6 +727,18 @@ io.on("connection", (socket) => {
 		const session = terminalSessions.get(payload?.sessionId);
 		if (session?.socketId === socket.id && typeof payload?.data === "string") {
 			session.write(payload.data.slice(0, 8192));
+			// Reset idle timeout on user input
+			if (session.idleTimer) {
+				clearTimeout(session.idleTimer);
+			}
+			session.idleTimer = setTimeout(() => {
+				socket.emit("terminal:exit", {
+					sessionId: payload.sessionId,
+					exitCode: -1,
+				});
+				closeTerminalSession(payload.sessionId);
+			}, SOCKET_IDLE_TIMEOUT_MS);
+			session.idleTimer.unref?.();
 		}
 	});
 
