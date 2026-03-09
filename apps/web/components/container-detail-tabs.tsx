@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { CodeEditor } from "@/components/code-editor";
 import { ContainerFileBrowser } from "@/components/container-file-browser";
 import { ContainerMetricsPanel } from "@/components/container-metrics-panel";
@@ -21,8 +21,10 @@ import { LogBlock } from "@/components/ui/log-block";
 import { MetricCard } from "@/components/ui/metric-card";
 import { Panel, PanelHeader, PanelTitle } from "@/components/ui/panel";
 import { TabsList, TabsPanel, TabsTrigger } from "@/components/ui/tabs";
+import { UtilizationBar } from "@/components/ui/utilization-bar";
 
-type Tab = "overview" | "metrics" | "logs" | "config" | "networks" | "files";
+type Tab = "overview" | "metrics" | "logs" | "config" | "networks" | "storage" | "files";
+
 type ContainerMetrics = {
 	available: boolean;
 	cpuPercent: number | null;
@@ -34,6 +36,29 @@ type ContainerMetrics = {
 	rxSeries: Array<{ time: string; value: number }>;
 	txSeries: Array<{ time: string; value: number }>;
 };
+
+const tabs: { id: Tab; label: string }[] = [
+	{ id: "overview", label: "Overview" },
+	{ id: "metrics", label: "Metrics" },
+	{ id: "logs", label: "Logs" },
+	{ id: "config", label: "Configuration" },
+	{ id: "networks", label: "Networks" },
+	{ id: "storage", label: "Storage" },
+	{ id: "files", label: "Files" },
+];
+
+function safeTab(value: string | undefined): Tab {
+	return tabs.find((tab) => tab.id === value)?.id || "overview";
+}
+
+function parsePercent(value: string | undefined) {
+	return Number.parseFloat((value || "0").replace("%", "")) || 0;
+}
+
+function summarizeLogs(input: string) {
+	const lines = input.split("\n").filter(Boolean);
+	return lines.slice(Math.max(0, lines.length - 120)).join("\n");
+}
 
 export function ContainerDetailTabs({
 	containerId,
@@ -56,7 +81,7 @@ export function ContainerDetailTabs({
 	inspect: Record<string, unknown>;
 	details: Record<string, unknown> | null;
 	metrics: ContainerMetrics | null;
-	mounts: Array<{ Source?: string; Destination?: string; Type?: string }>;
+	mounts: Array<{ Source?: string; Destination?: string; Type?: string; RW?: boolean }>;
 	envVars: string[];
 	labels: Record<string, string>;
 	networkEntries: Array<[string, { IPAddress?: string; Gateway?: string }]>;
@@ -73,20 +98,16 @@ export function ContainerDetailTabs({
 	targetPath: string;
 	initialTab?: string;
 }) {
-	const [activeTab, setActiveTab] = useState<Tab>((initialTab as Tab) || "overview");
+	const [activeTab, setActiveTab] = useState<Tab>(safeTab(initialTab));
 
-	const tabs: { id: Tab; label: string }[] = [
-		{ id: "overview", label: "Overview" },
-		{ id: "metrics", label: "Metrics" },
-		{ id: "logs", label: "Logs" },
-		{ id: "config", label: "Configuration" },
-		{ id: "networks", label: "Networks" },
-		{ id: "files", label: "Files" },
-	];
+	const runtimeStats = (details?.stats || {}) as Record<string, string>;
+	const memoryPercent = parsePercent(runtimeStats.MemPerc);
+	const cpuPercent = parsePercent(runtimeStats.CPUPerc);
+	const recentLogs = summarizeLogs(String(details?.logs || "No logs available."));
+	const sortedEnv = useMemo(() => [...envVars].sort((a, b) => a.localeCompare(b)), [envVars]);
 
 	return (
 		<div>
-			{/* Tab navigation */}
 			<TabsList>
 				{tabs.map((tab) => (
 					<TabsTrigger
@@ -99,9 +120,8 @@ export function ContainerDetailTabs({
 				))}
 			</TabsList>
 
-			{/* Tab content */}
 			<TabsPanel>
-				{activeTab === "overview" && (
+				{activeTab === "overview" ? (
 					<div className="space-y-4">
 						<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
 							<MetricCard
@@ -111,7 +131,7 @@ export function ContainerDetailTabs({
 								valueClassName="break-all text-sm"
 							/>
 							<MetricCard
-								label="Started at"
+								label="Started"
 								value={String((inspect.State as Record<string, unknown>)?.StartedAt || "—")}
 								className="h-full"
 								valueClassName="text-sm"
@@ -125,51 +145,64 @@ export function ContainerDetailTabs({
 							<MetricCard
 								label="Memory / CPU"
 								value={
-									details
-										? `${(details as Record<string, Record<string, string>>).stats?.MemUsage || "—"} · ${(details as Record<string, Record<string, string>>).stats?.CPUPerc || "—"}`
-										: "—"
+									details ? `${runtimeStats.MemUsage || "—"} · ${runtimeStats.CPUPerc || "—"}` : "—"
 								}
 								className="h-full"
 								valueClassName="text-sm"
 							/>
 						</div>
+
+						<Panel padding="md" className="space-y-4">
+							<p className="text-sm font-semibold">Current resource utilization</p>
+							<UtilizationBar
+								label="CPU"
+								valueLabel={`${cpuPercent.toFixed(1)}%`}
+								percent={cpuPercent}
+								helper="Live container CPU usage"
+							/>
+							<UtilizationBar
+								label="Memory"
+								valueLabel={runtimeStats.MemUsage || "—"}
+								percent={memoryPercent}
+								helper={`Usage against limit (${runtimeStats.MemLimit || "—"})`}
+							/>
+						</Panel>
+
 						<Panel padding="sm">
 							<p className="text-xs text-muted">Published ports</p>
 							<div className="mt-3">
 								<RuntimePortLinks ports={publishedPortSummary} />
 							</div>
 						</Panel>
-						{/* Quick logs preview */}
+
 						<Panel padding="sm">
 							<div className="flex items-center justify-between">
 								<p className="text-sm font-semibold">Recent logs</p>
 								<LinkButton
-									href="#"
+									href={`/dashboard/logs?mode=single&container=${containerId}&environment=${environmentId}`}
 									variant="ghost"
 									size="sm"
-									onClick={() => setActiveTab("logs")}
 								>
-									View all →
+									Open live logs →
 								</LinkButton>
 							</div>
-							<LogBlock className="mt-3 max-h-[260px] p-4">
-								{String((details as Record<string, unknown>)?.logs || "No logs available.")}
-							</LogBlock>
+							<LogBlock className="mt-3 max-h-[320px] p-4">{recentLogs}</LogBlock>
 						</Panel>
 					</div>
-				)}
+				) : null}
 
-				{activeTab === "metrics" && (
-					<div>
-						{metrics ? (
-							<ContainerMetricsPanel metrics={metrics} />
-						) : (
-							<EmptyState title="Metrics unavailable" description="Metrics are only available for local Docker environments with Prometheus configured." />
-						)}
-					</div>
-				)}
+				{activeTab === "metrics" ? (
+					metrics ? (
+						<ContainerMetricsPanel metrics={metrics} />
+					) : (
+						<EmptyState
+							title="Metrics unavailable"
+							description="Metrics are only available for local Docker environments with Prometheus configured."
+						/>
+					)
+				) : null}
 
-				{activeTab === "logs" && (
+				{activeTab === "logs" ? (
 					<Panel padding="sm">
 						<div className="flex items-center justify-between">
 							<p className="text-sm font-semibold">Container logs</p>
@@ -181,19 +214,19 @@ export function ContainerDetailTabs({
 								Open live workspace →
 							</LinkButton>
 						</div>
-						<LogBlock className="mt-3 max-h-[600px] p-4">
-							{String((details as Record<string, unknown>)?.logs || "No logs available.")}
+						<LogBlock className="mt-3 max-h-[680px] p-4">
+							{String(details?.logs || "No logs available.")}
 						</LogBlock>
 					</Panel>
-				)}
+				) : null}
 
-				{activeTab === "config" && (
+				{activeTab === "config" ? (
 					<div className="grid gap-4 xl:grid-cols-2">
 						<Panel className="overflow-hidden">
 							<PanelHeader>
 								<PanelTitle>Environment variables</PanelTitle>
 							</PanelHeader>
-							<CodeEditor value={envVars.join("\n")} language="env" readOnly minHeight="420px" />
+							<CodeEditor value={sortedEnv.join("\n")} language="env" readOnly minHeight="420px" />
 						</Panel>
 						<Panel className="overflow-hidden">
 							<PanelHeader>
@@ -207,80 +240,84 @@ export function ContainerDetailTabs({
 							/>
 						</Panel>
 					</div>
-				)}
+				) : null}
 
-				{activeTab === "networks" && (
-					<div className="space-y-4">
-						<Panel>
-							<DataTable>
-								<DataTableHeader>
-									<tr>
-										<DataTableHead>Network</DataTableHead>
-										<DataTableHead>IP Address</DataTableHead>
-										<DataTableHead>Gateway</DataTableHead>
-									</tr>
-								</DataTableHeader>
-								<DataTableBody>
-										{networkEntries.length ? (
-											networkEntries.map(([name, network]) => (
-												<DataTableRow key={name}>
-													<DataTableCell className="font-medium">
-														{canOpenRuntimeTopology ? (
-															<Link
-																href={`/dashboard/networks/${encodeURIComponent(name)}?environment=${environmentId}`}
-																className="transition-colors hover:text-foreground/80"
-															>
-																{name}
-															</Link>
-														) : (
-															name
-														)}
-													</DataTableCell>
-													<DataTableCell className="text-xs text-muted">
-														{network.IPAddress || "—"}
-													</DataTableCell>
-													<DataTableCell className="text-xs text-muted">{network.Gateway || "—"}</DataTableCell>
-												</DataTableRow>
-											))
-										) : (
-											<DataTableEmpty colSpan={3}>No network attachments.</DataTableEmpty>
-										)}
-								</DataTableBody>
-							</DataTable>
-						</Panel>
-
-						{/* Mounts / Storage */}
-						<Panel padding="sm">
-							<p className="text-sm font-semibold">Mounts</p>
-							<div className="mt-3 space-y-2 text-sm text-muted">
-								{mounts.length ? (
-									mounts.map((mount) => (
-										<div
-											key={`${mount.Source}-${mount.Destination}`}
-											className="rounded-lg bg-foreground/[0.03] px-3 py-2"
-										>
-											<p className="font-medium text-foreground">{mount.Destination}</p>
-											<p className="mt-0.5 text-xs">
-												{mount.Source || mount.Type || "Docker managed"}
-											</p>
-										</div>
+				{activeTab === "networks" ? (
+					<Panel>
+						<DataTable>
+							<DataTableHeader>
+								<tr>
+									<DataTableHead>Network</DataTableHead>
+									<DataTableHead>IP Address</DataTableHead>
+									<DataTableHead>Gateway</DataTableHead>
+								</tr>
+							</DataTableHeader>
+							<DataTableBody>
+								{networkEntries.length ? (
+									networkEntries.map(([name, network]) => (
+										<DataTableRow key={name}>
+											<DataTableCell className="font-medium">
+												{canOpenRuntimeTopology ? (
+													<Link
+														href={`/dashboard/networks/${encodeURIComponent(name)}?environment=${environmentId}`}
+														className="transition-colors hover:text-foreground/80"
+													>
+														{name}
+													</Link>
+												) : (
+													name
+												)}
+											</DataTableCell>
+											<DataTableCell className="text-xs text-muted">
+												{network.IPAddress || "—"}
+											</DataTableCell>
+											<DataTableCell className="text-xs text-muted">
+												{network.Gateway || "—"}
+											</DataTableCell>
+										</DataTableRow>
 									))
 								) : (
-									<p>No mounts configured.</p>
+									<DataTableEmpty colSpan={3}>No network attachments.</DataTableEmpty>
 								)}
-							</div>
-						</Panel>
-					</div>
-				)}
+							</DataTableBody>
+						</DataTable>
+					</Panel>
+				) : null}
 
-				{activeTab === "files" && (
+				{activeTab === "storage" ? (
+					<Panel padding="sm">
+						<p className="text-sm font-semibold">Mounts</p>
+						<div className="mt-3 space-y-2 text-sm text-muted">
+							{mounts.length ? (
+								mounts.map((mount) => (
+									<div
+										key={`${mount.Source}-${mount.Destination}`}
+										className="rounded-lg bg-foreground/[0.03] px-3 py-2"
+									>
+										<p className="font-medium text-foreground">{mount.Destination || "Unknown"}</p>
+										<p className="mt-0.5 text-xs">
+											{mount.Source || mount.Type || "Docker managed"}
+										</p>
+										<p className="mt-1 text-[11px] text-muted">
+											{mount.RW === false ? "Read-only" : "Read-write"}
+										</p>
+									</div>
+								))
+							) : (
+								<p>No mounts configured.</p>
+							)}
+						</div>
+					</Panel>
+				) : null}
+
+				{activeTab === "files" ? (
 					<ContainerFileBrowser
 						containerId={containerId}
 						path={targetPath}
 						environmentId={environmentId}
 						browser={browser}
 					/>
-				)}
+				) : null}
 			</TabsPanel>
 		</div>
 	);

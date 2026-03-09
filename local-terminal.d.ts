@@ -3,7 +3,7 @@ export function createLocalTerminalSession(payload: {
 	containerId?: string;
 	cols?: number;
 	rows?: number;
-}): { sessionId: string };
+}): Promise<{ sessionId: string }>;
 
 export function readLocalTerminalSession(
 	sessionId: string,

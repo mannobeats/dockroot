@@ -43,12 +43,12 @@ function clampTerminalRows(value) {
 	return Number.isFinite(parsed) ? Math.max(12, Math.min(120, Math.floor(parsed))) : 36;
 }
 
-function escapeSingleQuotes(value) {
-	return value.replaceAll("'", "'\"'\"'");
-}
-
 function isSafeCustomShell(value) {
 	return typeof value === "string" && /^[A-Za-z0-9_./-]{1,120}$/.test(value);
+}
+
+function escapeSingleQuotes(value) {
+	return value.replaceAll("'", "'\"'\"'");
 }
 
 function resolveShellCandidates(payload) {
@@ -73,9 +73,29 @@ function resolveShellCandidates(payload) {
 	return Array.from(new Set(candidates));
 }
 
-function buildShellBootstrapScript(candidates) {
+function buildShellProbeScript(candidates) {
 	const tokens = candidates.map((candidate) => `'${escapeSingleQuotes(candidate)}'`).join(" ");
-	return `for shell_bin in ${tokens}; do if command -v "$shell_bin" >/dev/null 2>&1; then exec "$shell_bin" -i; fi; done; echo "No supported shell found." >&2; exit 127`;
+	return `for shell_bin in ${tokens}; do if command -v "$shell_bin" >/dev/null 2>&1; then printf "%s" "$shell_bin"; exit 0; fi; done; exit 127`;
+}
+
+async function resolveContainerShell(containerId, candidates) {
+	try {
+		const probe = await execFileAsync(
+			"docker",
+			["exec", containerId, "sh", "-lc", buildShellProbeScript(candidates)],
+			{
+				maxBuffer: 1024 * 64,
+			},
+		);
+		const resolved = probe.stdout.trim();
+		if (resolved) {
+			return resolved;
+		}
+	} catch {
+		// Fall back to requested ordering when probe fails.
+	}
+
+	return candidates[0] || "sh";
 }
 
 function parseJsonLines(content) {
@@ -696,12 +716,12 @@ async function createTerminalSession(payload) {
 		throw new Error("containerId is required.");
 	}
 	const shellCandidates = resolveShellCandidates(payload);
-	const bootstrapScript = buildShellBootstrapScript(shellCandidates);
+	const shell = await resolveContainerShell(payload.containerId, shellCandidates);
 	const cols = clampTerminalColumns(payload?.cols);
 	const rows = clampTerminalRows(payload?.rows);
 	const command = {
 		file: "docker",
-		args: ["exec", "-it", payload.containerId, "sh", "-lc", bootstrapScript],
+		args: ["exec", "-it", payload.containerId, shell, "-i"],
 		cwd: "/",
 	};
 	const child = pty.spawn(command.file, command.args, {

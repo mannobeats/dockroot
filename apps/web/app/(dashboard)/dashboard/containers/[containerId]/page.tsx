@@ -120,13 +120,19 @@ export default async function ContainerDetailPage({
 		environment.kind === "local" ? getProtectedContainerLabel(protectedContainer) : "";
 
 	const containerName = inspect.Name?.replace(/^\//, "") || containerId;
+	const containerState = String(inspect.State?.Status || "offline").toLowerCase();
+	const isRunning = containerState === "running";
 
 	return (
 		<div className="animate-in space-y-6">
 			{/* Header with back + actions */}
 			<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 				<div className="flex items-center gap-3">
-					<LinkButton href={`/dashboard/containers?environment=${environment.id}`} variant="outline" size="icon">
+					<LinkButton
+						href={`/dashboard/containers?environment=${environment.id}`}
+						variant="outline"
+						size="icon"
+					>
 						<ArrowLeft className="h-4 w-4" />
 					</LinkButton>
 					<div>
@@ -146,21 +152,65 @@ export default async function ContainerDetailPage({
 					</div>
 				</div>
 				<div className="flex flex-wrap gap-1.5">
-					{(["start", "stop", "restart", "remove"] as const).map((action) => (
-						<form key={action} action={controlContainerAction}>
-							<input type="hidden" name="containerId" value={containerId} />
-							<input type="hidden" name="action" value={action} />
-							<input type="hidden" name="environmentId" value={environment.id} />
-							<FormSubmitButton
-								label={action}
-								pendingLabel={`${action}ing...`}
-								disabled={isProtected}
-								variant={action === "remove" ? "danger" : "outline"}
-								size="xs"
-								className="capitalize"
-							/>
-						</form>
-					))}
+					{isRunning ? (
+						<>
+							<form action={controlContainerAction}>
+								<input type="hidden" name="containerId" value={containerId} />
+								<input type="hidden" name="action" value="stop" />
+								<input type="hidden" name="environmentId" value={environment.id} />
+								<FormSubmitButton
+									label="stop"
+									pendingLabel="Stopping..."
+									disabled={isProtected}
+									variant="outline"
+									size="xs"
+									className="capitalize"
+								/>
+							</form>
+							<form action={controlContainerAction}>
+								<input type="hidden" name="containerId" value={containerId} />
+								<input type="hidden" name="action" value="restart" />
+								<input type="hidden" name="environmentId" value={environment.id} />
+								<FormSubmitButton
+									label="restart"
+									pendingLabel="Restarting..."
+									disabled={isProtected}
+									variant="outline"
+									size="xs"
+									className="capitalize"
+								/>
+							</form>
+						</>
+					) : (
+						<>
+							<form action={controlContainerAction}>
+								<input type="hidden" name="containerId" value={containerId} />
+								<input type="hidden" name="action" value="start" />
+								<input type="hidden" name="environmentId" value={environment.id} />
+								<FormSubmitButton
+									label="start"
+									pendingLabel="Starting..."
+									disabled={isProtected}
+									variant="outline"
+									size="xs"
+									className="capitalize"
+								/>
+							</form>
+							<form action={controlContainerAction}>
+								<input type="hidden" name="containerId" value={containerId} />
+								<input type="hidden" name="action" value="remove" />
+								<input type="hidden" name="environmentId" value={environment.id} />
+								<FormSubmitButton
+									label="remove"
+									pendingLabel="Removing..."
+									disabled={isProtected}
+									variant="danger"
+									size="xs"
+									className="capitalize"
+								/>
+							</form>
+						</>
+					)}
 					<LinkButton
 						href={`/dashboard/shell?target=container&containerId=${containerId}&environment=${environment.id}`}
 						variant="outline"

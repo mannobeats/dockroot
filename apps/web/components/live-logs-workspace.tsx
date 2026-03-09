@@ -1,8 +1,11 @@
 "use client";
 
-import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Input } from "@/components/ui/input";
 import { LinkButton } from "@/components/ui/link-button";
 import { LogBlock } from "@/components/ui/log-block";
 import { Panel } from "@/components/ui/panel";
@@ -30,6 +33,9 @@ export function LiveLogsWorkspace({
 	transport?: "local" | "remote";
 	environmentId?: string;
 }) {
+	const router = useRouter();
+	const pathname = usePathname();
+	const searchParams = useSearchParams();
 	const [query, setQuery] = useState("");
 	const [mode, setMode] = useState<"single" | "grouped">(initialMode);
 	const [selectedIds, setSelectedIds] = useState<string[]>(initialSelectedIds);
@@ -55,6 +61,33 @@ export function LiveLogsWorkspace({
 			setSelectedIds([containers[0].id]);
 		}
 	}, [containers, selectedIds.length]);
+
+	useEffect(() => {
+		const params = new URLSearchParams(searchParams.toString());
+		params.set("mode", mode);
+
+		if (mode === "grouped") {
+			params.delete("container");
+			if (selectedIds.length) {
+				params.set("containers", selectedIds.join(","));
+			} else {
+				params.delete("containers");
+			}
+		} else {
+			params.delete("containers");
+			if (selectedIds[0]) {
+				params.set("container", selectedIds[0]);
+			} else {
+				params.delete("container");
+			}
+		}
+
+		if (params.toString() === searchParams.toString()) {
+			return;
+		}
+
+		router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+	}, [mode, pathname, router, searchParams, selectedIds]);
 
 	const onData = useEffectEvent(
 		(payload: { sessionId: string; containerId: string; chunk: string }) => {
@@ -197,74 +230,82 @@ export function LiveLogsWorkspace({
 			<Panel padding="sm">
 				<div className="flex items-center justify-between">
 					<p className="text-sm font-semibold">Containers</p>
-					<div className="flex items-center gap-1 rounded-lg border border-default/10 bg-background p-0.5">
-						<button
+					<div className="flex items-center gap-1">
+						<Button
 							type="button"
 							onClick={() => {
 								setMode("single");
 								setSelectedIds((current) => (current[0] ? [current[0]] : current));
 							}}
-							className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${mode === "single" ? "bg-foreground text-background" : "text-muted hover:text-foreground"}`}
+							variant={mode === "single" ? "secondary" : "outline"}
+							size="xs"
 						>
 							Single
-						</button>
-						<button
+						</Button>
+						<Button
 							type="button"
 							onClick={() => setMode("grouped")}
-							className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${mode === "grouped" ? "bg-foreground text-background" : "text-muted hover:text-foreground"}`}
+							variant={mode === "grouped" ? "secondary" : "outline"}
+							size="xs"
 						>
 							Grouped
-						</button>
+						</Button>
 					</div>
 				</div>
-				<input
+				<Input
 					type="search"
 					value={query}
 					onChange={(event) => setQuery(event.target.value)}
 					placeholder="Filter..."
-					className="mt-3 h-8 w-full rounded-lg border border-default/10 bg-background px-3 text-xs outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
+					inputSize="sm"
+					className="mt-3 text-xs"
+					aria-label="Filter containers"
 				/>
 				<div className="mt-3 space-y-1">
-					{filtered.map((container) => {
-						const active = selectedIds.includes(container.id);
-						return (
-							<button
-								key={container.id}
-								type="button"
-								onClick={() =>
-									setSelectedIds((current) => {
-										if (mode === "single") {
-											return current[0] === container.id && current.length === 1
-												? current
-												: [container.id];
-										}
+					{filtered.length ? (
+						filtered.map((container) => {
+							const active = selectedIds.includes(container.id);
+							return (
+								<button
+									key={container.id}
+									type="button"
+									onClick={() =>
+										setSelectedIds((current) => {
+											if (mode === "single") {
+												return current[0] === container.id && current.length === 1
+													? current
+													: [container.id];
+											}
 
-										const next = active
-											? current.filter((value) => value !== container.id)
-											: [...current, container.id];
-										return next;
-									})
-								}
-								className={`block w-full rounded-lg px-3 py-2.5 text-left text-xs transition-all ${
-									active
-										? "bg-foreground/[0.06] text-foreground"
-										: "text-muted hover:bg-foreground/[0.03] hover:text-foreground"
-								}`}
-							>
-								<div className="flex items-start justify-between gap-2">
-									<div className="min-w-0">
-										<p className="truncate font-medium">{container.name}</p>
-										<p className="mt-0.5 truncate text-muted">{container.image}</p>
+											const next = active
+												? current.filter((value) => value !== container.id)
+												: [...current, container.id];
+											return next;
+										})
+									}
+									className={`block w-full rounded-lg px-3 py-2.5 text-left text-xs transition-all ${
+										active
+											? "bg-foreground/[0.06] text-foreground"
+											: "text-muted hover:bg-foreground/[0.03] hover:text-foreground"
+									}`}
+								>
+									<div className="flex items-start justify-between gap-2">
+										<div className="min-w-0">
+											<p className="truncate font-medium">{container.name}</p>
+											<p className="mt-0.5 truncate text-muted">{container.image}</p>
+										</div>
+										<StatusBadge status={container.state} />
 									</div>
-									<span
-										className={`mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full ${
-											container.state === "running" ? "bg-emerald-500" : "bg-neutral-400"
-										}`}
-									/>
-								</div>
-							</button>
-						);
-					})}
+								</button>
+							);
+						})
+					) : (
+						<EmptyState
+							title="No matching containers"
+							description="Try a different name, image, or container id."
+							className="p-4"
+						/>
+					)}
 				</div>
 			</Panel>
 
@@ -290,17 +331,14 @@ export function LiveLogsWorkspace({
 						>
 							{paused ? "Resume" : "Pause"}
 						</Button>
-						<button
+						<Button
 							type="button"
 							onClick={() => setAutoScroll((current) => !current)}
-							className={`inline-flex h-7 items-center rounded-md border px-2.5 text-xs font-medium transition-colors ${
-								autoScroll
-									? "border-foreground/20 bg-foreground/[0.06] text-foreground"
-									: "border-default/10 text-muted hover:text-foreground"
-							}`}
+							variant={autoScroll ? "secondary" : "outline"}
+							size="xs"
 						>
 							Auto-scroll
-						</button>
+						</Button>
 						<Button
 							onClick={() =>
 								setLogsByContainer((current) =>

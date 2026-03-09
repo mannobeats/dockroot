@@ -22,10 +22,25 @@ import { LinkButton } from "@/components/ui/link-button";
 import { MetricCard } from "@/components/ui/metric-card";
 import { Panel } from "@/components/ui/panel";
 import { Select } from "@/components/ui/select";
+import { UtilizationBar } from "@/components/ui/utilization-bar";
 import { isPrivilegedRole, requireUserSession } from "@/lib/authorization";
 import { resolveRuntimeEnvironment } from "@/lib/environment-runtime";
 import { listAccessibleContainersForUser } from "@/lib/runtime-access";
 import { getProtectedContainerLabel, isProtectedManagerContainer } from "@/lib/runtime-protection";
+
+function summarizeComposeProject(labels: string | undefined) {
+	if (!labels) {
+		return "";
+	}
+	return (
+		labels
+			.split(",")
+			.find((entry) => entry.startsWith("com.docker.compose.project="))
+			?.split("=")
+			.slice(1)
+			.join("=") || ""
+	);
+}
 
 export default async function ContainersPage({
 	searchParams,
@@ -53,6 +68,7 @@ export default async function ContainersPage({
 	const publishedCount = filtered.filter((container: Record<string, string>) =>
 		container.Ports?.includes("->"),
 	).length;
+	const stoppedCount = Math.max(filtered.length - runningCount, 0);
 
 	return (
 		<div className="animate-in space-y-6">
@@ -60,21 +76,52 @@ export default async function ContainersPage({
 				kicker="Runtime"
 				title="Containers"
 				description={`${environment.name} — ${filtered.length} containers, ${runningCount} running`}
+				actions={
+					<>
+						<LinkButton href={`/dashboard/logs?environment=${environment.id}`} variant="secondary">
+							Logs workspace
+						</LinkButton>
+						<LinkButton href={`/dashboard/shell?environment=${environment.id}`}>
+							Shell workspace
+						</LinkButton>
+					</>
+				}
 			/>
 
 			{includeRuntime ? <LiveRuntimePanel /> : null}
 
-			{/* Stats */}
-			<div className="grid gap-4 sm:grid-cols-3">
-				<MetricCard label="Total" value={filtered.length} />
-				<MetricCard label="Running" value={runningCount} valueClassName="text-success" />
-				<MetricCard label="Published ports" value={publishedCount} />
+			<div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+				<div className="grid gap-4 sm:grid-cols-3">
+					<MetricCard label="Total" value={filtered.length} />
+					<MetricCard label="Running" value={runningCount} />
+					<MetricCard label="Published ports" value={publishedCount} />
+				</div>
+				<Panel padding="md" className="space-y-3">
+					<p className="text-sm font-semibold">Runtime distribution</p>
+					<UtilizationBar
+						label="Running"
+						valueLabel={`${runningCount}/${filtered.length || 0}`}
+						percent={filtered.length ? (runningCount / filtered.length) * 100 : 0}
+						helper="Containers currently available to serve traffic"
+					/>
+					<UtilizationBar
+						label="Stopped / idle"
+						valueLabel={`${stoppedCount}/${filtered.length || 0}`}
+						percent={filtered.length ? (stoppedCount / filtered.length) * 100 : 0}
+						helper="Containers requiring start/recovery actions"
+					/>
+				</Panel>
 			</div>
 
-			{/* Filter */}
 			<Panel padding="sm">
 				<form className="flex flex-col gap-3 sm:flex-row">
-					<Input type="search" name="q" defaultValue={params.q || ""} placeholder="Search containers..." className="flex-1" />
+					<Input
+						type="search"
+						name="q"
+						defaultValue={params.q || ""}
+						placeholder="Search by container name or image"
+						className="flex-1"
+					/>
 					<Select name="status" defaultValue={status}>
 						<option value="all">All statuses</option>
 						<option value="running">Running</option>
@@ -82,13 +129,12 @@ export default async function ContainersPage({
 						<option value="created">Created</option>
 						<option value="paused">Paused</option>
 					</Select>
-					<Button type="submit">
-						Filter
+					<Button type="submit" variant="secondary">
+						Apply filters
 					</Button>
 				</form>
 			</Panel>
 
-			{/* Table */}
 			<Panel>
 				<DataTable>
 					<DataTableHeader>
@@ -99,100 +145,143 @@ export default async function ContainersPage({
 							<DataTableHead>Status</DataTableHead>
 							<DataTableHead>Ports</DataTableHead>
 							<DataTableHead>Size</DataTableHead>
-							<DataTableHead>Actions</DataTableHead>
+							<DataTableHead>Quick actions</DataTableHead>
 						</tr>
 					</DataTableHeader>
 					<DataTableBody>
-							{filtered.length ? (
-								filtered.map((container: Record<string, string>) => {
-									const isProtected =
-										environment.kind === "local" && isProtectedManagerContainer(container);
-									const protectedLabel =
-										environment.kind === "local" ? getProtectedContainerLabel(container) : "";
+						{filtered.length ? (
+							filtered.map((container: Record<string, string>) => {
+								const isProtected =
+									environment.kind === "local" && isProtectedManagerContainer(container);
+								const protectedLabel =
+									environment.kind === "local" ? getProtectedContainerLabel(container) : "";
+								const state = (container.State || "").toLowerCase();
+								const isRunning = state === "running";
+								const composeProject = summarizeComposeProject(container.Labels);
 
-									return (
-										<DataTableRow key={`${container.ID}-${container.Names}`} className="group">
-											<DataTableCell>
-												<div className="space-y-0.5">
-													<div className="flex items-center gap-2">
-														<Link
-															href={`/dashboard/containers/${container.ID}?environment=${environment.id}`}
-															className="font-medium transition-colors hover:text-foreground/80"
-														>
-															{container.Names}
-														</Link>
-														{isProtected ? (
-															<Badge title={protectedLabel || undefined} variant="warning">
-																<Lock className="h-2.5 w-2.5" />
-																Locked
-															</Badge>
-														) : null}
-													</div>
-													{container.Labels?.includes("com.docker.compose.project=") ? (
-														<p className="text-xs text-muted">
-															{container.Labels.split(",")
-																.find((label) => label.startsWith("com.docker.compose.project="))
-																?.split("=")
-																.slice(1)
-																.join("=")}
-														</p>
+								return (
+									<DataTableRow key={`${container.ID}-${container.Names}`} className="group">
+										<DataTableCell>
+											<div className="space-y-0.5">
+												<div className="flex items-center gap-2">
+													<Link
+														href={`/dashboard/containers/${container.ID}?environment=${environment.id}`}
+														className="font-medium transition-colors hover:text-foreground/80"
+													>
+														{container.Names}
+													</Link>
+													{isProtected ? (
+														<Badge title={protectedLabel || undefined} variant="warning">
+															<Lock className="h-2.5 w-2.5" />
+															Locked
+														</Badge>
 													) : null}
 												</div>
-											</DataTableCell>
-											<DataTableCell className="text-xs text-muted">{container.Image}</DataTableCell>
-											<DataTableCell>
-												<StatusBadge status={(container.State || "offline").toLowerCase()} />
-											</DataTableCell>
-											<DataTableCell className="text-xs text-muted">{container.Status || "—"}</DataTableCell>
-											<DataTableCell>
-												<RuntimePortLinks ports={container.Ports} compact />
-											</DataTableCell>
-											<DataTableCell className="text-xs text-muted">{container.Size || "—"}</DataTableCell>
-											<DataTableCell>
-												<div className="flex flex-wrap gap-1.5">
-													<LinkButton
-														href={`/dashboard/containers/${container.ID}?environment=${environment.id}`}
-														size="xs"
-													>
-														Open
-													</LinkButton>
-													{(["start", "stop", "restart", "remove"] as const).map((action) => (
-														<form key={action} action={controlContainerAction}>
+												{composeProject ? (
+													<p className="text-xs text-muted">{composeProject}</p>
+												) : null}
+											</div>
+										</DataTableCell>
+										<DataTableCell className="text-xs text-muted">{container.Image}</DataTableCell>
+										<DataTableCell>
+											<StatusBadge status={state || "offline"} />
+										</DataTableCell>
+										<DataTableCell className="text-xs text-muted">
+											{container.Status || "—"}
+										</DataTableCell>
+										<DataTableCell>
+											<RuntimePortLinks ports={container.Ports} compact />
+										</DataTableCell>
+										<DataTableCell className="text-xs text-muted">
+											{container.Size || "—"}
+										</DataTableCell>
+										<DataTableCell>
+											<div className="flex flex-wrap gap-1.5">
+												<LinkButton
+													href={`/dashboard/containers/${container.ID}?environment=${environment.id}`}
+													size="xs"
+												>
+													Open
+												</LinkButton>
+												{isRunning ? (
+													<>
+														<form action={controlContainerAction}>
 															<input type="hidden" name="containerId" value={container.ID} />
-															<input type="hidden" name="action" value={action} />
+															<input type="hidden" name="action" value="stop" />
 															<input type="hidden" name="environmentId" value={environment.id} />
 															<FormSubmitButton
-																label={action}
-																pendingLabel={`${action}ing...`}
+																label="Stop"
+																pendingLabel="Stopping..."
 																disabled={isProtected}
-																title={isProtected ? "Protected container" : undefined}
 																variant="outline"
 																size="xs"
 															/>
 														</form>
-													))}
-													<LinkButton
-														href={`/dashboard/shell?target=container&containerId=${container.ID}&environment=${environment.id}`}
-														variant="outline"
-														size="xs"
-													>
-														Shell
-													</LinkButton>
-													<LinkButton
-														href={`/dashboard/logs?mode=single&container=${container.ID}&environment=${environment.id}`}
-														variant="outline"
-														size="xs"
-													>
-														Logs
-													</LinkButton>
-												</div>
-											</DataTableCell>
-										</DataTableRow>
-									);
-								})
-							) : (
-								<DataTableEmpty colSpan={7}>No containers matched the current filters.</DataTableEmpty>
-							)}
+														<form action={controlContainerAction}>
+															<input type="hidden" name="containerId" value={container.ID} />
+															<input type="hidden" name="action" value="restart" />
+															<input type="hidden" name="environmentId" value={environment.id} />
+															<FormSubmitButton
+																label="Restart"
+																pendingLabel="Restarting..."
+																disabled={isProtected}
+																variant="outline"
+																size="xs"
+															/>
+														</form>
+													</>
+												) : (
+													<>
+														<form action={controlContainerAction}>
+															<input type="hidden" name="containerId" value={container.ID} />
+															<input type="hidden" name="action" value="start" />
+															<input type="hidden" name="environmentId" value={environment.id} />
+															<FormSubmitButton
+																label="Start"
+																pendingLabel="Starting..."
+																disabled={isProtected}
+																variant="outline"
+																size="xs"
+															/>
+														</form>
+														<form action={controlContainerAction}>
+															<input type="hidden" name="containerId" value={container.ID} />
+															<input type="hidden" name="action" value="remove" />
+															<input type="hidden" name="environmentId" value={environment.id} />
+															<FormSubmitButton
+																label="Remove"
+																pendingLabel="Removing..."
+																disabled={isProtected}
+																variant="danger"
+																size="xs"
+															/>
+														</form>
+													</>
+												)}
+												<LinkButton
+													href={`/dashboard/shell?target=container&containerId=${container.ID}&environment=${environment.id}`}
+													variant="outline"
+													size="xs"
+												>
+													Shell
+												</LinkButton>
+												<LinkButton
+													href={`/dashboard/logs?mode=single&container=${container.ID}&environment=${environment.id}`}
+													variant="outline"
+													size="xs"
+												>
+													Logs
+												</LinkButton>
+											</div>
+										</DataTableCell>
+									</DataTableRow>
+								);
+							})
+						) : (
+							<DataTableEmpty colSpan={7}>
+								No containers matched the current filters.
+							</DataTableEmpty>
+						)}
 					</DataTableBody>
 				</DataTable>
 			</Panel>

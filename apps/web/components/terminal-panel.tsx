@@ -15,6 +15,15 @@ function sanitizeTerminalChunk(chunk: string) {
 	);
 }
 
+function getCssColorValue(variable: string, fallback: string) {
+	if (typeof window === "undefined") {
+		return fallback;
+	}
+
+	const value = window.getComputedStyle(document.documentElement).getPropertyValue(variable).trim();
+	return value || fallback;
+}
+
 export function TerminalPanel({
 	target,
 	containerId,
@@ -73,9 +82,9 @@ export function TerminalPanel({
 				fontSize: 13,
 				lineHeight: 1.4,
 				theme: {
-					background: "#0a0a0a",
-					foreground: "#fafafa",
-					cursor: "#fafafa",
+					background: getCssColorValue("--console", "#0a0a0a"),
+					foreground: getCssColorValue("--console-foreground", "#fafafa"),
+					cursor: getCssColorValue("--console-foreground", "#fafafa"),
 					selectionBackground: "#ffffff30",
 				},
 			});
@@ -353,7 +362,11 @@ export function TerminalPanel({
 	}, [containerId, customShell, environmentId, label, shell, target, transport]);
 
 	return (
-		<Panel padding="sm" className="overflow-hidden">
+		<Panel
+			padding="sm"
+			className="overflow-hidden"
+			onMouseDown={() => terminalInstanceRef.current?.focus()}
+		>
 			<div className="flex flex-col gap-3 border-b border-default/10 pb-4 sm:flex-row sm:items-start sm:justify-between">
 				<div className="space-y-1">
 					<div className="flex items-center gap-2">

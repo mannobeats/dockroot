@@ -5,6 +5,7 @@ import { ChartFrame } from "@/components/chart-frame";
 import { EmptyState } from "@/components/ui/empty-state";
 import { MetricCard } from "@/components/ui/metric-card";
 import { Panel } from "@/components/ui/panel";
+import { UtilizationBar } from "@/components/ui/utilization-bar";
 
 function formatBytes(value: number | null) {
 	if (value === null) {
@@ -21,6 +22,10 @@ function formatBytes(value: number | null) {
 	}
 
 	return `${amount.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+}
+
+function safePercent(value: number | null) {
+	return Math.max(0, Math.min(100, Number(value || 0)));
 }
 
 export function ContainerMetricsPanel({
@@ -40,9 +45,17 @@ export function ContainerMetricsPanel({
 }) {
 	if (!metrics.available) {
 		return (
-			<EmptyState title="Metrics unavailable" description="Prometheus container metrics are not available yet for this container." className="p-6" />
+			<EmptyState
+				title="Metrics unavailable"
+				description="Prometheus container metrics are not available yet for this container."
+				className="p-6"
+			/>
 		);
 	}
+
+	const maxMemorySample = metrics.memorySeries.reduce((max, point) => {
+		return Math.max(max, point.value);
+	}, metrics.memoryBytes || 0);
 
 	return (
 		<div className="space-y-5">
@@ -52,6 +65,23 @@ export function ContainerMetricsPanel({
 				<MetricCard label="RX / sec" value={formatBytes(metrics.rxBytes)} />
 				<MetricCard label="TX / sec" value={formatBytes(metrics.txBytes)} />
 			</div>
+			<Panel padding="md" className="space-y-4">
+				<p className="text-sm font-semibold">Current utilization</p>
+				<UtilizationBar
+					label="CPU usage"
+					valueLabel={`${metrics.cpuPercent?.toFixed(1) ?? "0.0"}%`}
+					percent={safePercent(metrics.cpuPercent)}
+					helper="Current usage against available CPU time"
+				/>
+				<UtilizationBar
+					label="Memory usage"
+					valueLabel={formatBytes(metrics.memoryBytes)}
+					percent={safePercent(
+						maxMemorySample > 0 ? ((metrics.memoryBytes || 0) / maxMemorySample) * 100 : 0,
+					)}
+					helper="Relative to recent peak working set memory"
+				/>
+			</Panel>
 
 			<div className="grid gap-5 xl:grid-cols-2">
 				<Panel padding="md">

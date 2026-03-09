@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Bar, BarChart, CartesianGrid, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, CartesianGrid, Tooltip, XAxis, YAxis } from "recharts";
 import { io, type Socket } from "socket.io-client";
 import { ChartFrame } from "@/components/chart-frame";
-import { Badge } from "@/components/ui/badge";
 import { Panel } from "@/components/ui/panel";
+import { UtilizationBar } from "@/components/ui/utilization-bar";
 
 let socket: Socket | null = null;
 
@@ -102,7 +102,7 @@ export function LiveRuntimePanel() {
 
 	return (
 		<Panel padding="md">
-			<div className="flex items-center justify-between">
+			<div className="flex items-center justify-between gap-4">
 				<div>
 					<div className="flex items-center gap-2">
 						<h3 className="text-sm font-semibold">Live telemetry</h3>
@@ -110,21 +110,25 @@ export function LiveRuntimePanel() {
 					</div>
 					<p className="mt-0.5 text-xs text-muted">Real-time container resource usage</p>
 				</div>
-				<div className="flex items-center gap-4 text-xs">
-					<Badge className="bg-transparent px-0 py-0 text-xs text-muted">
-						<span className="h-2 w-2 rounded-full bg-foreground" />
-						CPU {latest?.cpu ?? 0}%
-					</Badge>
-					<Badge className="bg-transparent px-0 py-0 text-xs text-muted">
-						<span className="h-2 w-2 rounded-full bg-success" />
-						MEM {latest?.memory ?? 0}%
-					</Badge>
-				</div>
+			</div>
+			<div className="mt-4 grid gap-3 xl:grid-cols-2">
+				<UtilizationBar
+					label="CPU"
+					valueLabel={`${latest?.cpu ?? 0}%`}
+					percent={latest?.cpu ?? 0}
+					helper="Average across running containers"
+				/>
+				<UtilizationBar
+					label="Memory"
+					valueLabel={`${latest?.memory ?? 0}%`}
+					percent={latest?.memory ?? 0}
+					helper="Average usage against container limits"
+				/>
 			</div>
 			<ChartFrame className="mt-4 h-56">
 				{mounted
 					? ({ width, height }) => (
-							<BarChart width={width} height={height} data={history} barGap={2}>
+							<AreaChart width={width} height={height} data={history}>
 								<CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
 								<XAxis
 									dataKey="time"
@@ -140,15 +144,25 @@ export function LiveRuntimePanel() {
 									tickFormatter={(v) => `${v}%`}
 								/>
 								<Tooltip content={<CustomTooltip />} />
-								<Bar
+								<Area
+									type="monotone"
 									dataKey="cpu"
 									name="CPU"
 									fill="var(--foreground)"
-									radius={[3, 3, 0, 0]}
-									maxBarSize={24}
+									fillOpacity={0.15}
+									stroke="var(--foreground)"
+									strokeWidth={2}
 								/>
-								<Bar dataKey="memory" name="Memory" fill="var(--success)" radius={[3, 3, 0, 0]} maxBarSize={24} />
-							</BarChart>
+								<Area
+									type="monotone"
+									dataKey="memory"
+									name="Memory"
+									fill="var(--success)"
+									fillOpacity={0.15}
+									stroke="var(--success)"
+									strokeWidth={2}
+								/>
+							</AreaChart>
 						)
 					: () => null}
 			</ChartFrame>

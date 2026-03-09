@@ -3,7 +3,7 @@
 import { Search, TerminalSquare } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useDeferredValue, useMemo, useState, useTransition } from "react";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Panel } from "@/components/ui/panel";
@@ -26,17 +26,6 @@ const shellOptions: Array<{ value: ShellOption; label: string }> = [
 	{ value: "zsh", label: "zsh" },
 	{ value: "custom", label: "Custom" },
 ];
-
-function getStateVariant(state: string) {
-	const normalized = state.toLowerCase();
-	if (normalized === "running") {
-		return "success" as const;
-	}
-	if (normalized === "paused" || normalized === "restarting") {
-		return "warning" as const;
-	}
-	return "default" as const;
-}
 
 function matchesSearch(container: ContainerOption, query: string) {
 	const value = query.trim().toLowerCase();
@@ -138,7 +127,7 @@ export function ShellSessionControls({
 												</div>
 												<p className="mt-2 truncate text-xs text-muted">{container.image}</p>
 											</div>
-											<Badge variant={getStateVariant(container.state)}>{container.state}</Badge>
+											<StatusBadge status={container.state} />
 										</div>
 										<div className="mt-4 flex items-center justify-between gap-3 text-xs text-muted">
 											<span className="truncate">{container.status}</span>
@@ -171,9 +160,7 @@ export function ShellSessionControls({
 									<p className="truncate text-base font-semibold">{selectedContainer.name}</p>
 									<p className="mt-1 truncate text-sm text-muted">{selectedContainer.image}</p>
 								</div>
-								<Badge variant={getStateVariant(selectedContainer.state)}>
-									{selectedContainer.state}
-								</Badge>
+								<StatusBadge status={selectedContainer.state} />
 							</div>
 							<div className="mt-4 space-y-2 text-xs text-muted">
 								<p className="truncate">

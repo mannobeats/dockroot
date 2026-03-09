@@ -1,9 +1,12 @@
 import { existsSync } from "node:fs";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import * as pty from "node-pty";
 
 const terminalSessions = new Map();
 const supportedShells = new Set(["sh", "bash", "ash", "zsh"]);
 const defaultShellOrder = ["sh", "bash", "ash", "zsh"];
+const execFileAsync = promisify(execFile);
 
 function resolveExecutable(primaryCandidate, fallbackCandidates) {
 	for (const candidate of [primaryCandidate, ...fallbackCandidates]) {
@@ -25,12 +28,12 @@ const dockerBinary = resolveExecutable(process.env.DOCKER_BIN, [
 	"docker",
 ]);
 
-function escapeSingleQuotes(value) {
-	return value.replaceAll("'", "'\"'\"'");
-}
-
 function isSafeCustomShell(value) {
 	return typeof value === "string" && /^[A-Za-z0-9_./-]{1,120}$/.test(value);
+}
+
+function escapeSingleQuotes(value) {
+	return value.replaceAll("'", "'\"'\"'");
 }
 
 function resolveShellCandidates(payload) {
@@ -55,34 +58,47 @@ function resolveShellCandidates(payload) {
 	return Array.from(new Set(candidates));
 }
 
-function buildShellBootstrapScript(candidates) {
+function buildShellProbeScript(candidates) {
 	const tokens = candidates.map((candidate) => `'${escapeSingleQuotes(candidate)}'`).join(" ");
-	return `for shell_bin in ${tokens}; do if command -v "$shell_bin" >/dev/null 2>&1; then exec "$shell_bin" -i; fi; done; echo "No supported shell found." >&2; exit 127`;
+	return `for shell_bin in ${tokens}; do if command -v "$shell_bin" >/dev/null 2>&1; then printf "%s" "$shell_bin"; exit 0; fi; done; exit 127`;
 }
 
-function buildCommand(payload) {
+async function resolveContainerShell(containerId, candidates) {
+	try {
+		const probe = await execFileAsync(
+			dockerBinary,
+			["exec", containerId, "sh", "-lc", buildShellProbeScript(candidates)],
+			{
+				maxBuffer: 1024 * 64,
+			},
+		);
+		const resolved = probe.stdout.trim();
+		if (resolved) {
+			return resolved;
+		}
+	} catch {
+		// fall back to deterministic order
+	}
+
+	return candidates[0] || "sh";
+}
+
+async function buildCommand(payload) {
 	if (!payload?.containerId) {
 		throw new Error("containerId is required.");
 	}
 	const shellCandidates = resolveShellCandidates(payload);
-	const script = buildShellBootstrapScript(shellCandidates);
+	const shell = await resolveContainerShell(payload.containerId, shellCandidates);
 
 	return {
 		file: dockerBinary,
-		args: [
-			"exec",
-			"-it",
-			payload.containerId,
-			"sh",
-			"-lc",
-			script,
-		],
+		args: ["exec", "-it", payload.containerId, shell, "-i"],
 		cwd: "/",
 	};
 }
 
-export function createLocalTerminalSession(payload) {
-	const command = buildCommand(payload);
+export async function createLocalTerminalSession(payload) {
+	const command = await buildCommand(payload);
 	const cols = Math.max(40, Math.min(300, Number(payload?.cols || 120)));
 	const rows = Math.max(12, Math.min(120, Number(payload?.rows || 36)));
 	const processHandle = pty.spawn(command.file, command.args, {
