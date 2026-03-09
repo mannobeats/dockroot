@@ -98,21 +98,18 @@ export default async function DashboardPage({
 					value={String(data.stackCount)}
 					detail="Tracked workspaces"
 					icon={Layers3}
-					accent="blue"
 				/>
 				<StatCard
 					label="Environments"
 					value={String(data.environmentCount)}
 					detail="Local & remote"
 					icon={Server}
-					accent="green"
 				/>
 				<StatCard
 					label="Deployments"
 					value={String(data.deploymentCount)}
 					detail="Total operations"
 					icon={PlayCircle}
-					accent="amber"
 				/>
 				<StatCard
 					label="Containers"
@@ -123,7 +120,6 @@ export default async function DashboardPage({
 							: "Scoped to workspace"
 					}
 					icon={Boxes}
-					accent="purple"
 				/>
 			</div>
 

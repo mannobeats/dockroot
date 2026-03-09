@@ -2,8 +2,8 @@ import { Lock } from "lucide-react";
 import Link from "next/link";
 import { pruneImagesAction, pullImageAction, removeImageAction } from "@/app/(dashboard)/actions";
 import { DestructiveActionModal } from "@/components/destructive-action-modal";
-import { FormSubmitButton } from "@/components/form-submit-button";
 import { PageHeader } from "@/components/page-header";
+import { PullImageModal } from "@/components/pull-image-modal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -65,29 +65,8 @@ export default async function ImagesPage({
 				kicker="Runtime"
 				title="Images"
 				description={`${environment.name} — ${filtered.length} images`}
-			/>
-
-			{/* Actions bar */}
-			<Panel padding="sm">
-				<div className="flex flex-col gap-3 lg:flex-row lg:items-end">
-					<form className="flex flex-1 gap-3">
-						<Input
-							type="search"
-							name="q"
-							defaultValue={params.q || ""}
-							placeholder="Search images..."
-							className="flex-1"
-						/>
-						<Button type="submit" variant="secondary">
-							Filter
-						</Button>
-					</form>
-					<form action={pullImageAction} className="flex gap-3">
-						<input type="hidden" name="environmentId" value={environment.id} />
-						<Input type="text" name="imageRef" required placeholder="ghcr.io/owner/image:tag" />
-						<FormSubmitButton label="Pull" pendingLabel="Pulling..." />
-					</form>
-					<div className="flex gap-2">
+				actions={
+					<div className="flex items-center gap-2">
 						<DestructiveActionModal
 							action={pruneImagesAction}
 							title="Prune dangling images"
@@ -96,7 +75,7 @@ export default async function ImagesPage({
 							confirmLabel="Prune dangling"
 							pendingLabel="Pruning..."
 							triggerVariant="outline"
-							triggerSize="md"
+							triggerSize="sm"
 							hiddenFields={{ environmentId: environment.id }}
 						/>
 						<DestructiveActionModal
@@ -107,11 +86,28 @@ export default async function ImagesPage({
 							confirmLabel="Prune unused"
 							pendingLabel="Pruning..."
 							triggerVariant="warning"
-							triggerSize="md"
+							triggerSize="sm"
 							hiddenFields={{ environmentId: environment.id, mode: "all" }}
 						/>
+						<PullImageModal action={pullImageAction} environmentId={environment.id} />
 					</div>
-				</div>
+				}
+			/>
+
+			{/* Search */}
+			<Panel padding="md">
+				<form className="flex gap-3">
+					<Input
+						type="search"
+						name="q"
+						defaultValue={params.q || ""}
+						placeholder="Search images..."
+						className="flex-1"
+					/>
+					<Button type="submit" variant="secondary">
+						Filter
+					</Button>
+				</form>
 			</Panel>
 
 			{/* Stats */}

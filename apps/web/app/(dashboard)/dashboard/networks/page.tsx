@@ -4,8 +4,8 @@ import {
 	pruneNetworksAction,
 	removeNetworkAction,
 } from "@/app/(dashboard)/actions";
+import { CreateNetworkModal } from "@/components/create-network-modal";
 import { DestructiveActionModal } from "@/components/destructive-action-modal";
-import { FormSubmitButton } from "@/components/form-submit-button";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,7 +21,6 @@ import { Input } from "@/components/ui/input";
 import { LinkButton } from "@/components/ui/link-button";
 import { MetricCard } from "@/components/ui/metric-card";
 import { Panel } from "@/components/ui/panel";
-import { Select } from "@/components/ui/select";
 import { requirePrivilegedPageSession } from "@/lib/authorization";
 import { listNetworksForEnvironment, resolveRuntimeEnvironment } from "@/lib/environment-runtime";
 
@@ -50,46 +49,38 @@ export default async function NetworksPage({
 				kicker="Runtime"
 				title="Networks"
 				description={`${environment.name} — ${filtered.length} networks`}
+				actions={
+					<div className="flex items-center gap-2">
+						<DestructiveActionModal
+							action={pruneNetworksAction}
+							title="Prune unused networks"
+							description="This removes unused Docker networks."
+							triggerLabel="Prune"
+							confirmLabel="Prune networks"
+							pendingLabel="Pruning..."
+							triggerVariant="outline"
+							triggerSize="sm"
+							hiddenFields={{ environmentId: environment.id }}
+						/>
+						<CreateNetworkModal action={createNetworkAction} environmentId={environment.id} />
+					</div>
+				}
 			/>
 
-			{/* Actions */}
-			<Panel padding="sm">
-				<div className="flex flex-col gap-3 lg:flex-row">
-					<form className="flex flex-1 gap-3">
-						<Input
-							type="search"
-							name="q"
-							defaultValue={params.q || ""}
-							placeholder="Search networks..."
-							className="flex-1"
-						/>
-						<Button type="submit" variant="secondary">
-							Filter
-						</Button>
-					</form>
-					<form action={createNetworkAction} className="flex gap-3">
-						<input type="hidden" name="environmentId" value={environment.id} />
-						<Input type="text" name="name" required placeholder="app-network" />
-						<Select name="driver" defaultValue="bridge">
-							<option value="bridge">bridge</option>
-							<option value="overlay">overlay</option>
-							<option value="macvlan">macvlan</option>
-							<option value="host">host</option>
-						</Select>
-						<FormSubmitButton label="Create" pendingLabel="Creating..." />
-					</form>
-					<DestructiveActionModal
-						action={pruneNetworksAction}
-						title="Prune unused networks"
-						description="This removes unused Docker networks."
-						triggerLabel="Prune"
-						confirmLabel="Prune networks"
-						pendingLabel="Pruning..."
-						triggerVariant="outline"
-						triggerSize="md"
-						hiddenFields={{ environmentId: environment.id }}
+			{/* Search */}
+			<Panel padding="md">
+				<form className="flex gap-3">
+					<Input
+						type="search"
+						name="q"
+						defaultValue={params.q || ""}
+						placeholder="Search networks..."
+						className="flex-1"
 					/>
-				</div>
+					<Button type="submit" variant="secondary">
+						Filter
+					</Button>
+				</form>
 			</Panel>
 
 			{/* Stats */}

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createEnvironmentAction, deleteEnvironmentAction } from "@/app/(dashboard)/actions";
+import { CreateEnvironmentModal } from "@/components/create-environment-modal";
 import { DestructiveActionModal } from "@/components/destructive-action-modal";
-import { FormSubmitButton } from "@/components/form-submit-button";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
 import {
@@ -12,8 +12,6 @@ import {
 	DataTableHeader,
 	DataTableRow,
 } from "@/components/ui/data-table";
-import { Field, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import { LinkButton } from "@/components/ui/link-button";
 import { Panel } from "@/components/ui/panel";
 import { listEnvironments } from "@/lib/platform";
@@ -34,9 +32,9 @@ export default async function EnvironmentsPage() {
 				kicker="Infrastructure"
 				title="Environments"
 				description={`${environments.length} environments — manage and monitor your deployment targets`}
+				actions={<CreateEnvironmentModal action={createEnvironmentAction} />}
 			/>
 
-			{/* Compact table view — inspired by competitor's scalable layout */}
 			<Panel>
 				<DataTable>
 					<DataTableHeader>
@@ -109,35 +107,6 @@ export default async function EnvironmentsPage() {
 						})}
 					</DataTableBody>
 				</DataTable>
-			</Panel>
-
-			{/* Add environment form — clean card */}
-			<Panel padding="md">
-				<h2 className="text-sm font-semibold">Add environment</h2>
-				<p className="mt-1 text-xs text-muted">
-					Create a remote environment and deploy the Dockroot agent.
-				</p>
-				<form action={createEnvironmentAction} className="mt-4 grid gap-4 sm:grid-cols-3">
-					<Field>
-						<FieldLabel htmlFor="environment-name">Name</FieldLabel>
-						<Input id="environment-name" name="name" required placeholder="prod-fra-01" />
-					</Field>
-					<Field>
-						<FieldLabel htmlFor="environment-description">Description</FieldLabel>
-						<Input
-							id="environment-description"
-							name="description"
-							placeholder="Hetzner VM for production"
-						/>
-					</Field>
-					<Field>
-						<FieldLabel htmlFor="agent-url">Agent URL</FieldLabel>
-						<div className="flex gap-2">
-							<Input id="agent-url" name="agentUrl" placeholder="http://agent:9095" />
-							<FormSubmitButton label="Create" pendingLabel="Creating..." />
-						</div>
-					</Field>
-				</form>
 			</Panel>
 		</div>
 	);
