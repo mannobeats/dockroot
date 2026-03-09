@@ -4,6 +4,7 @@ import {
 	deployStackAction,
 	destroyStackAction,
 } from "@/app/(dashboard)/actions";
+import { DestructiveActionModal } from "@/components/destructive-action-modal";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
@@ -179,15 +180,17 @@ export default async function StacksPage({
 															size="xs"
 														/>
 													</form>
-													<form action={destroyStackAction}>
-														<input type="hidden" name="stackId" value={stack.stackId || ""} />
-														<FormSubmitButton
-															label="Destroy"
-															pendingLabel="Destroying..."
-															variant="danger"
-															size="xs"
-														/>
-													</form>
+													<DestructiveActionModal
+														action={destroyStackAction}
+														title={`Destroy stack ${stack.name}`}
+														description="This will stop and remove the stack resources."
+														triggerLabel="Destroy"
+														confirmLabel="Destroy"
+														pendingLabel="Destroying..."
+														triggerVariant="danger"
+														triggerSize="xs"
+														hiddenFields={{ stackId: stack.stackId || "" }}
+													/>
 													<LinkButton
 														href={`/dashboard/projects/${stack.projectId}/stacks/${stack.stackId}${detailEnvironmentSuffix}`}
 														variant="outline"
@@ -257,24 +260,33 @@ export default async function StacksPage({
 															/>
 														</form>
 													)}
-													<form action={controlComposeProjectAction}>
-														<input type="hidden" name="projectName" value={stack.slug} />
-														<input type="hidden" name="action" value="destroy" />
-														{stack.configFiles.map((configFile) => (
-															<input
-																key={`destroy-${configFile}`}
-																type="hidden"
-																name="configFiles"
-																value={configFile}
-															/>
-														))}
-														<FormSubmitButton
-															label="Destroy"
-															pendingLabel="Destroying..."
-															variant="danger"
-															size="xs"
-														/>
-													</form>
+													<DestructiveActionModal
+														action={controlComposeProjectAction}
+														title={`Destroy compose project ${stack.slug}`}
+														description="This will run docker compose down for the selected project."
+														triggerLabel="Destroy"
+														confirmLabel="Destroy"
+														pendingLabel="Destroying..."
+														triggerVariant="danger"
+														triggerSize="xs"
+														hiddenFields={{
+															projectName: stack.slug,
+															action: "destroy",
+															configFiles: stack.configFiles,
+														}}
+														options={[
+															{
+																name: "removeVolumes",
+																label: "Remove attached volumes",
+																description: "Persistent data may be lost.",
+															},
+															{
+																name: "removeImages",
+																label: "Remove local compose images",
+																description: "Images will be pulled again on next start.",
+															},
+														]}
+													/>
 												</>
 											) : null}
 											{stack.type === "untracked" && includeUntracked ? (

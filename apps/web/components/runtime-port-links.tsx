@@ -1,6 +1,7 @@
 "use client";
 
 import { ExternalLink } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 
 type PublishedPort = {
 	host: string;
@@ -12,16 +13,28 @@ type PublishedPort = {
 	description: string;
 };
 
-function normalizeHost(host: string) {
+function normalizeHost(host: string, preferredHost?: string | null) {
 	const stripped = host.replaceAll("[", "").replaceAll("]", "");
-	if (!stripped || stripped === "0.0.0.0" || stripped === "::") {
-		return "localhost";
+	if (
+		!stripped ||
+		stripped === "0.0.0.0" ||
+		stripped === "::" ||
+		stripped === "::1" ||
+		stripped === "localhost" ||
+		stripped === "127.0.0.1"
+	) {
+		return preferredHost || "localhost";
 	}
 
 	return stripped;
 }
 
-function buildBrowserHref(host: string, hostPort: string, protocol: string) {
+function buildBrowserHref(
+	host: string,
+	hostPort: string,
+	protocol: string,
+	preferredHost?: string | null,
+) {
 	if (protocol !== "tcp") {
 		return null;
 	}
@@ -38,7 +51,7 @@ function buildBrowserHref(host: string, hostPort: string, protocol: string) {
 	}
 
 	const scheme = numericPort === 443 || numericPort === 8443 ? "https" : "http";
-	return `${scheme}://${normalizeHost(host)}:${hostPort}`;
+	return `${scheme}://${normalizeHost(host, preferredHost)}:${hostPort}`;
 }
 
 function parseHostBinding(binding: string) {
@@ -61,7 +74,19 @@ function parseHostBinding(binding: string) {
 	return null;
 }
 
-export function parsePublishedPorts(rawPorts?: string | null) {
+function managerHostFromUrl(managerUrl?: string | null) {
+	if (!managerUrl) {
+		return null;
+	}
+
+	try {
+		return new URL(managerUrl).hostname;
+	} catch {
+		return null;
+	}
+}
+
+export function parsePublishedPorts(rawPorts?: string | null, preferredHost?: string | null) {
 	if (!rawPorts) {
 		return [];
 	}
@@ -87,8 +112,8 @@ export function parsePublishedPorts(rawPorts?: string | null) {
 
 		const containerPort = exposedMatch[1];
 		const protocol = exposedMatch[2].toLowerCase();
-		const href = buildBrowserHref(hostBinding.host, hostBinding.hostPort, protocol);
-		const dedupeKey = `${normalizeHost(hostBinding.host)}:${hostBinding.hostPort}:${containerPort}:${protocol}`;
+		const href = buildBrowserHref(hostBinding.host, hostBinding.hostPort, protocol, preferredHost);
+		const dedupeKey = `${normalizeHost(hostBinding.host, preferredHost)}:${hostBinding.hostPort}:${containerPort}:${protocol}`;
 
 		if (seen.has(dedupeKey)) {
 			continue;
@@ -102,7 +127,7 @@ export function parsePublishedPorts(rawPorts?: string | null) {
 			protocol,
 			href,
 			label: `${hostBinding.hostPort}:${containerPort}`,
-			description: `${normalizeHost(hostBinding.host)}:${hostBinding.hostPort} -> ${containerPort}/${protocol}`,
+			description: `${normalizeHost(hostBinding.host, preferredHost)}:${hostBinding.hostPort} -> ${containerPort}/${protocol}`,
 		});
 	}
 
@@ -112,11 +137,23 @@ export function parsePublishedPorts(rawPorts?: string | null) {
 export function RuntimePortLinks({
 	ports,
 	compact = false,
+	managerUrl,
 }: {
 	ports?: string | null;
 	compact?: boolean;
+	managerUrl?: string | null;
 }) {
-	const publishedPorts = parsePublishedPorts(ports);
+	const [browserHost, setBrowserHost] = useState<string | null>(null);
+
+	useEffect(() => {
+		setBrowserHost(window.location.hostname);
+	}, []);
+
+	const preferredHost = managerHostFromUrl(managerUrl) || browserHost;
+	const publishedPorts = useMemo(
+		() => parsePublishedPorts(ports, preferredHost),
+		[ports, preferredHost],
+	);
 
 	if (!publishedPorts.length) {
 		return <span className="text-muted">—</span>;

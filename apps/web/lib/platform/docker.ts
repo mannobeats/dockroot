@@ -271,11 +271,20 @@ export async function controlComposeProject(
 	projectName: string,
 	configFiles: string[],
 	action: "start" | "stop" | "restart" | "destroy",
+	options?: {
+		removeVolumes?: boolean;
+		removeImages?: boolean;
+	},
 ) {
 	const composeArgs = configFiles.flatMap((configFile) => ["-f", configFile]);
 	const operationArgs =
 		action === "destroy"
-			? ["down", "--remove-orphans"]
+			? [
+					"down",
+					"--remove-orphans",
+					...(options?.removeVolumes ? ["-v"] : []),
+					...(options?.removeImages ? ["--rmi", "local"] : []),
+				]
 			: action === "start"
 				? ["start"]
 				: action === "stop"
@@ -487,8 +496,14 @@ fi
 export async function controlContainer(
 	containerId: string,
 	action: "start" | "stop" | "restart" | "remove",
+	options?: {
+		removeVolumes?: boolean;
+	},
 ) {
-	const args = action === "remove" ? ["rm", "-f", containerId] : [action, containerId];
+	const args =
+		action === "remove"
+			? ["rm", "-f", ...(options?.removeVolumes ? ["-v"] : []), containerId]
+			: [action, containerId];
 	const result = await runDockerCommand(args);
 	const ok = !result.stderr;
 

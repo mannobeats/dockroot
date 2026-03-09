@@ -3,6 +3,7 @@
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { DestructiveActionModal } from "@/components/destructive-action-modal";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { StackComposeForm } from "@/components/stack-compose-form";
 import { type InstallationOption, StackGitHubForm } from "@/components/stack-github-form";
@@ -152,25 +153,28 @@ export function ProjectDetailTabs({
 																size="xs"
 															/>
 														</form>
-														<form action={destroyStackAction}>
-															<input type="hidden" name="stackId" value={stack.id} />
-															<FormSubmitButton
-																label="Destroy"
-																pendingLabel="..."
-																variant="danger"
-																size="xs"
-															/>
-														</form>
-														<form action={deleteStackAction}>
-															<input type="hidden" name="stackId" value={stack.id} />
-															<input type="hidden" name="projectId" value={project.id} />
-															<FormSubmitButton
-																label="Delete"
-																pendingLabel="..."
-																variant="quietDanger"
-																size="xs"
-															/>
-														</form>
+														<DestructiveActionModal
+															action={destroyStackAction}
+															title={`Destroy stack ${stack.name}`}
+															description="This will stop and remove the stack resources."
+															triggerLabel="Destroy"
+															confirmLabel="Destroy"
+															pendingLabel="Destroying..."
+															triggerVariant="danger"
+															triggerSize="xs"
+															hiddenFields={{ stackId: stack.id }}
+														/>
+														<DestructiveActionModal
+															action={deleteStackAction}
+															title={`Delete stack ${stack.name}`}
+															description="This permanently removes stack metadata from Dockroot."
+															triggerLabel="Delete"
+															confirmLabel="Delete"
+															pendingLabel="Deleting..."
+															triggerVariant="quietDanger"
+															triggerSize="xs"
+															hiddenFields={{ stackId: stack.id, projectId: project.id }}
+														/>
 														<LinkButton
 															href={`/dashboard/projects/${project.id}/stacks/${stack.id}`}
 															variant="outline"

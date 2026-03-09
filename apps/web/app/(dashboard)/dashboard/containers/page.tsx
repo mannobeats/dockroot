@@ -1,6 +1,7 @@
 import { Lock } from "lucide-react";
 import Link from "next/link";
 import { controlContainerAction } from "@/app/(dashboard)/actions";
+import { DestructiveActionModal } from "@/components/destructive-action-modal";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { LiveRuntimePanel } from "@/components/live-runtime-panel";
 import { PageHeader } from "@/components/page-header";
@@ -25,6 +26,7 @@ import { Select } from "@/components/ui/select";
 import { UtilizationBar } from "@/components/ui/utilization-bar";
 import { isPrivilegedRole, requireUserSession } from "@/lib/authorization";
 import { resolveRuntimeEnvironment } from "@/lib/environment-runtime";
+import { getGlobalSettings } from "@/lib/platform";
 import { listAccessibleContainersForUser } from "@/lib/runtime-access";
 import { getProtectedContainerLabel, isProtectedManagerContainer } from "@/lib/runtime-protection";
 
@@ -50,6 +52,7 @@ export default async function ContainersPage({
 	const { userId, role } = await requireUserSession();
 	const params = await searchParams;
 	const environment = await resolveRuntimeEnvironment(userId, params.environment);
+	const settings = await getGlobalSettings(userId);
 	const query = (params.q || "").toLowerCase();
 	const status = (params.status || "all").toLowerCase();
 	const containers = await listAccessibleContainersForUser(userId, role, environment.id);
@@ -190,7 +193,11 @@ export default async function ContainersPage({
 											{container.Status || "—"}
 										</DataTableCell>
 										<DataTableCell>
-											<RuntimePortLinks ports={container.Ports} compact />
+											<RuntimePortLinks
+												ports={container.Ports}
+												compact
+												managerUrl={settings.managerUrl}
+											/>
 										</DataTableCell>
 										<DataTableCell className="text-xs text-muted">
 											{container.Size || "—"}
@@ -244,18 +251,29 @@ export default async function ContainersPage({
 																size="xs"
 															/>
 														</form>
-														<form action={controlContainerAction}>
-															<input type="hidden" name="containerId" value={container.ID} />
-															<input type="hidden" name="action" value="remove" />
-															<input type="hidden" name="environmentId" value={environment.id} />
-															<FormSubmitButton
-																label="Remove"
-																pendingLabel="Removing..."
-																disabled={isProtected}
-																variant="danger"
-																size="xs"
-															/>
-														</form>
+														<DestructiveActionModal
+															action={controlContainerAction}
+															title={`Remove container ${container.Names}`}
+															description="This permanently removes the container."
+															triggerLabel="Remove"
+															confirmLabel="Remove"
+															pendingLabel="Removing..."
+															triggerVariant="danger"
+															triggerSize="xs"
+															disabled={isProtected}
+															hiddenFields={{
+																containerId: container.ID,
+																action: "remove",
+																environmentId: environment.id,
+															}}
+															options={[
+																{
+																	name: "removeVolumes",
+																	label: "Remove anonymous volumes",
+																	description: "Data in attached anonymous volumes will be lost.",
+																},
+															]}
+														/>
 													</>
 												)}
 												<LinkButton

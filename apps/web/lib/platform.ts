@@ -91,6 +91,36 @@ function normalizeAgentUrl(value: string | undefined) {
 	return parsed.toString().replace(/\/$/, "");
 }
 
+function normalizeManagerUrl(value: string | undefined) {
+	const trimmed = value?.trim();
+	if (!trimmed) {
+		return null;
+	}
+
+	let parsed: URL;
+	try {
+		parsed = new URL(trimmed);
+	} catch {
+		throw new Error("Manager URL must be a valid absolute URL.");
+	}
+
+	if (!["http:", "https:"].includes(parsed.protocol)) {
+		throw new Error("Manager URL must use http or https.");
+	}
+
+	if (
+		parsed.username ||
+		parsed.password ||
+		parsed.search ||
+		parsed.hash ||
+		parsed.pathname !== "/"
+	) {
+		throw new Error("Manager URL must not include credentials, query params, or a path.");
+	}
+
+	return parsed.toString().replace(/\/$/, "");
+}
+
 function matchesStoredToken(storedToken: string | null | undefined, candidate: string) {
 	if (!storedToken) {
 		return false;
@@ -116,7 +146,10 @@ async function issueRegistrationToken(agentId: string) {
 async function findAgentByRegistrationToken(registrationToken: string) {
 	const hashedToken = hashToken(registrationToken);
 	return db.query.agents.findFirst({
-		where: or(eq(agents.registrationToken, hashedToken), eq(agents.registrationToken, registrationToken)),
+		where: or(
+			eq(agents.registrationToken, hashedToken),
+			eq(agents.registrationToken, registrationToken),
+		),
 		with: {
 			environment: true,
 		},
@@ -1578,13 +1611,50 @@ export async function getGlobalSettings(userId: string) {
 
 	const environmentsList = await listEnvironments(userId);
 	const projectsList = await listProjects(userId);
+	const defaultLocal = environmentsList.find((environment) => environment.isDefaultLocal);
 
 	return {
-		managerUrl: publicEnv.appUrl,
+		managerUrl: defaultLocal?.managerUrl || publicEnv.appUrl,
 		dataDir: getPlatformDataDir(),
 		environments: environmentsList.length,
 		projects: projectsList.length,
 	};
+}
+
+export async function updateGlobalSettings({
+	userId,
+	managerUrl,
+}: {
+	userId: string;
+	managerUrl: string;
+}) {
+	await ensureDefaultLocalEnvironment(userId);
+
+	const normalizedManagerUrl =
+		normalizeManagerUrl(managerUrl) || publicEnv.appUrl.replace(/\/$/, "");
+	const defaultLocal = await db.query.environments.findFirst({
+		where: and(eq(environments.createdByUserId, userId), eq(environments.isDefaultLocal, true)),
+		columns: {
+			id: true,
+		},
+	});
+
+	if (!defaultLocal) {
+		throw new Error("Default local environment not found.");
+	}
+
+	await db
+		.update(environments)
+		.set({
+			managerUrl: normalizedManagerUrl,
+			updatedAt: now(),
+		})
+		.where(eq(environments.id, defaultLocal.id));
+
+	revalidatePath("/dashboard/settings");
+	revalidatePath("/dashboard/containers");
+	revalidatePath("/dashboard/stacks");
+	revalidatePath("/dashboard/projects");
 }
 
 export async function getPendingDeploymentById(id: string) {

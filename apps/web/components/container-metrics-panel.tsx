@@ -35,6 +35,7 @@ export function ContainerMetricsPanel({
 		available: boolean;
 		cpuPercent: number | null;
 		memoryBytes: number | null;
+		memoryLimitBytes: number | null;
 		rxBytes: number | null;
 		txBytes: number | null;
 		cpuSeries: Array<{ time: string; value: number }>;
@@ -56,6 +57,15 @@ export function ContainerMetricsPanel({
 	const maxMemorySample = metrics.memorySeries.reduce((max, point) => {
 		return Math.max(max, point.value);
 	}, metrics.memoryBytes || 0);
+	const hasReliableLimit =
+		Number.isFinite(metrics.memoryLimitBytes) &&
+		(metrics.memoryLimitBytes || 0) > 0 &&
+		(metrics.memoryLimitBytes || 0) < 9_000_000_000_000_000;
+	const memoryUtilizationPercent = hasReliableLimit
+		? ((metrics.memoryBytes || 0) / (metrics.memoryLimitBytes || 1)) * 100
+		: maxMemorySample > 0
+			? ((metrics.memoryBytes || 0) / maxMemorySample) * 100
+			: 0;
 
 	return (
 		<div className="space-y-5">
@@ -76,10 +86,12 @@ export function ContainerMetricsPanel({
 				<UtilizationBar
 					label="Memory usage"
 					valueLabel={formatBytes(metrics.memoryBytes)}
-					percent={safePercent(
-						maxMemorySample > 0 ? ((metrics.memoryBytes || 0) / maxMemorySample) * 100 : 0,
-					)}
-					helper="Relative to recent peak working set memory"
+					percent={safePercent(memoryUtilizationPercent)}
+					helper={
+						hasReliableLimit
+							? `Usage against memory limit (${formatBytes(metrics.memoryLimitBytes)})`
+							: "Relative to recent peak working set memory"
+					}
 				/>
 			</Panel>
 
@@ -98,8 +110,8 @@ export function ContainerMetricsPanel({
 							>
 								<defs>
 									<linearGradient id="container-cpu-fill" x1="0" y1="0" x2="0" y2="1">
-										<stop offset="5%" stopColor="var(--accent)" stopOpacity={0.4} />
-										<stop offset="95%" stopColor="var(--accent)" stopOpacity={0.05} />
+										<stop offset="5%" stopColor="var(--foreground)" stopOpacity={0.35} />
+										<stop offset="95%" stopColor="var(--foreground)" stopOpacity={0.05} />
 									</linearGradient>
 								</defs>
 								<CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
@@ -119,7 +131,7 @@ export function ContainerMetricsPanel({
 								<Area
 									type="monotone"
 									dataKey="cpu"
-									stroke="var(--accent)"
+									stroke="var(--foreground)"
 									fill="url(#container-cpu-fill)"
 									strokeWidth={2}
 								/>

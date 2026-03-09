@@ -1,10 +1,10 @@
 import { ArrowLeft } from "lucide-react";
-import Link from "next/link";
 import {
 	deleteEnvironmentAction,
 	rotateAgentRegistrationTokenAction,
 } from "@/app/(dashboard)/actions";
 import { CopyButton } from "@/components/copy-button";
+import { DestructiveActionModal } from "@/components/destructive-action-modal";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { StatusBadge } from "@/components/status-badge";
 import { LinkButton } from "@/components/ui/link-button";
@@ -58,19 +58,38 @@ export default async function EnvironmentDetailPage({
 					Open workspace
 				</LinkButton>
 				{environment.isDefaultLocal ? null : (
-					<form action={deleteEnvironmentAction}>
-						<input type="hidden" name="environmentId" value={environment.id} />
-						<FormSubmitButton label="Delete environment" pendingLabel="Deleting..." variant="quietDanger" size="sm" />
-					</form>
+					<DestructiveActionModal
+						action={deleteEnvironmentAction}
+						title={`Delete environment ${environment.name}`}
+						description="This will permanently remove the environment and linked runtime metadata."
+						triggerLabel="Delete environment"
+						confirmLabel="Delete environment"
+						pendingLabel="Deleting..."
+						triggerVariant="quietDanger"
+						triggerSize="sm"
+						hiddenFields={{ environmentId: environment.id }}
+					/>
 				)}
 			</div>
 
 			{/* Connection details */}
 			<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
 				<MetricCard label="Kind" value={environment.kind} valueClassName="text-sm capitalize" />
-				<MetricCard label="Agent URL" value={environment.managerUrl || "Not configured"} valueClassName="break-all text-sm" />
-				<MetricCard label="Hostname" value={agent?.hostname || "Pending install"} valueClassName="text-sm" />
-				<MetricCard label="Docker version" value={agent?.dockerVersion || "Pending install"} valueClassName="text-sm" />
+				<MetricCard
+					label="Agent URL"
+					value={environment.managerUrl || "Not configured"}
+					valueClassName="break-all text-sm"
+				/>
+				<MetricCard
+					label="Hostname"
+					value={agent?.hostname || "Pending install"}
+					valueClassName="text-sm"
+				/>
+				<MetricCard
+					label="Docker version"
+					value={agent?.dockerVersion || "Pending install"}
+					valueClassName="text-sm"
+				/>
 			</div>
 
 			{/* Install commands */}
@@ -79,11 +98,18 @@ export default async function EnvironmentDetailPage({
 					<Panel padding="sm" className="flex items-center justify-between">
 						<div>
 							<p className="text-sm font-semibold">Install token</p>
-							<p className="mt-0.5 text-xs text-muted">A fresh install token is generated when these commands are rendered.</p>
+							<p className="mt-0.5 text-xs text-muted">
+								A fresh install token is generated when these commands are rendered.
+							</p>
 						</div>
 						<form action={rotateAgentRegistrationTokenAction}>
 							<input type="hidden" name="environmentId" value={environment.id} />
-							<FormSubmitButton label="Rotate token" pendingLabel="Rotating..." variant="outline" size="xs" />
+							<FormSubmitButton
+								label="Rotate token"
+								pendingLabel="Rotating..."
+								variant="outline"
+								size="xs"
+							/>
 						</form>
 					</Panel>
 					<div className="grid gap-3 xl:grid-cols-2">

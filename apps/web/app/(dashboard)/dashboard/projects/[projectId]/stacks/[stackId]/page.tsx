@@ -6,6 +6,7 @@ import {
 	destroyStackAction,
 } from "@/app/(dashboard)/actions";
 import { CodeEditor } from "@/components/code-editor";
+import { DestructiveActionModal } from "@/components/destructive-action-modal";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { LiveStackFeed } from "@/components/live-stack-feed";
 import { StackServicesAccordion } from "@/components/stack-services-accordion";
@@ -13,7 +14,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/link-button";
 import { Panel } from "@/components/ui/panel";
-import { getStackById } from "@/lib/platform";
+import { getGlobalSettings, getStackById } from "@/lib/platform";
 import { getContainerDetails, listStackContainers } from "@/lib/platform/docker";
 import { getServerSession } from "@/lib/session";
 
@@ -30,11 +31,14 @@ export default async function StackWorkspacePage({
 	}
 
 	const { projectId, stackId } = await params;
-	const stack = await getStackById({
-		stackId,
-		projectId,
-		userId: session.user.id,
-	});
+	const [stack, settings] = await Promise.all([
+		getStackById({
+			stackId,
+			projectId,
+			userId: session.user.id,
+		}),
+		getGlobalSettings(session.user.id),
+	]);
 
 	if (!stack) {
 		return <div className="text-sm text-muted">Stack not found.</div>;
@@ -89,15 +93,28 @@ export default async function StackWorkspacePage({
 							size="sm"
 						/>
 					</form>
-					<form action={destroyStackAction}>
-						<input type="hidden" name="stackId" value={stack.id} />
-						<FormSubmitButton label="Destroy" pendingLabel="..." variant="danger" size="sm" />
-					</form>
-					<form action={deleteStackAction}>
-						<input type="hidden" name="stackId" value={stack.id} />
-						<input type="hidden" name="projectId" value={projectId} />
-						<FormSubmitButton label="Delete" pendingLabel="..." variant="quietDanger" size="sm" />
-					</form>
+					<DestructiveActionModal
+						action={destroyStackAction}
+						title={`Destroy stack ${stack.name}`}
+						description="This will stop and remove the stack resources."
+						triggerLabel="Destroy"
+						confirmLabel="Destroy"
+						pendingLabel="Destroying..."
+						triggerVariant="danger"
+						triggerSize="sm"
+						hiddenFields={{ stackId: stack.id }}
+					/>
+					<DestructiveActionModal
+						action={deleteStackAction}
+						title={`Delete stack ${stack.name}`}
+						description="This permanently removes stack metadata from Dockroot."
+						triggerLabel="Delete"
+						confirmLabel="Delete"
+						pendingLabel="Deleting..."
+						triggerVariant="quietDanger"
+						triggerSize="sm"
+						hiddenFields={{ stackId: stack.id, projectId }}
+					/>
 				</div>
 			</div>
 
@@ -156,6 +173,7 @@ export default async function StackWorkspacePage({
 						containerDetailsMap={containerDetailsMap}
 						controlContainerAction={controlContainerAction}
 						environmentId={stack.environment.id}
+						managerUrl={settings.managerUrl}
 					/>
 				</div>
 

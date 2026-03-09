@@ -203,10 +203,13 @@ export async function controlContainerForEnvironment(input: {
 	environmentId?: string;
 	containerId: string;
 	action: "start" | "stop" | "restart" | "remove";
+	removeVolumes?: boolean;
 }) {
 	const environment = await getEnvironmentRecord(input.environmentId, input.userId);
 	if (environment.kind === "local") {
-		return controlContainer(input.containerId, input.action);
+		return controlContainer(input.containerId, input.action, {
+			removeVolumes: input.removeVolumes,
+		});
 	}
 
 	await fetchAgent(environment, `/containers/${encodeURIComponent(input.containerId)}/actions`, {
@@ -214,7 +217,7 @@ export async function controlContainerForEnvironment(input: {
 		headers: {
 			"content-type": "application/json",
 		},
-		body: JSON.stringify({ action: input.action }),
+		body: JSON.stringify({ action: input.action, removeVolumes: input.removeVolumes }),
 	});
 }
 

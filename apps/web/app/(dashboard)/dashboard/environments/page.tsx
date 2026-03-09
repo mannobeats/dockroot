@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createEnvironmentAction, deleteEnvironmentAction } from "@/app/(dashboard)/actions";
+import { DestructiveActionModal } from "@/components/destructive-action-modal";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
@@ -49,54 +50,63 @@ export default async function EnvironmentsPage() {
 						</tr>
 					</DataTableHeader>
 					<DataTableBody>
-							{environments.map((environment) => {
-								const agent = environment.agent[0];
-								return (
-									<DataTableRow key={environment.id}>
-										<DataTableCell>
-											<Link
+						{environments.map((environment) => {
+							const agent = environment.agent[0];
+							return (
+								<DataTableRow key={environment.id}>
+									<DataTableCell>
+										<Link
+											href={`/dashboard/environments/${environment.id}`}
+											className="font-medium transition-colors hover:text-foreground/80"
+										>
+											{environment.name}
+										</Link>
+										<p className="mt-0.5 text-xs text-muted">
+											{environment.description || "No description"}
+										</p>
+									</DataTableCell>
+									<DataTableCell>
+										<StatusBadge status={environment.status} />
+									</DataTableCell>
+									<DataTableCell>
+										<span className="capitalize text-xs text-muted">{environment.kind}</span>
+									</DataTableCell>
+									<DataTableCell className="text-xs text-muted">
+										{environment.stacks.length}
+									</DataTableCell>
+									<DataTableCell className="text-xs text-muted">
+										{agent?.hostname || "Awaiting registration"}
+									</DataTableCell>
+									<DataTableCell>
+										<div className="flex gap-1.5">
+											<LinkButton href={`/dashboard?environment=${environment.id}`} size="xs">
+												Open
+											</LinkButton>
+											<LinkButton
 												href={`/dashboard/environments/${environment.id}`}
-												className="font-medium transition-colors hover:text-foreground/80"
+												variant="outline"
+												size="xs"
 											>
-												{environment.name}
-											</Link>
-											<p className="mt-0.5 text-xs text-muted">
-												{environment.description || "No description"}
-											</p>
-										</DataTableCell>
-										<DataTableCell>
-											<StatusBadge status={environment.status} />
-										</DataTableCell>
-										<DataTableCell>
-											<span className="capitalize text-xs text-muted">{environment.kind}</span>
-										</DataTableCell>
-										<DataTableCell className="text-xs text-muted">{environment.stacks.length}</DataTableCell>
-										<DataTableCell className="text-xs text-muted">
-											{agent?.hostname || "Awaiting registration"}
-										</DataTableCell>
-										<DataTableCell>
-											<div className="flex gap-1.5">
-												<LinkButton href={`/dashboard?environment=${environment.id}`} size="xs">
-													Open
-												</LinkButton>
-												<LinkButton
-													href={`/dashboard/environments/${environment.id}`}
-													variant="outline"
-													size="xs"
-												>
-													Details
-												</LinkButton>
-												{environment.isDefaultLocal ? null : (
-													<form action={deleteEnvironmentAction}>
-														<input type="hidden" name="environmentId" value={environment.id} />
-														<FormSubmitButton label="Delete" pendingLabel="Deleting..." variant="quietDanger" size="xs" />
-													</form>
-												)}
-											</div>
-										</DataTableCell>
-									</DataTableRow>
-								);
-							})}
+												Details
+											</LinkButton>
+											{environment.isDefaultLocal ? null : (
+												<DestructiveActionModal
+													action={deleteEnvironmentAction}
+													title={`Delete environment ${environment.name}`}
+													description="This will permanently remove the environment and linked runtime metadata."
+													triggerLabel="Delete"
+													confirmLabel="Delete"
+													pendingLabel="Deleting..."
+													triggerVariant="quietDanger"
+													triggerSize="xs"
+													hiddenFields={{ environmentId: environment.id }}
+												/>
+											)}
+										</div>
+									</DataTableCell>
+								</DataTableRow>
+							);
+						})}
 					</DataTableBody>
 				</DataTable>
 			</Panel>

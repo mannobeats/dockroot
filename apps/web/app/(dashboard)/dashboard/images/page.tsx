@@ -1,6 +1,7 @@
 import { Lock } from "lucide-react";
 import Link from "next/link";
 import { pruneImagesAction, pullImageAction, removeImageAction } from "@/app/(dashboard)/actions";
+import { DestructiveActionModal } from "@/components/destructive-action-modal";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -87,19 +88,28 @@ export default async function ImagesPage({
 						<FormSubmitButton label="Pull" pendingLabel="Pulling..." />
 					</form>
 					<div className="flex gap-2">
-						<form action={pruneImagesAction}>
-							<input type="hidden" name="environmentId" value={environment.id} />
-							<FormSubmitButton
-								label="Prune dangling"
-								pendingLabel="Pruning..."
-								variant="outline"
-							/>
-						</form>
-						<form action={pruneImagesAction}>
-							<input type="hidden" name="environmentId" value={environment.id} />
-							<input type="hidden" name="mode" value="all" />
-							<FormSubmitButton label="Prune unused" pendingLabel="Pruning..." variant="warning" />
-						</form>
+						<DestructiveActionModal
+							action={pruneImagesAction}
+							title="Prune dangling images"
+							description="This removes dangling images that are no longer referenced."
+							triggerLabel="Prune dangling"
+							confirmLabel="Prune dangling"
+							pendingLabel="Pruning..."
+							triggerVariant="outline"
+							triggerSize="md"
+							hiddenFields={{ environmentId: environment.id }}
+						/>
+						<DestructiveActionModal
+							action={pruneImagesAction}
+							title="Prune unused images"
+							description="This removes all unused local images and can impact redeploy speed."
+							triggerLabel="Prune unused"
+							confirmLabel="Prune unused"
+							pendingLabel="Pruning..."
+							triggerVariant="warning"
+							triggerSize="md"
+							hiddenFields={{ environmentId: environment.id, mode: "all" }}
+						/>
 					</div>
 				</div>
 			</Panel>
@@ -171,17 +181,18 @@ export default async function ImagesPage({
 												>
 													Details
 												</LinkButton>
-												<form action={removeImageAction}>
-													<input type="hidden" name="imageRef" value={imageRef} />
-													<input type="hidden" name="environmentId" value={environment.id} />
-													<FormSubmitButton
-														label="Delete"
-														pendingLabel="Deleting..."
-														disabled={isProtected}
-														variant="danger"
-														size="xs"
-													/>
-												</form>
+												<DestructiveActionModal
+													action={removeImageAction}
+													title={`Delete image ${imageRef}`}
+													description="This permanently removes the image from local cache."
+													triggerLabel="Delete"
+													confirmLabel="Delete image"
+													pendingLabel="Deleting..."
+													triggerVariant="danger"
+													triggerSize="xs"
+													disabled={isProtected}
+													hiddenFields={{ imageRef, environmentId: environment.id }}
+												/>
 											</div>
 										</DataTableCell>
 									</DataTableRow>

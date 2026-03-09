@@ -1,6 +1,7 @@
 import { ArrowLeft, Lock } from "lucide-react";
 import { controlContainerAction } from "@/app/(dashboard)/actions";
 import { ContainerDetailTabs } from "@/components/container-detail-tabs";
+import { DestructiveActionModal } from "@/components/destructive-action-modal";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +12,7 @@ import {
 	getContainerDetailsForEnvironment,
 	resolveRuntimeEnvironment,
 } from "@/lib/environment-runtime";
+import { getGlobalSettings } from "@/lib/platform";
 import { getPrometheusContainerMetrics } from "@/lib/prometheus";
 import { requireAccessibleContainerForUser } from "@/lib/runtime-access";
 import { getProtectedContainerLabel, isProtectedManagerContainer } from "@/lib/runtime-protection";
@@ -52,6 +54,7 @@ export default async function ContainerDetailPage({
 	const auth = await requireUserSession();
 	const { containerId } = await params;
 	const query = await searchParams;
+	const settings = await getGlobalSettings(auth.userId);
 	const environment = await resolveRuntimeEnvironment(auth.userId, query.environment);
 	await requireAccessibleContainerForUser({
 		containerId,
@@ -199,19 +202,30 @@ export default async function ContainerDetailPage({
 									className="capitalize"
 								/>
 							</form>
-							<form action={controlContainerAction}>
-								<input type="hidden" name="containerId" value={containerId} />
-								<input type="hidden" name="action" value="remove" />
-								<input type="hidden" name="environmentId" value={environment.id} />
-								<FormSubmitButton
-									label="remove"
-									pendingLabel="Removing..."
-									disabled={isProtected}
-									variant="danger"
-									size="xs"
-									className="capitalize"
-								/>
-							</form>
+							<DestructiveActionModal
+								action={controlContainerAction}
+								title={`Remove container ${containerName}`}
+								description="This permanently removes the container."
+								triggerLabel="remove"
+								confirmLabel="Remove"
+								pendingLabel="Removing..."
+								triggerVariant="danger"
+								triggerSize="xs"
+								disabled={isProtected}
+								triggerClassName="capitalize"
+								hiddenFields={{
+									containerId,
+									action: "remove",
+									environmentId: environment.id,
+								}}
+								options={[
+									{
+										name: "removeVolumes",
+										label: "Remove anonymous volumes",
+										description: "Data in attached anonymous volumes will be lost.",
+									},
+								]}
+							/>
 						</>
 					)}
 					<LinkButton
@@ -243,6 +257,7 @@ export default async function ContainerDetailPage({
 				labels={labels}
 				networkEntries={networkEntries}
 				publishedPortSummary={publishedPortSummary}
+				managerUrl={settings.managerUrl}
 				canOpenRuntimeTopology={canOpenRuntimeTopology}
 				browser={
 					browser.kind === "directory"

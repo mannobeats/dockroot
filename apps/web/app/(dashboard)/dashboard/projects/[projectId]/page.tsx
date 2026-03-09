@@ -7,7 +7,7 @@ import {
 	deployStackAction,
 	destroyStackAction,
 } from "@/app/(dashboard)/actions";
-import { FormSubmitButton } from "@/components/form-submit-button";
+import { DestructiveActionModal } from "@/components/destructive-action-modal";
 import { ProjectDetailTabs } from "@/components/project-detail-tabs";
 import { LinkButton } from "@/components/ui/link-button";
 import { MetricCard } from "@/components/ui/metric-card";
@@ -59,10 +59,17 @@ export default async function ProjectDetailPage({
 					</div>
 				</div>
 				<div className="flex flex-wrap gap-2">
-					<form action={deleteProjectAction}>
-						<input type="hidden" name="projectId" value={project.id} />
-						<FormSubmitButton label="Delete project" pendingLabel="Deleting..." variant="danger" size="xs" />
-					</form>
+					<DestructiveActionModal
+						action={deleteProjectAction}
+						title="Delete project"
+						description="This will permanently delete the project, all related stacks, and deployment history."
+						triggerLabel="Delete project"
+						confirmLabel="Delete project"
+						pendingLabel="Deleting..."
+						triggerVariant="danger"
+						triggerSize="xs"
+						hiddenFields={{ projectId: project.id }}
+					/>
 				</div>
 			</div>
 

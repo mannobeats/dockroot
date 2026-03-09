@@ -29,6 +29,7 @@ type ContainerMetrics = {
 	available: boolean;
 	cpuPercent: number | null;
 	memoryBytes: number | null;
+	memoryLimitBytes: number | null;
 	rxBytes: number | null;
 	txBytes: number | null;
 	cpuSeries: Array<{ time: string; value: number }>;
@@ -71,6 +72,7 @@ export function ContainerDetailTabs({
 	labels,
 	networkEntries,
 	publishedPortSummary,
+	managerUrl,
 	canOpenRuntimeTopology,
 	browser,
 	targetPath,
@@ -86,6 +88,7 @@ export function ContainerDetailTabs({
 	labels: Record<string, string>;
 	networkEntries: Array<[string, { IPAddress?: string; Gateway?: string }]>;
 	publishedPortSummary: string;
+	managerUrl?: string | null;
 	canOpenRuntimeTopology: boolean;
 	browser:
 		| {
@@ -172,7 +175,7 @@ export function ContainerDetailTabs({
 						<Panel padding="sm">
 							<p className="text-xs text-muted">Published ports</p>
 							<div className="mt-3">
-								<RuntimePortLinks ports={publishedPortSummary} />
+								<RuntimePortLinks ports={publishedPortSummary} managerUrl={managerUrl} />
 							</div>
 						</Panel>
 

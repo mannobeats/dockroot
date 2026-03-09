@@ -27,6 +27,7 @@ import {
 	deleteStack,
 	queueOrRunDeployment,
 	rotateAgentRegistrationToken,
+	updateGlobalSettings,
 } from "@/lib/platform";
 import { controlComposeProject, listContainers } from "@/lib/platform/docker";
 import {
@@ -37,6 +38,16 @@ import { isProtectedManagerContainer, isProtectedManagerImage } from "@/lib/runt
 
 function getValue(formData: FormData, key: string) {
 	return String(formData.get(key) || "").trim();
+}
+
+function getBoolValue(formData: FormData, key: string) {
+	return getValue(formData, key) === "true";
+}
+
+function requireDestructiveConfirmation(formData: FormData) {
+	if (getValue(formData, "__confirmDestructive") !== "yes") {
+		throw new Error("Confirmation is required for destructive actions.");
+	}
 }
 
 export async function createProjectAction(formData: FormData) {
@@ -113,6 +124,7 @@ export async function rotateAgentRegistrationTokenAction(formData: FormData) {
 }
 
 export async function deleteEnvironmentAction(formData: FormData) {
+	requireDestructiveConfirmation(formData);
 	const { userId } = await requireUserSession();
 	const environmentId = getValue(formData, "environmentId");
 
@@ -220,6 +232,7 @@ export async function deployStackAction(formData: FormData) {
 }
 
 export async function destroyStackAction(formData: FormData) {
+	requireDestructiveConfirmation(formData);
 	const { userId } = await requireUserSession();
 	const stackId = getValue(formData, "stackId");
 
@@ -235,6 +248,7 @@ export async function destroyStackAction(formData: FormData) {
 }
 
 export async function deleteStackAction(formData: FormData) {
+	requireDestructiveConfirmation(formData);
 	const { userId } = await requireUserSession();
 	const stackId = getValue(formData, "stackId");
 	const projectId = getValue(formData, "projectId");
@@ -252,6 +266,7 @@ export async function deleteStackAction(formData: FormData) {
 }
 
 export async function deleteProjectAction(formData: FormData) {
+	requireDestructiveConfirmation(formData);
 	const { userId } = await requireUserSession();
 	const projectId = getValue(formData, "projectId");
 
@@ -272,9 +287,13 @@ export async function controlContainerAction(formData: FormData) {
 	const containerId = getValue(formData, "containerId");
 	const action = getValue(formData, "action");
 	const environmentId = getValue(formData, "environmentId") || undefined;
+	const removeVolumes = getBoolValue(formData, "removeVolumes");
 
 	if (!containerId || !["start", "stop", "restart", "remove"].includes(action)) {
 		throw new Error("Container and action are required");
+	}
+	if (action === "remove") {
+		requireDestructiveConfirmation(formData);
 	}
 
 	await requireAccessibleContainerForUser({
@@ -299,6 +318,7 @@ export async function controlContainerAction(formData: FormData) {
 		environmentId,
 		containerId,
 		action: action as "start" | "stop" | "restart" | "remove",
+		removeVolumes,
 	});
 	revalidatePath("/dashboard/containers");
 }
@@ -307,6 +327,8 @@ export async function controlComposeProjectAction(formData: FormData) {
 	await requirePrivilegedSession();
 	const projectName = getValue(formData, "projectName");
 	const action = getValue(formData, "action");
+	const removeVolumes = getBoolValue(formData, "removeVolumes");
+	const removeImages = getBoolValue(formData, "removeImages");
 	const configFiles = formData
 		.getAll("configFiles")
 		.map((value) => String(value).trim())
@@ -315,11 +337,15 @@ export async function controlComposeProjectAction(formData: FormData) {
 	if (!projectName || !["start", "stop", "restart", "destroy"].includes(action)) {
 		throw new Error("Compose project and action are required");
 	}
+	if (action === "destroy") {
+		requireDestructiveConfirmation(formData);
+	}
 
 	await controlComposeProject(
 		projectName,
 		configFiles,
 		action as "start" | "stop" | "restart" | "destroy",
+		{ removeVolumes, removeImages },
 	);
 	revalidatePath("/dashboard/stacks");
 }
@@ -338,6 +364,7 @@ export async function pullImageAction(formData: FormData) {
 }
 
 export async function removeImageAction(formData: FormData) {
+	requireDestructiveConfirmation(formData);
 	const auth = await requirePrivilegedSession();
 	const imageRef = getValue(formData, "imageRef");
 	const environmentId = getValue(formData, "environmentId") || undefined;
@@ -358,6 +385,7 @@ export async function removeImageAction(formData: FormData) {
 }
 
 export async function pruneImagesAction(formData: FormData) {
+	requireDestructiveConfirmation(formData);
 	const auth = await requirePrivilegedSession();
 	const mode = getValue(formData, "mode");
 	const environmentId = getValue(formData, "environmentId") || undefined;
@@ -380,6 +408,7 @@ export async function createVolumeAction(formData: FormData) {
 }
 
 export async function removeVolumeAction(formData: FormData) {
+	requireDestructiveConfirmation(formData);
 	const auth = await requirePrivilegedSession();
 	const name = getValue(formData, "name");
 	const environmentId = getValue(formData, "environmentId") || undefined;
@@ -393,6 +422,7 @@ export async function removeVolumeAction(formData: FormData) {
 }
 
 export async function pruneVolumesAction(formData: FormData) {
+	requireDestructiveConfirmation(formData);
 	const auth = await requirePrivilegedSession();
 	const environmentId = getValue(formData, "environmentId") || undefined;
 	await pruneVolumesForEnvironment(auth.userId, environmentId);
@@ -414,6 +444,7 @@ export async function createNetworkAction(formData: FormData) {
 }
 
 export async function removeNetworkAction(formData: FormData) {
+	requireDestructiveConfirmation(formData);
 	const auth = await requirePrivilegedSession();
 	const name = getValue(formData, "name");
 	const environmentId = getValue(formData, "environmentId") || undefined;
@@ -427,8 +458,19 @@ export async function removeNetworkAction(formData: FormData) {
 }
 
 export async function pruneNetworksAction(formData: FormData) {
+	requireDestructiveConfirmation(formData);
 	const auth = await requirePrivilegedSession();
 	const environmentId = getValue(formData, "environmentId") || undefined;
 	await pruneNetworksForEnvironment(auth.userId, environmentId);
 	revalidatePath("/dashboard/networks");
+}
+
+export async function updateGlobalSettingsAction(formData: FormData) {
+	const { userId } = await requirePrivilegedSession();
+	const managerUrl = getValue(formData, "managerUrl");
+
+	await updateGlobalSettings({
+		userId,
+		managerUrl,
+	});
 }

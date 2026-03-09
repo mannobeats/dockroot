@@ -23,11 +23,13 @@ export function StackServicesAccordion({
 	containerDetailsMap,
 	controlContainerAction,
 	environmentId,
+	managerUrl,
 }: {
 	containers: Container[];
 	containerDetailsMap: Record<string, ContainerDetails>;
 	controlContainerAction: FormAction;
 	environmentId?: string;
+	managerUrl?: string | null;
 }) {
 	const [openIds, setOpenIds] = useState<Set<string>>(new Set());
 
@@ -93,7 +95,9 @@ export function StackServicesAccordion({
 								<StatusBadge status={(container.State || "offline").toLowerCase()} />
 							</div>
 							<div className="flex items-center gap-3">
-								{container.Ports ? <RuntimePortLinks ports={container.Ports} compact /> : null}
+								{container.Ports ? (
+									<RuntimePortLinks ports={container.Ports} compact managerUrl={managerUrl} />
+								) : null}
 							</div>
 						</button>
 

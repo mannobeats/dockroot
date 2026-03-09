@@ -205,6 +205,9 @@ export async function getPrometheusContainerMetrics(input: {
 	const memoryQueries = selectors.map(
 		(selector) => `container_memory_working_set_bytes{${selector}}`,
 	);
+	const memoryLimitQueries = selectors.map(
+		(selector) => `container_spec_memory_limit_bytes{${selector}}`,
+	);
 	const rxQueries = selectors.map(
 		(selector) => `sum(rate(container_network_receive_bytes_total{${selector}}[2m]))`,
 	);
@@ -212,17 +215,27 @@ export async function getPrometheusContainerMetrics(input: {
 		(selector) => `sum(rate(container_network_transmit_bytes_total{${selector}}[2m]))`,
 	);
 
-	const [cpuPercent, memoryBytes, rxBytes, txBytes, cpuSeries, memorySeries, rxSeries, txSeries] =
-		await Promise.all([
-			firstNonNullInstant(cpuQueries),
-			firstNonNullInstant(memoryQueries),
-			firstNonNullInstant(rxQueries),
-			firstNonNullInstant(txQueries),
-			firstNonEmptyRange(cpuQueries),
-			firstNonEmptyRange(memoryQueries),
-			firstNonEmptyRange(rxQueries),
-			firstNonEmptyRange(txQueries),
-		]);
+	const [
+		cpuPercent,
+		memoryBytes,
+		memoryLimitBytes,
+		rxBytes,
+		txBytes,
+		cpuSeries,
+		memorySeries,
+		rxSeries,
+		txSeries,
+	] = await Promise.all([
+		firstNonNullInstant(cpuQueries),
+		firstNonNullInstant(memoryQueries),
+		firstNonNullInstant(memoryLimitQueries),
+		firstNonNullInstant(rxQueries),
+		firstNonNullInstant(txQueries),
+		firstNonEmptyRange(cpuQueries),
+		firstNonEmptyRange(memoryQueries),
+		firstNonEmptyRange(rxQueries),
+		firstNonEmptyRange(txQueries),
+	]);
 
 	return {
 		available:
@@ -236,6 +249,7 @@ export async function getPrometheusContainerMetrics(input: {
 			txSeries.length > 0,
 		cpuPercent,
 		memoryBytes,
+		memoryLimitBytes,
 		rxBytes,
 		txBytes,
 		cpuSeries,

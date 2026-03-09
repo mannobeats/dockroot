@@ -4,6 +4,7 @@ import {
 	pruneVolumesAction,
 	removeVolumeAction,
 } from "@/app/(dashboard)/actions";
+import { DestructiveActionModal } from "@/components/destructive-action-modal";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -55,7 +56,13 @@ export default async function VolumesPage({
 			<Panel padding="sm">
 				<div className="flex flex-col gap-3 lg:flex-row">
 					<form className="flex flex-1 gap-3">
-						<Input type="search" name="q" defaultValue={params.q || ""} placeholder="Search volumes..." className="flex-1" />
+						<Input
+							type="search"
+							name="q"
+							defaultValue={params.q || ""}
+							placeholder="Search volumes..."
+							className="flex-1"
+						/>
 						<Button type="submit" variant="secondary">
 							Filter
 						</Button>
@@ -68,10 +75,17 @@ export default async function VolumesPage({
 						</Select>
 						<FormSubmitButton label="Create" pendingLabel="Creating..." />
 					</form>
-					<form action={pruneVolumesAction}>
-						<input type="hidden" name="environmentId" value={environment.id} />
-						<FormSubmitButton label="Prune" pendingLabel="Pruning..." variant="outline" />
-					</form>
+					<DestructiveActionModal
+						action={pruneVolumesAction}
+						title="Prune unused volumes"
+						description="This removes all dangling Docker volumes and may delete persisted data."
+						triggerLabel="Prune"
+						confirmLabel="Prune volumes"
+						pendingLabel="Pruning..."
+						triggerVariant="outline"
+						triggerSize="md"
+						hiddenFields={{ environmentId: environment.id }}
+					/>
 				</div>
 			</Panel>
 
@@ -94,47 +108,48 @@ export default async function VolumesPage({
 						</tr>
 					</DataTableHeader>
 					<DataTableBody>
-							{filtered.length ? (
-								filtered.map((volume: Record<string, string>) => (
-									<DataTableRow key={`${volume.Name}-${volume.Driver}`}>
-										<DataTableCell>
-											<Link
+						{filtered.length ? (
+							filtered.map((volume: Record<string, string>) => (
+								<DataTableRow key={`${volume.Name}-${volume.Driver}`}>
+									<DataTableCell>
+										<Link
+											href={`/dashboard/volumes/${encodeURIComponent(volume.Name)}?environment=${environment.id}`}
+											className="font-medium transition-colors hover:text-foreground/80"
+										>
+											{volume.Name}
+										</Link>
+									</DataTableCell>
+									<DataTableCell className="text-xs text-muted">{volume.Driver}</DataTableCell>
+									<DataTableCell className="text-xs text-muted">
+										{volume.Mountpoint || "Docker managed"}
+									</DataTableCell>
+									<DataTableCell>
+										<div className="flex gap-1.5">
+											<LinkButton
 												href={`/dashboard/volumes/${encodeURIComponent(volume.Name)}?environment=${environment.id}`}
-												className="font-medium transition-colors hover:text-foreground/80"
+												variant="outline"
+												size="xs"
 											>
-												{volume.Name}
-											</Link>
-										</DataTableCell>
-										<DataTableCell className="text-xs text-muted">{volume.Driver}</DataTableCell>
-										<DataTableCell className="text-xs text-muted">
-											{volume.Mountpoint || "Docker managed"}
-										</DataTableCell>
-										<DataTableCell>
-											<div className="flex gap-1.5">
-												<LinkButton
-													href={`/dashboard/volumes/${encodeURIComponent(volume.Name)}?environment=${environment.id}`}
-													variant="outline"
-													size="xs"
-												>
-													Details
-												</LinkButton>
-												<form action={removeVolumeAction}>
-													<input type="hidden" name="name" value={volume.Name} />
-													<input type="hidden" name="environmentId" value={environment.id} />
-													<FormSubmitButton
-														label="Delete"
-														pendingLabel="Deleting..."
-														variant="danger"
-														size="xs"
-													/>
-												</form>
-											</div>
-										</DataTableCell>
-									</DataTableRow>
-								))
-							) : (
-								<DataTableEmpty colSpan={4}>No volumes found.</DataTableEmpty>
-							)}
+												Details
+											</LinkButton>
+											<DestructiveActionModal
+												action={removeVolumeAction}
+												title={`Delete volume ${volume.Name}`}
+												description="This permanently removes the volume and all data it contains."
+												triggerLabel="Delete"
+												confirmLabel="Delete volume"
+												pendingLabel="Deleting..."
+												triggerVariant="danger"
+												triggerSize="xs"
+												hiddenFields={{ name: volume.Name, environmentId: environment.id }}
+											/>
+										</div>
+									</DataTableCell>
+								</DataTableRow>
+							))
+						) : (
+							<DataTableEmpty colSpan={4}>No volumes found.</DataTableEmpty>
+						)}
 					</DataTableBody>
 				</DataTable>
 			</Panel>
