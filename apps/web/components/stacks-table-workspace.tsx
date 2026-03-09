@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDown, ChevronRight, ExternalLink, Package } from "lucide-react";
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { DestructiveActionModal } from "@/components/destructive-action-modal";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { StatusBadge } from "@/components/status-badge";
@@ -100,6 +100,32 @@ export function StacksTableWorkspace({
 	const [search, setSearch] = useState("");
 	const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
 
+	useEffect(() => {
+		function isTypingTarget(target: EventTarget | null) {
+			if (!(target instanceof HTMLElement)) {
+				return false;
+			}
+			const tag = target.tagName.toLowerCase();
+			return tag === "input" || tag === "textarea" || tag === "select" || target.isContentEditable;
+		}
+
+		function onKeyDown(event: KeyboardEvent) {
+			if (event.key === "/" && !event.metaKey && !event.ctrlKey && !event.altKey) {
+				if (isTypingTarget(event.target)) {
+					return;
+				}
+				event.preventDefault();
+				const element = document.getElementById("stack-list-search");
+				if (element instanceof HTMLInputElement) {
+					element.focus();
+				}
+			}
+		}
+
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, []);
+
 	const filteredStacks = useMemo(() => {
 		const query = search.trim().toLowerCase();
 		if (!query) {
@@ -118,6 +144,7 @@ export function StacksTableWorkspace({
 			<Panel padding="sm">
 				<div className="flex flex-col gap-3 sm:flex-row">
 					<Input
+						id="stack-list-search"
 						type="search"
 						placeholder="Search stacks and environments..."
 						value={search}

@@ -1,7 +1,7 @@
 "use client";
 
 import { Github, Layers3, Plus, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { StackComposeForm } from "@/components/stack-compose-form";
 import { type InstallationOption, StackGitHubForm } from "@/components/stack-github-form";
 import { Button } from "@/components/ui/button";
@@ -29,12 +29,53 @@ export function StackCreateModal({
 		return tab === "manual" ? "Create stack manually" : "Create stack from GitHub";
 	}, [tab]);
 
+	useEffect(() => {
+		function isTypingTarget(target: EventTarget | null) {
+			if (!(target instanceof HTMLElement)) {
+				return false;
+			}
+			const tag = target.tagName.toLowerCase();
+			return tag === "input" || tag === "textarea" || tag === "select" || target.isContentEditable;
+		}
+
+		function onKeyDown(event: KeyboardEvent) {
+			if (open && (event.key === "Escape" || event.key.toLowerCase() === "x")) {
+				if (event.key.toLowerCase() === "x" && isTypingTarget(event.target)) {
+					return;
+				}
+				event.preventDefault();
+				setOpen(false);
+				return;
+			}
+
+			if (isTypingTarget(event.target)) {
+				return;
+			}
+
+			if (event.altKey && event.key.toLowerCase() === "c") {
+				event.preventDefault();
+				setTab("manual");
+				setOpen(true);
+			}
+
+			if (event.altKey && event.key.toLowerCase() === "g") {
+				event.preventDefault();
+				setTab("github");
+				setOpen(true);
+			}
+		}
+
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, [open]);
+
 	return (
 		<>
 			<div className="flex flex-wrap items-center gap-2">
 				<Button
 					variant="secondary"
 					size="sm"
+					title="Alt+G"
 					onClick={() => {
 						setTab("github");
 						setOpen(true);
@@ -45,6 +86,7 @@ export function StackCreateModal({
 				</Button>
 				<Button
 					size="sm"
+					title="Alt+C"
 					onClick={() => {
 						setTab("manual");
 						setOpen(true);
@@ -57,7 +99,18 @@ export function StackCreateModal({
 
 			{open ? (
 				<div className="fixed inset-0 z-50 flex items-center justify-center bg-background/75 px-4 py-6 backdrop-blur-sm">
-					<div className="flex h-full max-h-[92vh] w-full max-w-[1320px] flex-col overflow-hidden rounded-2xl border border-default/15 bg-surface shadow-2xl">
+					<button
+						type="button"
+						aria-label="Close stack creation modal"
+						onClick={() => setOpen(false)}
+						className="absolute inset-0 h-full w-full cursor-default"
+					/>
+					<div
+						role="dialog"
+						aria-modal="true"
+						aria-label={title}
+						className="relative z-10 flex h-full max-h-[92vh] w-full max-w-[1320px] flex-col overflow-hidden rounded-2xl border border-default/15 bg-surface shadow-2xl"
+					>
 						<div className="flex items-center justify-between border-b border-default/10 px-5 py-4">
 							<div className="flex items-center gap-3">
 								<div className="flex h-9 w-9 items-center justify-center rounded-lg bg-foreground/[0.05] text-foreground">

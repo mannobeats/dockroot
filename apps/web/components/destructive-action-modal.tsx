@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, X } from "lucide-react";
-import { useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
@@ -62,11 +62,41 @@ export function DestructiveActionModal({
 	);
 	const [optionState, setOptionState] = useState(optionDefaults);
 
-	const resetState = () => {
+	const resetState = useCallback(() => {
 		setAcknowledged(!requireAcknowledgement);
 		setOptionState(optionDefaults);
 		setOpen(false);
-	};
+	}, [optionDefaults, requireAcknowledgement]);
+
+	useEffect(() => {
+		if (!open) {
+			return;
+		}
+
+		function isTypingTarget(target: EventTarget | null) {
+			if (!(target instanceof HTMLElement)) {
+				return false;
+			}
+			const tag = target.tagName.toLowerCase();
+			return tag === "input" || tag === "textarea" || tag === "select" || target.isContentEditable;
+		}
+
+		function onKeyDown(event: KeyboardEvent) {
+			if (event.key === "Escape") {
+				event.preventDefault();
+				resetState();
+				return;
+			}
+
+			if (event.key.toLowerCase() === "x" && !isTypingTarget(event.target)) {
+				event.preventDefault();
+				resetState();
+			}
+		}
+
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, [open, resetState]);
 
 	return (
 		<>
@@ -87,12 +117,18 @@ export function DestructiveActionModal({
 
 			{open ? (
 				<div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 px-4 backdrop-blur-sm">
+					<button
+						type="button"
+						aria-label="Close confirmation dialog"
+						onClick={resetState}
+						className="absolute inset-0 h-full w-full cursor-default"
+					/>
 					<div
 						role="dialog"
 						aria-modal="true"
 						aria-labelledby={titleId}
 						aria-describedby={descriptionId}
-						className="w-full max-w-2xl rounded-2xl border border-danger/20 bg-surface p-6 shadow-2xl"
+						className="relative z-10 w-full max-w-2xl rounded-2xl border border-danger/20 bg-surface p-6 shadow-2xl"
 					>
 						<div className="flex items-start justify-between gap-4">
 							<div className="flex items-start gap-3">
