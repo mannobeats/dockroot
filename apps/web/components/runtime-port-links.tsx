@@ -164,7 +164,7 @@ export function RuntimePortLinks({
 			{publishedPorts.map((port) =>
 				port.href ? (
 					<a
-						key={`${port.host}-${port.hostPort}-${port.containerPort}`}
+						key={`${port.host}-${port.hostPort}-${port.containerPort}-${port.protocol}`}
 						href={port.href}
 						target="_blank"
 						rel="noreferrer"
@@ -176,7 +176,7 @@ export function RuntimePortLinks({
 					</a>
 				) : (
 					<span
-						key={`${port.host}-${port.hostPort}-${port.containerPort}`}
+						key={`${port.host}-${port.hostPort}-${port.containerPort}-${port.protocol}`}
 						title={port.description}
 						className="inline-flex items-center rounded-full border border-default/20 bg-background/70 px-2.5 py-1 text-xs font-medium text-muted"
 					>

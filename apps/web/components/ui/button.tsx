@@ -1,5 +1,5 @@
-import type { ButtonHTMLAttributes } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
+import { type ButtonHTMLAttributes, forwardRef } from "react";
 import { cn } from "@/lib/cn";
 
 export const buttonVariants = cva(
@@ -8,17 +8,13 @@ export const buttonVariants = cva(
 		variants: {
 			variant: {
 				primary: "bg-accent text-accent-foreground hover:opacity-90",
-				secondary:
-					"border border-default/10 bg-surface text-foreground hover:border-default/20",
+				secondary: "border border-default/10 bg-surface text-foreground hover:border-default/20",
 				outline:
 					"border border-default/10 bg-background text-muted hover:border-default/20 hover:text-foreground",
 				ghost: "text-muted hover:bg-foreground/[0.04] hover:text-foreground",
-				danger:
-					"border border-danger/20 bg-danger/10 text-danger hover:bg-danger/15",
-				warning:
-					"border border-warning/20 bg-warning/10 text-warning hover:bg-warning/15",
-				quietDanger:
-					"border border-default/10 bg-background text-muted hover:text-danger",
+				danger: "border border-danger/20 bg-danger/10 text-danger hover:bg-danger/15",
+				warning: "border border-warning/20 bg-warning/10 text-warning hover:bg-warning/15",
+				quietDanger: "border border-default/10 bg-background text-muted hover:text-danger",
 			},
 			size: {
 				xs: "h-7 px-2.5 text-xs",
@@ -40,15 +36,19 @@ export const buttonVariants = cva(
 	},
 );
 
-type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> &
-	VariantProps<typeof buttonVariants>;
+type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & VariantProps<typeof buttonVariants>;
 
-export function Button({ className, variant, size, fullWidth, type = "button", ...props }: ButtonProps) {
-	return (
-		<button
-			type={type}
-			className={cn(buttonVariants({ variant, size, fullWidth }), className)}
-			{...props}
-		/>
-	);
-}
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
+	({ className, variant, size, fullWidth, type = "button", ...props }, ref) => {
+		return (
+			<button
+				ref={ref}
+				type={type}
+				className={cn(buttonVariants({ variant, size, fullWidth }), className)}
+				{...props}
+			/>
+		);
+	},
+);
+
+Button.displayName = "Button";
