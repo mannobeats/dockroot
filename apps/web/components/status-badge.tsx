@@ -1,21 +1,21 @@
-const statusStyles: Record<string, { dot: string; text: string }> = {
-	healthy: { dot: "bg-success", text: "text-success" },
-	running: { dot: "bg-success", text: "text-success" },
-	succeeded: { dot: "bg-success", text: "text-success" },
-	deploying: { dot: "bg-accent pulse-dot", text: "text-foreground" },
-	queued: { dot: "bg-warning", text: "text-warning" },
-	provisioning: { dot: "bg-warning pulse-dot", text: "text-warning" },
-	degraded: { dot: "bg-warning", text: "text-warning" },
-	failed: { dot: "bg-danger", text: "text-danger" },
-	offline: { dot: "bg-danger", text: "text-danger" },
-	stopped: { dot: "bg-muted", text: "text-muted" },
-	exited: { dot: "bg-muted", text: "text-muted" },
-	draft: { dot: "bg-muted", text: "text-muted" },
-	created: { dot: "bg-muted", text: "text-muted" },
-	paused: { dot: "bg-warning", text: "text-warning" },
+const statusStyles: Record<string, { dot: string; bg: string; text: string }> = {
+	healthy: { dot: "bg-emerald-500", bg: "bg-emerald-50 dark:bg-emerald-500/10", text: "text-emerald-700 dark:text-emerald-400" },
+	running: { dot: "bg-emerald-500", bg: "bg-emerald-50 dark:bg-emerald-500/10", text: "text-emerald-700 dark:text-emerald-400" },
+	succeeded: { dot: "bg-emerald-500", bg: "bg-emerald-50 dark:bg-emerald-500/10", text: "text-emerald-700 dark:text-emerald-400" },
+	deploying: { dot: "bg-blue-500 pulse-dot", bg: "bg-blue-50 dark:bg-blue-500/10", text: "text-blue-700 dark:text-blue-400" },
+	queued: { dot: "bg-amber-500", bg: "bg-amber-50 dark:bg-amber-500/10", text: "text-amber-700 dark:text-amber-400" },
+	provisioning: { dot: "bg-amber-500 pulse-dot", bg: "bg-amber-50 dark:bg-amber-500/10", text: "text-amber-700 dark:text-amber-400" },
+	degraded: { dot: "bg-amber-500", bg: "bg-amber-50 dark:bg-amber-500/10", text: "text-amber-700 dark:text-amber-400" },
+	failed: { dot: "bg-rose-500", bg: "bg-rose-50 dark:bg-rose-500/10", text: "text-rose-700 dark:text-rose-400" },
+	offline: { dot: "bg-rose-500", bg: "bg-rose-50 dark:bg-rose-500/10", text: "text-rose-700 dark:text-rose-400" },
+	stopped: { dot: "bg-gray-400 dark:bg-gray-500", bg: "bg-gray-50 dark:bg-gray-500/10", text: "text-gray-600 dark:text-gray-400" },
+	exited: { dot: "bg-gray-400 dark:bg-gray-500", bg: "bg-gray-50 dark:bg-gray-500/10", text: "text-gray-600 dark:text-gray-400" },
+	draft: { dot: "bg-gray-400 dark:bg-gray-500", bg: "bg-gray-50 dark:bg-gray-500/10", text: "text-gray-600 dark:text-gray-400" },
+	created: { dot: "bg-gray-400 dark:bg-gray-500", bg: "bg-gray-50 dark:bg-gray-500/10", text: "text-gray-600 dark:text-gray-400" },
+	paused: { dot: "bg-amber-500", bg: "bg-amber-50 dark:bg-amber-500/10", text: "text-amber-700 dark:text-amber-400" },
 };
 
-const fallback = { dot: "bg-muted", text: "text-muted" };
+const fallback = { dot: "bg-gray-400 dark:bg-gray-500", bg: "bg-gray-50 dark:bg-gray-500/10", text: "text-gray-600 dark:text-gray-400" };
 
 export function StatusBadge({ status }: { status: string }) {
 	const normalized = status.toLowerCase().trim();
@@ -23,7 +23,7 @@ export function StatusBadge({ status }: { status: string }) {
 
 	return (
 		<span
-			className={`inline-flex items-center gap-1.5 text-xs font-medium capitalize ${style.text}`}
+			className={`inline-flex items-center gap-1.5 rounded-lg px-2 py-0.5 text-[11px] font-medium capitalize ${style.bg} ${style.text}`}
 		>
 			<span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
 			{status.replaceAll("-", " ")}

@@ -25,7 +25,7 @@ export function DashboardShell({
 			/>
 			<main className="flex min-w-0 flex-1 flex-col">
 				<Topbar onMenuToggle={() => setMobileOpen((prev) => !prev)} />
-				<div className="flex-1 overflow-auto p-4 lg:p-6">
+				<div className="flex-1 overflow-auto p-5 lg:p-8">
 					<div className="mx-auto max-w-[1520px]">{children}</div>
 				</div>
 			</main>

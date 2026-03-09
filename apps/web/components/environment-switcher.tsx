@@ -26,7 +26,7 @@ export function EnvironmentSwitcher({
 				}
 				router.push(`${pathname}?${params.toString()}`);
 			}}
-			className="h-9 w-full rounded-lg border border-default/10 bg-background px-3 text-sm outline-none transition-colors focus:border-foreground/20"
+			className="h-9 w-full rounded-xl border border-default/10 bg-background px-3 text-sm outline-none transition-all duration-200 focus:border-accent/30 focus:ring-2 focus:ring-accent/8"
 		>
 			{environments.map((environment) => (
 				<option key={environment.id} value={environment.id}>

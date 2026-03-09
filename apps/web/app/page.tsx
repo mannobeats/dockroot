@@ -51,40 +51,40 @@ export default function Home() {
 		<PublicLayout>
 			<div className="flex flex-col">
 				{/* Hero */}
-				<section className="relative overflow-hidden pb-20 pt-24 sm:pb-28 sm:pt-32">
+				<section className="relative overflow-hidden pb-24 pt-28 sm:pb-32 sm:pt-36">
 					<div className="absolute inset-0 -z-10 overflow-hidden">
-						<div className="absolute left-1/2 top-0 h-[600px] w-[900px] -translate-x-1/2 -translate-y-1/3 rounded-full bg-accent/8 blur-3xl" />
+						<div className="absolute left-1/2 top-0 h-[600px] w-[900px] -translate-x-1/2 -translate-y-1/3 rounded-full bg-accent/6 blur-3xl" />
 					</div>
 					<div className="mx-auto max-w-7xl px-4 sm:px-6">
 						<div className="mx-auto max-w-2xl text-center">
-							<div className="mb-5 inline-flex items-center gap-2 rounded-full border border-accent/20 bg-accent/5 px-3.5 py-1 text-[13px] font-medium text-accent">
+							<div className="mb-6 inline-flex items-center gap-2 rounded-full border border-accent/15 bg-accent/5 px-4 py-1.5 text-[13px] font-medium text-accent shadow-[var(--shadow-xs)]">
 								<Rocket className="h-3.5 w-3.5" />
 								Compose-Native Control Plane
 							</div>
 							<h1 className="text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
 								Run Docker{" "}
-								<span className="bg-linear-to-r from-accent to-secondary bg-clip-text text-transparent">
+								<span className="text-gradient">
 									Operations Smarter
 								</span>
 							</h1>
-							<p className="mx-auto mt-5 max-w-lg text-[15px] leading-relaxed text-muted">
+							<p className="mx-auto mt-6 max-w-lg text-[15px] leading-relaxed text-muted">
 								Dockroot gives teams a unified control plane for Docker Compose deployments, runtime
 								operations, monitoring, and tenant-aware infrastructure management.
 							</p>
-							<div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+							<div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
 								<Link
 									href="/sign-up"
-									className="inline-flex items-center rounded-lg bg-accent px-5 py-2.5 text-[14px] font-medium text-white transition-colors hover:bg-accent/90"
+									className="inline-flex items-center rounded-xl bg-accent px-6 py-3 text-[14px] font-medium text-white shadow-[var(--shadow-md)] transition-all duration-200 hover:opacity-90 hover:shadow-[var(--shadow-lg)] active:scale-[0.97]"
 								>
-									<Lock className="mr-1.5 h-3.5 w-3.5" />
+									<Lock className="mr-2 h-3.5 w-3.5" />
 									Get Started
 								</Link>
 								<Link
 									href="/dashboard"
-									className="inline-flex items-center rounded-lg border border-default/50 px-5 py-2.5 text-[14px] font-medium transition-colors hover:bg-default/30"
+									className="inline-flex items-center rounded-xl border border-default/15 bg-surface px-6 py-3 text-[14px] font-medium shadow-[var(--shadow-xs)] transition-all duration-200 hover:border-default/30 hover:shadow-[var(--shadow-sm)] active:scale-[0.97]"
 								>
 									View Dashboard
-									<ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+									<ArrowRight className="ml-2 h-3.5 w-3.5" />
 								</Link>
 							</div>
 						</div>
@@ -92,9 +92,9 @@ export default function Home() {
 				</section>
 
 				{/* Features */}
-				<section className="border-t border-default/30 py-20 sm:py-24">
+				<section className="border-t border-default/8 py-24 sm:py-28">
 					<div className="mx-auto max-w-7xl px-4 sm:px-6">
-						<div className="mx-auto mb-12 max-w-lg text-center">
+						<div className="mx-auto mb-14 max-w-lg text-center">
 							<h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Everything You Need</h2>
 							<p className="mt-3 text-[15px] text-muted">
 								The operational building blocks to deploy, observe, and manage containerized
@@ -105,11 +105,11 @@ export default function Home() {
 							{features.map((feature) => (
 								<div
 									key={feature.title}
-									className="group rounded-xl border border-default/40 bg-surface p-5 transition-all hover:border-accent/30 hover:shadow-sm"
+									className="group rounded-2xl border border-default/10 bg-surface p-6 shadow-[var(--shadow-xs)] transition-all duration-300 hover:border-accent/20 hover:shadow-[var(--shadow-md)] hover:-translate-y-1"
 								>
-									<div className="mb-3 flex items-center gap-3">
-										<div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent/10">
-											<feature.icon className="h-4.5 w-4.5 text-accent" />
+									<div className="mb-4 flex items-center gap-3">
+										<div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent/8 transition-colors group-hover:bg-accent/12">
+											<feature.icon className="h-5 w-5 text-accent" />
 										</div>
 										<h3 className="text-[15px] font-semibold">{feature.title}</h3>
 									</div>
@@ -121,7 +121,7 @@ export default function Home() {
 				</section>
 
 				{/* CTA */}
-				<section className="border-t border-default/30 py-20 sm:py-24">
+				<section className="border-t border-default/8 py-24 sm:py-28">
 					<div className="mx-auto max-w-7xl px-4 sm:px-6">
 						<div className="mx-auto max-w-lg text-center">
 							<h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Ready to Deploy?</h2>
@@ -129,9 +129,9 @@ export default function Home() {
 								Bring Dockroot up locally, configure your instance, and start managing deployments
 								from the control plane.
 							</p>
-							<div className="mt-8 overflow-hidden rounded-xl border border-default/40 bg-surface">
-								<pre className="overflow-x-auto p-5 text-left text-[13px] leading-relaxed">
-									<code className="text-foreground/80">
+							<div className="mt-10 overflow-hidden rounded-2xl border border-default/10 bg-console shadow-[var(--shadow-md)]">
+								<pre className="overflow-x-auto p-6 text-left text-[13px] leading-relaxed">
+									<code className="text-console-foreground">
 										{`git clone <your-repo>
 cd dockroot
 cp .env.local.example .env.local

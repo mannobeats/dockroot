@@ -37,19 +37,16 @@ export default function SignInPage() {
 
 	return (
 		<>
-			<div className="flex flex-col items-center gap-2 px-6 pt-8">
-				<div className="flex h-10 w-10 items-center justify-center rounded-lg bg-foreground text-background">
-					<Layers3 className="h-4 w-4" />
-				</div>
-				<h1 className="mt-1 text-lg font-semibold">Welcome back</h1>
-				<p className="text-sm text-muted">Sign in to Dockroot</p>
+			<div className="flex flex-col items-center gap-3 px-8 pt-10">
+				<h1 className="text-xl font-bold tracking-tight">Welcome back</h1>
+				<p className="text-sm text-muted">Sign in to your Dockroot account</p>
 			</div>
-			<form onSubmit={handleSubmit} className="flex flex-col gap-4 px-6 py-6">
+			<form onSubmit={handleSubmit} className="flex flex-col gap-5 px-8 py-8">
 				{error ? <Alert>{error}</Alert> : null}
 				<Field>
 					<FieldLabel htmlFor="email">Email</FieldLabel>
 					<div className="relative">
-						<Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+						<Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted/50" />
 						<Input
 							id="email"
 							type="email"
@@ -65,7 +62,7 @@ export default function SignInPage() {
 				<Field>
 					<FieldLabel htmlFor="password">Password</FieldLabel>
 					<div className="relative">
-						<Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+						<Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted/50" />
 						<Input
 							id="password"
 							type="password"
@@ -95,7 +92,7 @@ export default function SignInPage() {
 					)}
 				</Button>
 			</form>
-			<div className="border-t border-default/10 px-6 py-4 text-center">
+			<div className="border-t border-default/8 px-8 py-5 text-center">
 				<p className="text-xs text-muted">Account creation is controlled by the instance owner.</p>
 			</div>
 		</>

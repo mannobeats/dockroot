@@ -225,11 +225,11 @@ export function LiveLogsWorkspace({
 	});
 
 	return (
-		<div className="grid gap-4 xl:grid-cols-[280px_1fr]">
+		<div className="grid gap-5 xl:grid-cols-[300px_1fr]">
 			{/* Container selector */}
-			<Panel padding="sm">
+			<Panel padding="md">
 				<div className="flex items-center justify-between">
-					<p className="text-sm font-semibold">Containers</p>
+					<p className="text-sm font-semibold tracking-tight">Containers</p>
 					<div className="flex items-center gap-1">
 						<Button
 							type="button"
@@ -283,9 +283,9 @@ export function LiveLogsWorkspace({
 											return next;
 										})
 									}
-									className={`block w-full rounded-lg px-3 py-2.5 text-left text-xs transition-all ${
+									className={`block w-full rounded-xl px-3.5 py-3 text-left text-xs transition-all duration-200 ${
 										active
-											? "bg-foreground/[0.06] text-foreground"
+											? "bg-accent/8 text-foreground shadow-[var(--shadow-xs)]"
 											: "text-muted hover:bg-foreground/[0.03] hover:text-foreground"
 									}`}
 								>
@@ -310,10 +310,10 @@ export function LiveLogsWorkspace({
 			</Panel>
 
 			{/* Log viewer */}
-			<Panel padding="sm">
+			<Panel padding="md">
 				<div className="flex items-center justify-between">
 					<div>
-						<p className="text-sm font-semibold">
+						<p className="text-sm font-semibold tracking-tight">
 							{mode === "grouped"
 								? "Grouped logs"
 								: containers.find((item) => item.id === selectedIds[0])?.name || "Logs"}

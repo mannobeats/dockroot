@@ -52,7 +52,7 @@ type ChartTooltipProps = {
 const CustomTooltip = ({ active, payload, label }: ChartTooltipProps) => {
 	if (!active || !payload?.length) return null;
 	return (
-		<div className="rounded-lg border border-default/10 bg-surface px-3 py-2 shadow-lg">
+		<div className="rounded-xl border border-default/10 bg-surface px-3.5 py-2.5 shadow-[var(--shadow-md)]">
 			<p className="text-xs font-medium text-muted">{label}</p>
 			{payload.map((entry, index) => (
 				<p
@@ -117,17 +117,20 @@ export function LiveRuntimePanel() {
 		latest?.source === "prometheus" ? "Host-wide utilization" : "Average across running containers";
 
 	return (
-		<Panel padding="md">
+		<Panel padding="lg">
 			<div className="flex items-center justify-between gap-4">
 				<div>
-					<div className="flex items-center gap-2">
-						<h3 className="text-sm font-semibold">Live telemetry</h3>
-						<span className="h-1.5 w-1.5 rounded-full bg-success pulse-dot" />
+					<div className="flex items-center gap-2.5">
+						<h3 className="text-sm font-semibold tracking-tight">Live telemetry</h3>
+						<span className="relative flex h-2 w-2">
+							<span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+							<span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+						</span>
 					</div>
 					<p className="mt-0.5 text-xs text-muted">Real-time container resource usage</p>
 				</div>
 			</div>
-			<div className="mt-4 grid gap-3 xl:grid-cols-2">
+			<div className="mt-5 grid gap-4 xl:grid-cols-2">
 				<UtilizationBar
 					label="CPU"
 					valueLabel={`${latest?.cpu ?? 0}%`}
@@ -145,8 +148,8 @@ export function LiveRuntimePanel() {
 					}
 				/>
 			</div>
-			<div className="mt-4 grid gap-4 xl:grid-cols-2">
-				<Panel padding="sm" className="bg-transparent">
+			<div className="mt-5 grid gap-5 xl:grid-cols-2">
+				<div>
 					<p className="text-xs font-medium text-muted">CPU trend</p>
 					<ChartFrame className="mt-2 h-44">
 						{mounted
@@ -154,8 +157,8 @@ export function LiveRuntimePanel() {
 									<AreaChart width={width} height={height} data={history}>
 										<defs>
 											<linearGradient id="runtime-cpu-fill" x1="0" y1="0" x2="0" y2="1">
-												<stop offset="5%" stopColor="var(--foreground)" stopOpacity={0.35} />
-												<stop offset="95%" stopColor="var(--foreground)" stopOpacity={0.05} />
+												<stop offset="5%" stopColor="var(--accent)" stopOpacity={0.25} />
+												<stop offset="95%" stopColor="var(--accent)" stopOpacity={0.02} />
 											</linearGradient>
 										</defs>
 										<CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
@@ -178,15 +181,15 @@ export function LiveRuntimePanel() {
 											dataKey="cpu"
 											name="CPU"
 											fill="url(#runtime-cpu-fill)"
-											stroke="var(--foreground)"
+											stroke="var(--accent)"
 											strokeWidth={2}
 										/>
 									</AreaChart>
 								)
 							: () => null}
 					</ChartFrame>
-				</Panel>
-				<Panel padding="sm" className="bg-transparent">
+				</div>
+				<div>
 					<p className="text-xs font-medium text-muted">Memory trend</p>
 					<ChartFrame className="mt-2 h-44">
 						{mounted
@@ -194,8 +197,8 @@ export function LiveRuntimePanel() {
 									<AreaChart width={width} height={height} data={history}>
 										<defs>
 											<linearGradient id="runtime-memory-fill" x1="0" y1="0" x2="0" y2="1">
-												<stop offset="5%" stopColor="var(--success)" stopOpacity={0.35} />
-												<stop offset="95%" stopColor="var(--success)" stopOpacity={0.05} />
+												<stop offset="5%" stopColor="var(--success)" stopOpacity={0.25} />
+												<stop offset="95%" stopColor="var(--success)" stopOpacity={0.02} />
 											</linearGradient>
 										</defs>
 										<CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
@@ -225,7 +228,7 @@ export function LiveRuntimePanel() {
 								)
 							: () => null}
 					</ChartFrame>
-				</Panel>
+				</div>
 			</div>
 		</Panel>
 	);

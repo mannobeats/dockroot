@@ -140,8 +140,8 @@ export function StacksTableWorkspace({
 	}, [search, stacks]);
 
 	return (
-		<div className="space-y-4">
-			<Panel padding="sm">
+		<div className="space-y-5">
+			<Panel padding="md">
 				<div className="flex flex-col gap-3 sm:flex-row">
 					<Input
 						id="stack-list-search"
@@ -151,7 +151,7 @@ export function StacksTableWorkspace({
 						onChange={(event) => setSearch(event.target.value)}
 						className="flex-1"
 					/>
-					<Button variant="secondary" size="sm" onClick={() => setSearch("")}>
+					<Button variant="outline" size="sm" onClick={() => setSearch("")}>
 						Clear
 					</Button>
 				</div>
@@ -191,7 +191,7 @@ export function StacksTableWorkspace({
 															[rowKey]: !current[rowKey],
 														}))
 													}
-													className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-foreground/[0.05] hover:text-foreground"
+													className="inline-flex h-7 w-7 items-center justify-center rounded-xl text-muted transition-all duration-200 hover:bg-foreground/[0.05] hover:text-foreground"
 													aria-label={
 														expanded ? "Collapse stack services" : "Expand stack services"
 													}
@@ -385,9 +385,9 @@ export function StacksTableWorkspace({
 										{expanded ? (
 											<DataTableRow>
 												<DataTableCell colSpan={7}>
-													<div className="rounded-xl border border-default/10 bg-background/40 p-3">
+													<div className="rounded-2xl border border-default/8 bg-background/60 p-4">
 														<div className="mb-2 flex items-center justify-between">
-															<p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">
+															<p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted/60">
 																Services
 															</p>
 															<p className="text-xs text-muted">
@@ -399,7 +399,7 @@ export function StacksTableWorkspace({
 																{stack.containers.map((container) => (
 																	<div
 																		key={`${rowKey}-${container.ID}`}
-																		className="rounded-lg border border-default/10 bg-surface p-3"
+																		className="rounded-xl border border-default/8 bg-surface p-3.5 transition-all duration-200 hover:shadow-[var(--shadow-xs)]"
 																	>
 																		<div className="flex items-start justify-between gap-2">
 																			<div className="min-w-0">

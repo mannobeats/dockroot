@@ -12,16 +12,16 @@ export function MonitoringHealthGrid({
 	}>;
 }) {
 	return (
-		<Panel padding="md">
+		<Panel padding="lg">
 			<div className="flex items-center justify-between">
-				<h3 className="text-sm font-semibold">Scrape targets</h3>
+				<h3 className="text-sm font-semibold tracking-tight">Scrape targets</h3>
 				<p className="text-xs text-muted">{targets.length} targets</p>
 			</div>
-			<div className="mt-4 grid gap-3 md:grid-cols-2">
+			<div className="mt-5 grid gap-3 md:grid-cols-2">
 				{targets.map((target) => (
 					<div
 						key={target.scrapeUrl}
-						className="rounded-lg border border-default/10 bg-foreground/[0.02] p-4 transition-colors hover:border-default/20"
+						className="rounded-xl border border-default/8 bg-foreground/[0.015] p-4 transition-all duration-200 hover:border-default/20 hover:shadow-[var(--shadow-sm)]"
 					>
 						<div className="flex items-center justify-between gap-3">
 							<p className="text-sm font-medium">{target.job}</p>

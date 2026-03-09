@@ -72,7 +72,7 @@ export default async function DashboardPage({
 	})();
 
 	return (
-		<div className="animate-in space-y-6">
+		<div className="animate-in space-y-8">
 			<PageHeader
 				title={`${greeting}, ${session.user.name}`}
 				description={`${environment.name} environment`}
@@ -98,18 +98,21 @@ export default async function DashboardPage({
 					value={String(data.stackCount)}
 					detail="Tracked workspaces"
 					icon={Layers3}
+					accent="blue"
 				/>
 				<StatCard
 					label="Environments"
 					value={String(data.environmentCount)}
 					detail="Local & remote"
 					icon={Server}
+					accent="green"
 				/>
 				<StatCard
 					label="Deployments"
 					value={String(data.deploymentCount)}
 					detail="Total operations"
 					icon={PlayCircle}
+					accent="amber"
 				/>
 				<StatCard
 					label="Containers"
@@ -120,33 +123,34 @@ export default async function DashboardPage({
 							: "Scoped to workspace"
 					}
 					icon={Boxes}
+					accent="purple"
 				/>
 			</div>
 
 			{/* Host Overview + Recent stacks */}
-			<div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+			<div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
 				{includeRuntime && runtime ? (
-					<Panel padding="md">
+					<Panel padding="lg">
 						<div className="flex items-center justify-between">
 							<div>
-								<h2 className="text-sm font-semibold">{runtime.snapshot.host.hostname}</h2>
+								<h2 className="text-sm font-semibold tracking-tight">{runtime.snapshot.host.hostname}</h2>
 								<p className="mt-0.5 text-xs text-muted">{environment.name}</p>
 							</div>
 							<StatusBadge status="healthy" />
 						</div>
-						<div className="mt-4 grid gap-3 sm:grid-cols-3">
-							<div className="rounded-lg bg-foreground/[0.02] p-3">
-								<p className="text-xs text-muted">Platform</p>
-								<p className="mt-1.5 text-sm font-medium">{runtime.snapshot.host.platform}</p>
+						<div className="mt-5 grid gap-3 sm:grid-cols-3">
+							<div className="rounded-xl bg-foreground/[0.02] p-4">
+								<p className="text-[10px] font-semibold uppercase tracking-wider text-muted/60">Platform</p>
+								<p className="mt-2 text-sm font-semibold">{runtime.snapshot.host.platform}</p>
 								<p className="text-xs text-muted">{runtime.snapshot.host.architecture}</p>
 							</div>
-							<div className="rounded-lg bg-foreground/[0.02] p-3">
-								<p className="text-xs text-muted">Resources</p>
-								<p className="mt-1.5 text-sm font-medium">{runtime.snapshot.host.cpus} CPU</p>
+							<div className="rounded-xl bg-foreground/[0.02] p-4">
+								<p className="text-[10px] font-semibold uppercase tracking-wider text-muted/60">Resources</p>
+								<p className="mt-2 text-sm font-semibold">{runtime.snapshot.host.cpus} CPU</p>
 								<p className="text-xs text-muted">
 									{memoryUsed ?? "—"} / {runtime.snapshot.host.totalMemoryGb} GB
 								</p>
-								<div className="mt-2">
+								<div className="mt-3">
 									<UtilizationBar
 										label="Memory usage"
 										percent={memoryUsedPercent ?? 0}
@@ -154,15 +158,15 @@ export default async function DashboardPage({
 									/>
 								</div>
 							</div>
-							<div className="rounded-lg bg-foreground/[0.02] p-3">
-								<p className="text-xs text-muted">Data directory</p>
-								<p className="mt-1.5 break-all text-xs font-medium">{data.dataDir}</p>
+							<div className="rounded-xl bg-foreground/[0.02] p-4">
+								<p className="text-[10px] font-semibold uppercase tracking-wider text-muted/60">Data directory</p>
+								<p className="mt-2 break-all text-xs font-medium">{data.dataDir}</p>
 							</div>
 						</div>
 					</Panel>
 				) : (
-					<Panel padding="md">
-						<h2 className="text-sm font-semibold">Workspace overview</h2>
+					<Panel padding="lg">
+						<h2 className="text-sm font-semibold tracking-tight">Workspace overview</h2>
 						<p className="mt-2 max-w-lg text-sm text-muted">
 							Scoped to owned environments, stacks, and containers. Host telemetry restricted to
 							privileged operators.
@@ -170,12 +174,12 @@ export default async function DashboardPage({
 					</Panel>
 				)}
 
-				<Panel padding="md">
+				<Panel padding="lg">
 					<div className="flex items-center justify-between">
-						<h2 className="text-sm font-semibold">Recent stacks</h2>
+						<h2 className="text-sm font-semibold tracking-tight">Recent stacks</h2>
 						<Link
 							href={`/dashboard/stacks?environment=${environment.id}`}
-							className="text-xs font-medium text-muted transition-colors hover:text-foreground"
+							className="text-xs font-medium text-accent transition-colors hover:text-accent/80"
 						>
 							View all
 						</Link>
@@ -186,7 +190,7 @@ export default async function DashboardPage({
 								<Link
 									key={stack.id}
 									href={`/dashboard/stacks/${stack.id}`}
-									className="block rounded-lg border border-default/10 p-3 transition-all hover:border-default/20 hover:shadow-sm"
+									className="block rounded-xl border border-default/8 p-3.5 transition-all duration-200 hover:border-default/20 hover:shadow-[var(--shadow-sm)] hover:-translate-y-px"
 								>
 									<div className="flex items-start justify-between gap-3">
 										<div className="min-w-0">
@@ -195,7 +199,7 @@ export default async function DashboardPage({
 												{stack.description || stack.environment.name}
 											</p>
 										</div>
-										<Badge className="shrink-0 px-2 py-0.5 text-xs">{stack.environment.name}</Badge>
+										<Badge className="shrink-0">{stack.environment.name}</Badge>
 									</div>
 								</Link>
 							))
@@ -212,50 +216,50 @@ export default async function DashboardPage({
 			{includeRuntime && environment.kind === "local" ? <LiveRuntimePanel /> : null}
 
 			{/* Latest Activity */}
-			<Panel padding="md">
-				<div className="flex items-center justify-between">
-					<h2 className="text-sm font-semibold">Latest deployments</h2>
-					<Link
-						href={`/dashboard/activity?environment=${environment.id}`}
-						className="text-xs font-medium text-muted transition-colors hover:text-foreground"
-					>
-						View all
-					</Link>
+			<Panel>
+				<div className="px-5 py-4">
+					<div className="flex items-center justify-between">
+						<h2 className="text-sm font-semibold tracking-tight">Latest deployments</h2>
+						<Link
+							href={`/dashboard/activity?environment=${environment.id}`}
+							className="text-xs font-medium text-accent transition-colors hover:text-accent/80"
+						>
+							View all
+						</Link>
+					</div>
 				</div>
-				<div className="mt-4">
-					<DataTable>
-						<DataTableHeader>
-							<tr>
-								<DataTableHead className="px-0">Stack</DataTableHead>
-								<DataTableHead className="px-0">Environment</DataTableHead>
-								<DataTableHead className="px-0">Version</DataTableHead>
-								<DataTableHead className="px-0">Status</DataTableHead>
-							</tr>
-						</DataTableHeader>
-						<DataTableBody>
-							{data.recentDeployments.length ? (
-								data.recentDeployments.map((deployment) => (
-									<DataTableRow key={deployment.id} className="group">
-										<DataTableCell className="px-0 pr-4 font-medium">
-											{deployment.stack.name}
-										</DataTableCell>
-										<DataTableCell className="px-0 pr-4 text-muted">
-											{deployment.environment.name}
-										</DataTableCell>
-										<DataTableCell className="px-0 pr-4 font-mono text-xs text-muted">
-											{deployment.version}
-										</DataTableCell>
-										<DataTableCell className="px-0">
-											<StatusBadge status={deployment.status} />
-										</DataTableCell>
-									</DataTableRow>
-								))
-							) : (
-								<DataTableEmpty colSpan={4}>No deployments yet</DataTableEmpty>
-							)}
-						</DataTableBody>
-					</DataTable>
-				</div>
+				<DataTable>
+					<DataTableHeader>
+						<tr>
+							<DataTableHead>Stack</DataTableHead>
+							<DataTableHead>Environment</DataTableHead>
+							<DataTableHead>Version</DataTableHead>
+							<DataTableHead>Status</DataTableHead>
+						</tr>
+					</DataTableHeader>
+					<DataTableBody>
+						{data.recentDeployments.length ? (
+							data.recentDeployments.map((deployment) => (
+								<DataTableRow key={deployment.id} className="group">
+									<DataTableCell className="font-medium">
+										{deployment.stack.name}
+									</DataTableCell>
+									<DataTableCell className="text-muted">
+										{deployment.environment.name}
+									</DataTableCell>
+									<DataTableCell className="font-mono text-xs text-muted">
+										{deployment.version}
+									</DataTableCell>
+									<DataTableCell>
+										<StatusBadge status={deployment.status} />
+									</DataTableCell>
+								</DataTableRow>
+							))
+						) : (
+							<DataTableEmpty colSpan={4}>No deployments yet</DataTableEmpty>
+						)}
+					</DataTableBody>
+				</DataTable>
 			</Panel>
 		</div>
 	);

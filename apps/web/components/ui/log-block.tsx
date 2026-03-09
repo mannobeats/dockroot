@@ -7,7 +7,7 @@ export const LogBlock = forwardRef<HTMLPreElement, HTMLAttributes<HTMLPreElement
 			<pre
 				ref={ref}
 				className={cn(
-					"log-viewport rounded-lg border border-default/10 bg-console text-xs leading-5 text-console-foreground",
+					"log-viewport rounded-xl border border-default/10 bg-console text-xs leading-6 text-console-foreground shadow-[var(--shadow-sm)]",
 					className,
 				)}
 				{...props}

@@ -57,6 +57,14 @@ const navItems = [
 	},
 ];
 
+const groupLabels: Record<string, string> = {
+	main: "",
+	runtime: "Runtime",
+	resources: "Resources",
+	ops: "Operations",
+	admin: "Admin",
+};
+
 interface SidebarProps {
 	environments: Array<{ id: string; name: string; kind: string }>;
 	defaultEnvironmentId?: string;
@@ -125,7 +133,7 @@ export function Sidebar({
 
 	if (!mounted) {
 		return (
-			<div className="hidden h-screen w-[260px] shrink-0 border-r border-default/10 md:block" />
+			<div className="hidden h-screen w-[260px] shrink-0 border-r border-default/8 md:block" />
 		);
 	}
 
@@ -138,30 +146,30 @@ export function Sidebar({
 					type="button"
 					aria-label="Close sidebar"
 					onClick={onMobileClose}
-					className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm md:hidden"
+					className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm md:hidden"
 				/>
 			) : null}
 
 			<aside
-				className={`fixed inset-y-0 left-0 z-50 flex h-screen flex-col border-r border-default/10 bg-surface transition-all duration-200 ease-out md:sticky md:translate-x-0 ${sidebarWidth} ${
+				className={`fixed inset-y-0 left-0 z-50 flex h-screen flex-col border-r border-default/8 bg-surface transition-all duration-300 ease-out md:sticky md:translate-x-0 ${sidebarWidth} ${
 					mobileOpen ? "translate-x-0" : "-translate-x-full"
 				}`}
 			>
 				{/* Logo / Brand */}
 				<div
-					className={`flex h-14 items-center border-b border-default/10 ${collapsed ? "justify-center px-3" : "justify-between px-5"}`}
+					className={`flex h-[60px] items-center border-b border-default/8 ${collapsed ? "justify-center px-3" : "justify-between px-5"}`}
 				>
 					{!collapsed ? (
 						<Link href="/dashboard" className="flex items-center gap-2.5">
-							<div className="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground text-background">
+							<div className="flex h-8 w-8 items-center justify-center rounded-xl bg-accent text-white shadow-[var(--shadow-sm)]">
 								<Layers3 className="h-4 w-4" />
 							</div>
-							<span className="text-sm font-semibold tracking-tight">Dockroot</span>
+							<span className="text-[15px] font-bold tracking-tight">Dockroot</span>
 						</Link>
 					) : (
 						<Link
 							href="/dashboard"
-							className="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground text-background"
+							className="flex h-8 w-8 items-center justify-center rounded-xl bg-accent text-white shadow-[var(--shadow-sm)]"
 						>
 							<Layers3 className="h-4 w-4" />
 						</Link>
@@ -169,7 +177,7 @@ export function Sidebar({
 					<button
 						type="button"
 						onClick={() => setCollapsed((v) => !v)}
-						className={`hidden h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-default/20 hover:text-foreground md:inline-flex ${collapsed ? "!hidden" : ""}`}
+						className={`hidden h-7 w-7 items-center justify-center rounded-lg text-muted transition-all duration-200 hover:bg-foreground/[0.05] hover:text-foreground md:inline-flex ${collapsed ? "!hidden" : ""}`}
 					>
 						<ChevronLeft className="h-3.5 w-3.5" />
 					</button>
@@ -177,15 +185,15 @@ export function Sidebar({
 
 				{/* Search (expanded only) */}
 				{!collapsed ? (
-					<div className="px-3 pt-3">
+					<div className="px-3 pt-4">
 						<div className="relative">
-							<Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
+							<Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted/50" />
 							<input
 								type="search"
 								value={searchQuery}
 								onChange={(e) => setSearchQuery(e.target.value)}
 								placeholder="Search..."
-								className="h-9 w-full rounded-lg border border-default/10 bg-background pl-9 pr-3 text-sm outline-none transition-colors placeholder:text-muted/60 focus:border-foreground/20"
+								className="h-9 w-full rounded-xl border border-default/10 bg-background pl-9 pr-3 text-sm outline-none transition-all duration-200 placeholder:text-muted/40 focus:border-accent/30 focus:ring-2 focus:ring-accent/8"
 							/>
 						</div>
 					</div>
@@ -202,20 +210,12 @@ export function Sidebar({
 				) : null}
 
 				{/* Navigation */}
-				<nav className={`mt-3 flex-1 overflow-y-auto ${collapsed ? "px-2" : "px-3"}`}>
+				<nav className={`mt-4 flex-1 overflow-y-auto ${collapsed ? "px-2" : "px-3"}`}>
 					{Object.entries(groupedItems).map(([group, items], index) => (
-						<div key={group} className={index > 0 ? "mt-4 border-t border-default/8 pt-4" : ""}>
-							{!collapsed ? (
-								<p className="mb-1.5 px-2 text-[11px] font-medium uppercase tracking-wider text-muted/60">
-									{group === "main"
-										? ""
-										: group === "runtime"
-											? "Runtime"
-											: group === "resources"
-												? "Resources"
-												: group === "ops"
-													? "Operations"
-													: "Admin"}
+						<div key={group} className={index > 0 ? "mt-5 pt-5 border-t border-default/6" : ""}>
+							{!collapsed && groupLabels[group] ? (
+								<p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted/50">
+									{groupLabels[group]}
 								</p>
 							) : null}
 							<div className="space-y-0.5">
@@ -234,16 +234,16 @@ export function Sidebar({
 											key={item.href}
 											href={linkHref}
 											title={collapsed ? item.label : undefined}
-											className={`group flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-all ${
+											className={`group flex items-center gap-2.5 rounded-xl px-3 py-2 text-[13px] font-medium transition-all duration-200 ${
 												collapsed ? "justify-center" : ""
 											} ${
 												isActive
-													? "bg-foreground/[0.06] text-foreground"
+													? "bg-accent/8 text-accent shadow-[var(--shadow-xs)]"
 													: "text-muted hover:bg-foreground/[0.04] hover:text-foreground"
 											}`}
 										>
 											<item.icon
-												className={`h-4 w-4 shrink-0 ${isActive ? "text-foreground" : "text-muted group-hover:text-foreground"}`}
+												className={`h-4 w-4 shrink-0 transition-colors ${isActive ? "text-accent" : "text-muted/70 group-hover:text-foreground"}`}
 											/>
 											{!collapsed ? <span>{item.label}</span> : null}
 										</Link>
@@ -256,11 +256,11 @@ export function Sidebar({
 
 				{/* Collapse toggle (bottom of sidebar) */}
 				{collapsed ? (
-					<div className="border-t border-default/10 px-2 py-3">
+					<div className="border-t border-default/8 px-2 py-3">
 						<button
 							type="button"
 							onClick={() => setCollapsed(false)}
-							className="flex h-9 w-full items-center justify-center rounded-lg text-muted transition-colors hover:bg-foreground/[0.04] hover:text-foreground"
+							className="flex h-9 w-full items-center justify-center rounded-xl text-muted transition-all duration-200 hover:bg-foreground/[0.04] hover:text-foreground"
 						>
 							<ChevronRight className="h-4 w-4" />
 						</button>
@@ -269,9 +269,9 @@ export function Sidebar({
 
 				{/* User section */}
 				{session && !collapsed ? (
-					<div className="border-t border-default/10 p-3">
-						<div className="flex items-center gap-3 rounded-lg p-2">
-							<div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-foreground/[0.06] text-xs font-semibold">
+					<div className="border-t border-default/8 p-3">
+						<div className="flex items-center gap-3 rounded-xl p-2 transition-colors hover:bg-foreground/[0.03]">
+							<div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-accent/10 text-xs font-bold text-accent">
 								{session.user.name?.charAt(0)?.toUpperCase() || "U"}
 							</div>
 							<div className="min-w-0 flex-1">
@@ -282,7 +282,7 @@ export function Sidebar({
 								type="button"
 								onClick={handleSignOut}
 								title="Sign out"
-								className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
+								className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted transition-all duration-200 hover:bg-foreground/[0.06] hover:text-foreground"
 							>
 								<LogOut className="h-3.5 w-3.5" />
 							</button>
@@ -290,12 +290,12 @@ export function Sidebar({
 					</div>
 				) : null}
 				{session && collapsed ? (
-					<div className="border-t border-default/10 p-2 py-3">
+					<div className="border-t border-default/8 p-2 py-3">
 						<button
 							type="button"
 							onClick={handleSignOut}
 							title="Sign out"
-							className="flex h-9 w-full items-center justify-center rounded-lg text-muted transition-colors hover:bg-foreground/[0.04] hover:text-foreground"
+							className="flex h-9 w-full items-center justify-center rounded-xl text-muted transition-all duration-200 hover:bg-foreground/[0.04] hover:text-foreground"
 						>
 							<LogOut className="h-4 w-4" />
 						</button>
