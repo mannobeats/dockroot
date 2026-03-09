@@ -1,6 +1,6 @@
 import { Server } from "lucide-react";
-import { publicEnv } from "@/lib/public-env";
 import { Badge } from "@/components/ui/badge";
+import { publicEnv } from "@/lib/public-env";
 
 export function Footer() {
 	return (

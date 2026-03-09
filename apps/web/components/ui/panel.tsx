@@ -1,5 +1,5 @@
-import type { HTMLAttributes, ReactNode } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
+import type { HTMLAttributes, ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
 const panelVariants = cva("rounded-2xl border bg-surface transition-all duration-200", {
@@ -28,34 +28,28 @@ const panelVariants = cva("rounded-2xl border bg-surface transition-all duration
 	},
 });
 
-type PanelProps = HTMLAttributes<HTMLDivElement> &
-	VariantProps<typeof panelVariants>;
+type PanelProps = HTMLAttributes<HTMLDivElement> & VariantProps<typeof panelVariants>;
 
 export function Panel({ className, padding, tone, interactive, ...props }: PanelProps) {
-	return <div className={cn(panelVariants({ padding, tone, interactive }), className)} {...props} />;
+	return (
+		<div className={cn(panelVariants({ padding, tone, interactive }), className)} {...props} />
+	);
 }
 
-export function PanelHeader({
-	className,
-	children,
-}: {
-	className?: string;
-	children: ReactNode;
-}) {
+export function PanelHeader({ className, children }: { className?: string; children: ReactNode }) {
 	return (
-		<div className={cn("flex items-start justify-between gap-3 border-b border-default/8 px-5 py-3.5", className)}>
+		<div
+			className={cn(
+				"flex items-start justify-between gap-3 border-b border-default/8 px-5 py-3.5",
+				className,
+			)}
+		>
 			{children}
 		</div>
 	);
 }
 
-export function PanelTitle({
-	className,
-	children,
-}: {
-	className?: string;
-	children: ReactNode;
-}) {
+export function PanelTitle({ className, children }: { className?: string; children: ReactNode }) {
 	return <h2 className={cn("text-sm font-semibold tracking-tight", className)}>{children}</h2>;
 }
 
@@ -69,12 +63,6 @@ export function PanelDescription({
 	return <p className={cn("mt-1 text-xs text-muted", className)}>{children}</p>;
 }
 
-export function PanelContent({
-	className,
-	children,
-}: {
-	className?: string;
-	children: ReactNode;
-}) {
+export function PanelContent({ className, children }: { className?: string; children: ReactNode }) {
 	return <div className={cn("p-5", className)}>{children}</div>;
 }

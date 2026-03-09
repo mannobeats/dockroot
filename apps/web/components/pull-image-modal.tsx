@@ -34,7 +34,9 @@ export function PullImageModal({
 						placeholder="ghcr.io/owner/image:tag"
 					/>
 					<p className="mt-1.5 text-[11px] text-muted">
-						Full registry path including tag, e.g. <code className="text-foreground/60">nginx:latest</code> or <code className="text-foreground/60">ghcr.io/org/app:v2</code>
+						Full registry path including tag, e.g.{" "}
+						<code className="text-foreground/60">nginx:latest</code> or{" "}
+						<code className="text-foreground/60">ghcr.io/org/app:v2</code>
 					</p>
 				</Field>
 				<div className="flex justify-end gap-2 pt-2">

@@ -4,11 +4,11 @@ import { Lock, Mail, Server, User, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { signUp } from "@/lib/auth-client";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { signUp } from "@/lib/auth-client";
 
 export default function SignUpPage() {
 	const router = useRouter();
@@ -106,13 +106,7 @@ export default function SignUpPage() {
 						/>
 					</div>
 				</Field>
-				<Button
-					type="submit"
-					disabled={loading}
-					size="lg"
-					fullWidth
-					className="mt-1 text-[14px]"
-				>
+				<Button type="submit" disabled={loading} size="lg" fullWidth className="mt-1 text-[14px]">
 					{loading ? (
 						"Creating account..."
 					) : (

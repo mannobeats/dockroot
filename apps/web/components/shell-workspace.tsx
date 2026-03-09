@@ -110,6 +110,8 @@ export function ShellWorkspace({
 
 	const selectedContainer =
 		containers.find((container) => container.id === containerId) || filteredContainers[0] || null;
+	const selectedContainerId = selectedContainer?.id || "";
+	const selectedContainerName = selectedContainer?.name || "Container";
 
 	/* ── select a container and navigate ── */
 	function selectContainer(id: string) {
@@ -138,14 +140,14 @@ export function ShellWorkspace({
 
 	/* ── Terminal lifecycle ── */
 	useEffect(() => {
-		if (!attached || !terminalRef.current || !selectedContainer) {
+		if (!attached || !terminalRef.current || !selectedContainerId) {
 			return;
 		}
 
 		let disposed = false;
 		let cleanup = () => {};
-		const containerId = selectedContainer.id;
-		const label = selectedContainer.name || "Container";
+		const containerId = selectedContainerId;
+		const label = selectedContainerName;
 
 		void (async () => {
 			const [{ FitAddon }, { WebLinksAddon }, { Terminal }] = await Promise.all([
@@ -443,7 +445,15 @@ export function ShellWorkspace({
 			disposed = true;
 			cleanup();
 		};
-	}, [attached, selectedContainer?.id, customShell, environmentId, shell, transport]);
+	}, [
+		attached,
+		selectedContainerId,
+		selectedContainerName,
+		customShell,
+		environmentId,
+		shell,
+		transport,
+	]);
 
 	return (
 		<div className="grid gap-5 xl:grid-cols-[300px_1fr]">
@@ -563,12 +573,7 @@ export function ShellWorkspace({
 								aria-label="Custom shell path"
 							/>
 						) : null}
-						<Button
-							type="button"
-							onClick={handleAttach}
-							size="xs"
-							disabled={!selectedContainer}
-						>
+						<Button type="button" onClick={handleAttach} size="xs" disabled={!selectedContainer}>
 							Attach
 						</Button>
 					</div>
@@ -595,9 +600,7 @@ export function ShellWorkspace({
 								<p className="mt-3 text-sm font-medium text-muted">
 									Select a container and click Attach
 								</p>
-								<p className="mt-1 text-xs text-muted/60">
-									to open an interactive shell session
-								</p>
+								<p className="mt-1 text-xs text-muted/60">to open an interactive shell session</p>
 							</div>
 						</div>
 					</div>

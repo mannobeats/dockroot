@@ -30,11 +30,8 @@ export async function GET(
 			environmentId,
 		);
 		return NextResponse.json(result.browser);
-	} catch (error) {
-		return NextResponse.json(
-			{ error: "Unable to browse files." },
-			{ status: 500 },
-		);
+	} catch (_error) {
+		return NextResponse.json({ error: "Unable to browse files." }, { status: 500 });
 	}
 }
 
@@ -66,11 +63,8 @@ export async function PUT(
 			environmentId,
 		);
 		return NextResponse.json({ ok: result.ok, output: result.stderr || result.stdout });
-	} catch (error) {
-		return NextResponse.json(
-			{ error: "Unable to save file." },
-			{ status: 500 },
-		);
+	} catch (_error) {
+		return NextResponse.json({ error: "Unable to save file." }, { status: 500 });
 	}
 }
 
@@ -106,11 +100,8 @@ export async function POST(
 			environmentId,
 		);
 		return NextResponse.json({ ok: result.ok, output: result.stderr || result.stdout });
-	} catch (error) {
-		return NextResponse.json(
-			{ error: "Unable to upload file." },
-			{ status: 500 },
-		);
+	} catch (_error) {
+		return NextResponse.json({ error: "Unable to upload file." }, { status: 500 });
 	}
 }
 
@@ -141,10 +132,7 @@ export async function DELETE(
 			environmentId,
 		);
 		return NextResponse.json({ ok: result.ok, output: result.stderr || result.stdout });
-	} catch (error) {
-		return NextResponse.json(
-			{ error: "Unable to delete path." },
-			{ status: 500 },
-		);
+	} catch (_error) {
+		return NextResponse.json({ error: "Unable to delete path." }, { status: 500 });
 	}
 }

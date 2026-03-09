@@ -129,19 +129,25 @@ export default async function DashboardPage({
 					<Panel padding="lg">
 						<div className="flex items-center justify-between">
 							<div>
-								<h2 className="text-sm font-semibold tracking-tight">{runtime.snapshot.host.hostname}</h2>
+								<h2 className="text-sm font-semibold tracking-tight">
+									{runtime.snapshot.host.hostname}
+								</h2>
 								<p className="mt-0.5 text-xs text-muted">{environment.name}</p>
 							</div>
 							<StatusBadge status="healthy" />
 						</div>
 						<div className="mt-5 grid gap-3 sm:grid-cols-3">
 							<div className="rounded-xl bg-foreground/[0.02] p-4">
-								<p className="text-[10px] font-semibold uppercase tracking-wider text-muted/60">Platform</p>
+								<p className="text-[10px] font-semibold uppercase tracking-wider text-muted/60">
+									Platform
+								</p>
 								<p className="mt-2 text-sm font-semibold">{runtime.snapshot.host.platform}</p>
 								<p className="text-xs text-muted">{runtime.snapshot.host.architecture}</p>
 							</div>
 							<div className="rounded-xl bg-foreground/[0.02] p-4">
-								<p className="text-[10px] font-semibold uppercase tracking-wider text-muted/60">Resources</p>
+								<p className="text-[10px] font-semibold uppercase tracking-wider text-muted/60">
+									Resources
+								</p>
 								<p className="mt-2 text-sm font-semibold">{runtime.snapshot.host.cpus} CPU</p>
 								<p className="text-xs text-muted">
 									{memoryUsed ?? "—"} / {runtime.snapshot.host.totalMemoryGb} GB
@@ -155,7 +161,9 @@ export default async function DashboardPage({
 								</div>
 							</div>
 							<div className="rounded-xl bg-foreground/[0.02] p-4">
-								<p className="text-[10px] font-semibold uppercase tracking-wider text-muted/60">Data directory</p>
+								<p className="text-[10px] font-semibold uppercase tracking-wider text-muted/60">
+									Data directory
+								</p>
 								<p className="mt-2 break-all text-xs font-medium">{data.dataDir}</p>
 							</div>
 						</div>
@@ -237,9 +245,7 @@ export default async function DashboardPage({
 						{data.recentDeployments.length ? (
 							data.recentDeployments.map((deployment) => (
 								<DataTableRow key={deployment.id} className="group">
-									<DataTableCell className="font-medium">
-										{deployment.stack.name}
-									</DataTableCell>
+									<DataTableCell className="font-medium">{deployment.stack.name}</DataTableCell>
 									<DataTableCell className="text-muted">
 										{deployment.environment.name}
 									</DataTableCell>

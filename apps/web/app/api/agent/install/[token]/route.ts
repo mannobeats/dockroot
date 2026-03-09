@@ -145,9 +145,9 @@ echo "Manager URL: \${MANAGER_URL}"
 `;
 
 	return new NextResponse(script, {
-			headers: {
-				"content-type": "text/x-shellscript; charset=utf-8",
-				"content-disposition": `inline; filename="dockroot-agent-install-${environment.slug}.sh"`,
-			},
-		});
+		headers: {
+			"content-type": "text/x-shellscript; charset=utf-8",
+			"content-disposition": `inline; filename="dockroot-agent-install-${environment.slug}.sh"`,
+		},
+	});
 }

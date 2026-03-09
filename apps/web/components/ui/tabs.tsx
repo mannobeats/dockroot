@@ -28,12 +28,6 @@ export function TabsTrigger({
 	);
 }
 
-export function TabsPanel({
-	className,
-	children,
-}: {
-	className?: string;
-	children: ReactNode;
-}) {
+export function TabsPanel({ className, children }: { className?: string; children: ReactNode }) {
 	return <div className={cn("mt-6 animate-in", className)}>{children}</div>;
 }

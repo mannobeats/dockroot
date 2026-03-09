@@ -6,15 +6,10 @@ export function Field({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
 }
 
 export function FieldLabel({ className, ...props }: LabelHTMLAttributes<HTMLLabelElement>) {
+	// biome-ignore lint/a11y/noLabelWithoutControl: this is a reusable label component; callers provide htmlFor.
 	return <label className={cn("text-xs font-medium text-muted", className)} {...props} />;
 }
 
-export function FieldHint({
-	className,
-	children,
-}: {
-	className?: string;
-	children: ReactNode;
-}) {
+export function FieldHint({ className, children }: { className?: string; children: ReactNode }) {
 	return <p className={cn("text-xs text-muted", className)}>{children}</p>;
 }

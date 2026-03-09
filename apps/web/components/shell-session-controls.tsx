@@ -201,10 +201,7 @@ export function ShellSessionControls({
 				>
 					<div className="space-y-3">
 						<div className="space-y-1.5">
-							<label
-								htmlFor="shell-kind"
-								className="block text-xs font-medium text-muted"
-							>
+							<label htmlFor="shell-kind" className="block text-xs font-medium text-muted">
 								Shell type
 							</label>
 							<Select
@@ -221,8 +218,11 @@ export function ShellSessionControls({
 						</div>
 						{shell === "custom" ? (
 							<div className="space-y-1.5">
-								<label className="block text-xs font-medium text-muted">Custom shell path</label>
+								<label htmlFor="custom-shell-path" className="block text-xs font-medium text-muted">
+									Custom shell path
+								</label>
 								<Input
+									id="custom-shell-path"
 									value={customShell}
 									onChange={(event) => setCustomShell(event.target.value)}
 									placeholder="/bin/fish"

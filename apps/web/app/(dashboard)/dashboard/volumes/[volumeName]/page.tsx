@@ -50,13 +50,21 @@ export default async function VolumeDetailPage({
 
 			{/* Info grid */}
 			<div className="grid gap-3 sm:grid-cols-3">
-				<MetricCard label="Driver" value={String(volume.Driver || "local")} valueClassName="text-sm" />
+				<MetricCard
+					label="Driver"
+					value={String(volume.Driver || "local")}
+					valueClassName="text-sm"
+				/>
 				<MetricCard
 					label="Mount point"
 					value={String(volume.Mountpoint || "Managed by Docker")}
 					valueClassName="break-all text-sm"
 				/>
-				<MetricCard label="Scope" value={String(volume.Scope || "local")} valueClassName="text-sm" />
+				<MetricCard
+					label="Scope"
+					value={String(volume.Scope || "local")}
+					valueClassName="text-sm"
+				/>
 			</div>
 
 			{/* Inspect payload */}

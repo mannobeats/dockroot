@@ -65,10 +65,10 @@ export const auth = betterAuth({
 	},
 	databaseHooks: {
 		user: {
-				create: {
-					before: async (user) => {
-						const [{ value: existingUsers }] = await db.select({ value: count() }).from(schema.user);
-						const ownerRows = await db.execute<{ key: string }>(sql`
+			create: {
+				before: async (user) => {
+					const [{ value: existingUsers }] = await db.select({ value: count() }).from(schema.user);
+					const ownerRows = await db.execute<{ key: string }>(sql`
 							with reset as (
 								delete from "instance_bootstrap"
 								where "key" = 'owner-bootstrap'
@@ -86,24 +86,24 @@ export const auth = betterAuth({
 							select "key" from claim
 						`);
 
-						if (ownerRows.length > 0) {
-							return {
-								data: {
-									...user,
+					if (ownerRows.length > 0) {
+						return {
+							data: {
+								...user,
 								role: "owner",
 							},
 						};
-						}
+					}
 
-						if (!existingUsers) {
-							throw new APIError("FORBIDDEN", {
-								message: "Instance bootstrap is already in progress. Please try again.",
-							});
-						}
+					if (!existingUsers) {
+						throw new APIError("FORBIDDEN", {
+							message: "Instance bootstrap is already in progress. Please try again.",
+						});
+					}
 
-						if (!publicSignupsAllowed()) {
-							throw new APIError("FORBIDDEN", {
-								message: "Public sign-up is disabled for this instance.",
+					if (!publicSignupsAllowed()) {
+						throw new APIError("FORBIDDEN", {
+							message: "Public sign-up is disabled for this instance.",
 						});
 					}
 

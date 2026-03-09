@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import * as pty from "node-pty";
+import { spawn } from "node:child_process";
 
 const terminalSessions = new Map();
 const supportedShells = new Set(["sh", "bash", "ash", "zsh"]);
@@ -92,26 +93,78 @@ async function buildCommand(payload) {
 
 	return {
 		file: dockerBinary,
-		args: ["exec", "-it", payload.containerId, shell, "-i"],
+		ptyArgs: ["exec", "-it", payload.containerId, shell, "-i"],
+		pipeArgs: ["exec", "-i", payload.containerId, shell, "-i"],
 		cwd: "/",
 	};
 }
 
-export async function createLocalTerminalSession(payload) {
-	const command = await buildCommand(payload);
-	const cols = Math.max(40, Math.min(300, Number(payload?.cols || 120)));
-	const rows = Math.max(12, Math.min(120, Number(payload?.rows || 36)));
-	const processHandle = pty.spawn(command.file, command.args, {
-		name: "xterm-color",
-		cols,
-		rows,
+function createPipeProcess(command) {
+	const child = spawn(command.file, command.pipeArgs, {
 		cwd: command.cwd,
 		env: {
 			...process.env,
 			TERM: process.env.TERM || "xterm-256color",
 			COLORTERM: process.env.COLORTERM || "truecolor",
 		},
+		stdio: ["pipe", "pipe", "pipe"],
 	});
+
+	return {
+		onData(callback) {
+			child.stdout?.on("data", (chunk) => callback(String(chunk || "")));
+			child.stderr?.on("data", (chunk) => callback(String(chunk || "")));
+		},
+		onExit(callback) {
+			child.on("exit", (exitCode) => {
+				callback({ exitCode: exitCode ?? 0 });
+			});
+			child.on("error", () => {
+				callback({ exitCode: 1 });
+			});
+		},
+		write(data) {
+			child.stdin?.write(String(data || ""));
+		},
+		resize() {},
+		kill() {
+			child.kill("SIGTERM");
+			setTimeout(() => {
+				child.kill("SIGKILL");
+			}, 1_000).unref?.();
+		},
+	};
+}
+
+function createTerminalProcess(command, cols, rows) {
+	try {
+		return {
+			process: pty.spawn(command.file, command.ptyArgs, {
+				name: "xterm-color",
+				cols,
+				rows,
+				cwd: command.cwd,
+				env: {
+					...process.env,
+					TERM: process.env.TERM || "xterm-256color",
+					COLORTERM: process.env.COLORTERM || "truecolor",
+				},
+			}),
+			compatibilityMode: false,
+		};
+	} catch {
+		return {
+			process: createPipeProcess(command),
+			compatibilityMode: true,
+		};
+	}
+}
+
+export async function createLocalTerminalSession(payload) {
+	const command = await buildCommand(payload);
+	const cols = Math.max(40, Math.min(300, Number(payload?.cols || 120)));
+	const rows = Math.max(12, Math.min(120, Number(payload?.rows || 36)));
+	const { process: processHandle, compatibilityMode } = createTerminalProcess(command, cols, rows);
 
 	const sessionId = globalThis.crypto.randomUUID();
 	const session = {
@@ -121,6 +174,14 @@ export async function createLocalTerminalSession(payload) {
 		closed: false,
 		exitCode: null,
 	};
+
+	if (compatibilityMode) {
+		session.events.push({
+			cursor: session.nextCursor,
+			data: "Terminal is running in compatibility mode.\r\n",
+		});
+		session.nextCursor += 1;
+	}
 
 	const onData = (chunk) => {
 		session.events.push({

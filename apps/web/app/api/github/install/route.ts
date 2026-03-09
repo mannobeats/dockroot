@@ -7,7 +7,7 @@ import {
 } from "@/lib/github-app";
 import { getServerSession } from "@/lib/session";
 
-function useSecureCookies() {
+function shouldUseSecureCookies() {
 	return process.env.SESSION_COOKIE_SECURE === undefined
 		? process.env.NODE_ENV === "production"
 		: process.env.SESSION_COOKIE_SECURE === "true";
@@ -33,14 +33,14 @@ export async function GET(request: Request) {
 	response.cookies.set("dockroot_github_redirect_to", redirectTo, {
 		httpOnly: true,
 		sameSite: "lax",
-		secure: useSecureCookies(),
+		secure: shouldUseSecureCookies(),
 		path: "/",
 		maxAge: 60 * 10,
 	});
 	response.cookies.set("dockroot_github_user_id", session.user.id, {
 		httpOnly: true,
 		sameSite: "lax",
-		secure: useSecureCookies(),
+		secure: shouldUseSecureCookies(),
 		path: "/",
 		maxAge: 60 * 10,
 	});

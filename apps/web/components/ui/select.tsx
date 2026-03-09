@@ -1,5 +1,5 @@
-import type { SelectHTMLAttributes } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
+import type { SelectHTMLAttributes } from "react";
 import { cn } from "@/lib/cn";
 
 const selectVariants = cva(

@@ -36,7 +36,8 @@ const features = [
 	{
 		icon: Container,
 		title: "Clean Deployment Modes",
-		description: "Host-run development and full Docker deployment use one consistent, documented flow.",
+		description:
+			"Host-run development and full Docker deployment use one consistent, documented flow.",
 	},
 	{
 		icon: Terminal,
@@ -62,10 +63,7 @@ export default function Home() {
 								Compose-Native Control Plane
 							</div>
 							<h1 className="text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
-								Run Docker{" "}
-								<span className="text-gradient">
-									Operations Smarter
-								</span>
+								Run Docker <span className="text-gradient">Operations Smarter</span>
 							</h1>
 							<p className="mx-auto mt-6 max-w-lg text-[15px] leading-relaxed text-muted">
 								Dockroot gives teams a unified control plane for Docker Compose deployments, runtime

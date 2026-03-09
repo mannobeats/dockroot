@@ -83,7 +83,9 @@ export function PrometheusOverview({
 				</div>
 				<div className="mt-5 grid gap-5 xl:grid-cols-2">
 					<div>
-						<p className="text-xs font-medium text-muted">CPU {metrics.cpuPercent?.toFixed(1) ?? "—"}%</p>
+						<p className="text-xs font-medium text-muted">
+							CPU {metrics.cpuPercent?.toFixed(1) ?? "—"}%
+						</p>
 						<ChartFrame className="mt-2 h-56">
 							{({ width, height }) => (
 								<AreaChart width={width} height={height} data={metrics.cpuSeries}>
@@ -121,7 +123,9 @@ export function PrometheusOverview({
 						</ChartFrame>
 					</div>
 					<div>
-						<p className="text-xs font-medium text-muted">Memory {metrics.memoryPercent?.toFixed(1) ?? "—"}%</p>
+						<p className="text-xs font-medium text-muted">
+							Memory {metrics.memoryPercent?.toFixed(1) ?? "—"}%
+						</p>
 						<ChartFrame className="mt-2 h-56">
 							{({ width, height }) => (
 								<AreaChart width={width} height={height} data={metrics.memorySeries}>

@@ -1,6 +1,14 @@
 "use client";
 
-import { Check, ChevronDown, ChevronRight, GitBranch, RefreshCw, Search, Sparkles } from "lucide-react";
+import {
+	Check,
+	ChevronDown,
+	ChevronRight,
+	GitBranch,
+	RefreshCw,
+	Search,
+	Sparkles,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { CodeEditor } from "@/components/code-editor";
 import { FormSubmitButton } from "@/components/form-submit-button";
@@ -11,7 +19,6 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { LinkButton } from "@/components/ui/link-button";
-import { Panel } from "@/components/ui/panel";
 import { Select } from "@/components/ui/select";
 
 interface InstallationRepository {
@@ -416,7 +423,10 @@ export function StackGitHubForm({
 										{active ? <Check className="h-3.5 w-3.5 shrink-0 text-accent" /> : null}
 										<span className="truncate font-medium">{repository.full_name}</span>
 									</div>
-									<Badge variant={repository.private ? "warning" : "success"} className="text-[10px]">
+									<Badge
+										variant={repository.private ? "warning" : "success"}
+										className="text-[10px]"
+									>
 										{repository.private ? "private" : "public"}
 									</Badge>
 								</button>
@@ -519,9 +529,7 @@ export function StackGitHubForm({
 				</div>
 				{pathSuggestions.length ? (
 					<div className="mt-3 flex flex-wrap items-center gap-1.5">
-						<span className="text-[10px] text-muted uppercase tracking-wider mr-1">
-							Detected:
-						</span>
+						<span className="text-[10px] text-muted uppercase tracking-wider mr-1">Detected:</span>
 						{pathSuggestions.map((path) => (
 							<button
 								key={path}
@@ -621,11 +629,7 @@ export function StackGitHubForm({
 							? `${selectedRepository.full_name}`
 							: "Select a repository above"}
 					</p>
-					<FormSubmitButton
-						label="Create stack"
-						pendingLabel="Creating..."
-						size="sm"
-					/>
+					<FormSubmitButton label="Create stack" pendingLabel="Creating..." size="sm" />
 				</div>
 			</div>
 		</form>

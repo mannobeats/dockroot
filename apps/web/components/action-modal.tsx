@@ -1,7 +1,7 @@
 "use client";
 
-import { X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 
@@ -82,9 +82,7 @@ export function ActionModal({
 								) : null}
 								<div>
 									<p className="text-sm font-semibold">{title}</p>
-									{description ? (
-										<p className="mt-0.5 text-xs text-muted">{description}</p>
-									) : null}
+									{description ? <p className="mt-0.5 text-xs text-muted">{description}</p> : null}
 								</div>
 							</div>
 							<button

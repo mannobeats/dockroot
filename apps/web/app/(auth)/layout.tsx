@@ -1,9 +1,9 @@
 import { Layers3 } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Panel } from "@/components/ui/panel";
 import { publicEnv } from "@/lib/public-env";
 import { getServerSession } from "@/lib/session";
-import { Panel } from "@/components/ui/panel";
 
 export default async function AuthLayout({ children }: { children: React.ReactNode }) {
 	const session = await getServerSession();

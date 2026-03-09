@@ -75,7 +75,11 @@ export default async function ImageDetailPage({
 
 			{/* Info grid */}
 			<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-				<MetricCard label="Architecture" value={String(image.Architecture || "unknown")} valueClassName="text-sm" />
+				<MetricCard
+					label="Architecture"
+					value={String(image.Architecture || "unknown")}
+					valueClassName="text-sm"
+				/>
 				<MetricCard label="OS" value={String(image.Os || "unknown")} valueClassName="text-sm" />
 				<MetricCard label="Size" value={String(image.Size || "unknown")} valueClassName="text-sm" />
 				<MetricCard label="Containers" value={attachedContainers.length} valueClassName="text-sm" />

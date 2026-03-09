@@ -1,5 +1,5 @@
-import type { HTMLAttributes } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
+import type { HTMLAttributes } from "react";
 import { cn } from "@/lib/cn";
 
 const alertVariants = cva("rounded-xl px-4 py-3 text-sm", {

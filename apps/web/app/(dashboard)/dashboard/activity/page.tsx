@@ -26,7 +26,11 @@ export default async function ActivityPage() {
 			<div className="space-y-3">
 				{deployments.length ? (
 					deployments.map((deployment) => (
-						<Panel key={deployment.id} padding="md" className="transition-all hover:border-default/20">
+						<Panel
+							key={deployment.id}
+							padding="md"
+							className="transition-all hover:border-default/20"
+						>
 							<div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
 								<div>
 									<div className="flex items-center gap-2">
@@ -46,9 +50,7 @@ export default async function ActivityPage() {
 								{deployment.summary || "Awaiting result..."}
 							</p>
 							{deployment.log ? (
-								<LogBlock className="mt-3 max-h-48 p-4">
-									{deployment.log}
-								</LogBlock>
+								<LogBlock className="mt-3 max-h-48 p-4">{deployment.log}</LogBlock>
 							) : null}
 						</Panel>
 					))

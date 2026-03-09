@@ -1,13 +1,13 @@
 "use client";
 
-import { Layers3, Lock, LogIn, Mail } from "lucide-react";
+import { Lock, LogIn, Mail } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { signIn } from "@/lib/auth-client";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { signIn } from "@/lib/auth-client";
 
 export default function SignInPage() {
 	const router = useRouter();
@@ -75,13 +75,7 @@ export default function SignInPage() {
 						/>
 					</div>
 				</Field>
-				<Button
-					type="submit"
-					disabled={loading}
-					size="lg"
-					fullWidth
-					className="mt-1"
-				>
+				<Button type="submit" disabled={loading} size="lg" fullWidth className="mt-1">
 					{loading ? (
 						"Signing in..."
 					) : (

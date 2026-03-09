@@ -57,8 +57,16 @@ export default async function NetworkDetailPage({
 
 			{/* Info */}
 			<div className="grid gap-3 sm:grid-cols-3">
-				<MetricCard label="Driver" value={String(network.Driver || "unknown")} valueClassName="text-sm" />
-				<MetricCard label="Scope" value={String(network.Scope || "local")} valueClassName="text-sm" />
+				<MetricCard
+					label="Driver"
+					value={String(network.Driver || "unknown")}
+					valueClassName="text-sm"
+				/>
+				<MetricCard
+					label="Scope"
+					value={String(network.Scope || "local")}
+					valueClassName="text-sm"
+				/>
 				<MetricCard label="Containers" value={containers.length} valueClassName="text-sm" />
 			</div>
 
