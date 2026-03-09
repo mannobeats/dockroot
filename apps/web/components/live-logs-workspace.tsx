@@ -256,7 +256,7 @@ export function LiveLogsWorkspace({
 					type="search"
 					value={query}
 					onChange={(event) => setQuery(event.target.value)}
-					placeholder="Filter..."
+					placeholder="Search..."
 					inputSize="sm"
 					className="mt-3 text-xs"
 					aria-label="Filter containers"

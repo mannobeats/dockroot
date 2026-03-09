@@ -1,6 +1,5 @@
 import { PageHeader } from "@/components/page-header";
-import { ShellSessionControls } from "@/components/shell-session-controls";
-import { TerminalPanel } from "@/components/terminal-panel";
+import { ShellWorkspace } from "@/components/shell-workspace";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireUserSession } from "@/lib/authorization";
 import { resolveRuntimeEnvironment } from "@/lib/environment-runtime";
@@ -34,8 +33,6 @@ export default async function ShellPage({
 		? containers.find((container: Record<string, string>) => container.ID === params.containerId) ||
 			null
 		: null;
-	const activeContainer = selectedContainer || containers[0] || null;
-	const shouldRenderTerminal = Boolean(activeContainer);
 	const transport = environment.kind === "local" ? "local" : "remote";
 
 	return (
@@ -46,41 +43,26 @@ export default async function ShellPage({
 				description="Attach to a running container in your environment."
 			/>
 
-			<ShellSessionControls
-				environmentId={environment.id}
-				containers={containers.map((container: Record<string, string>) => ({
-					id: container.ID,
-					name: container.Names,
-					state: container.State,
-					status: container.Status,
-					image: container.Image,
-				}))}
-				initialContainerId={selectedContainer?.ID}
-				initialShell={shell}
-				initialCustomShell={customShell}
-			/>
-
 			{containers.length === 0 ? (
 				<EmptyState
 					title="No accessible containers available"
 					description="Start a running container or deploy a stack before opening a shell."
 					className="p-8"
 				/>
-			) : !shouldRenderTerminal ? (
-				<EmptyState
-					title="Select a container to continue"
-					description="The selected container is no longer available. Pick another running container to continue."
-					className="p-8"
-				/>
 			) : (
-				<TerminalPanel
-					target="container"
-					containerId={activeContainer?.ID}
-					transport={transport}
+				<ShellWorkspace
 					environmentId={environment.id}
-					label={activeContainer?.Names || "Container"}
-					shell={shell}
-					customShell={customShell}
+					containers={containers.map((container: Record<string, string>) => ({
+						id: container.ID,
+						name: container.Names,
+						state: container.State,
+						status: container.Status,
+						image: container.Image,
+					}))}
+					initialContainerId={selectedContainer?.ID}
+					initialShell={shell}
+					initialCustomShell={customShell}
+					transport={transport}
 				/>
 			)}
 		</div>
