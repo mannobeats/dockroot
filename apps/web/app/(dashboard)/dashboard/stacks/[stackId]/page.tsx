@@ -4,16 +4,16 @@ import {
 	deleteStackAction,
 	deployStackAction,
 	destroyStackAction,
+	updateStackConfigAction,
 } from "@/app/(dashboard)/actions";
-import { CodeEditor } from "@/components/code-editor";
 import { DestructiveActionModal } from "@/components/destructive-action-modal";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { LiveStackFeed } from "@/components/live-stack-feed";
+import { StackConfigEditor } from "@/components/stack-config-editor";
 import { StackServicesAccordion } from "@/components/stack-services-accordion";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/link-button";
-import { Panel } from "@/components/ui/panel";
 import { getGlobalSettings, getStackById } from "@/lib/platform";
 import { getContainerDetails, listStackContainers } from "@/lib/platform/docker";
 import { getServerSession } from "@/lib/session";
@@ -136,35 +136,15 @@ export default async function StackWorkspacePage({
 			<div className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
 				{/* Left: Source + Services */}
 				<div className="space-y-5">
-					{/* Compose files */}
-					<Panel className="grid gap-0 overflow-hidden xl:grid-cols-[1.4fr_0.6fr]">
-						<div className="min-h-0 border-b border-default/10 xl:border-b-0 xl:border-r">
-							<div className="border-b border-default/5 bg-surface px-4 py-2">
-								<p className="text-xs font-medium">{stack.composeFileName}</p>
-							</div>
-							<CodeEditor
-								value={stack.composeYaml}
-								language="yaml"
-								readOnly
-								minHeight="320px"
-								maxHeight={editorHeight}
-								height={editorHeight}
-							/>
-						</div>
-						<div className="min-h-0">
-							<div className="border-b border-default/5 bg-surface px-4 py-2">
-								<p className="text-xs font-medium">{stack.envFileName || ".env"}</p>
-							</div>
-							<CodeEditor
-								value={stack.envFileContent || "# No env file configured"}
-								language="env"
-								readOnly
-								minHeight="320px"
-								maxHeight={editorHeight}
-								height={editorHeight}
-							/>
-						</div>
-					</Panel>
+					<StackConfigEditor
+						stackId={stack.id}
+						composeFileName={stack.composeFileName}
+						envFileName={stack.envFileName}
+						initialComposeYaml={stack.composeYaml}
+						initialEnvFileContent={stack.envFileContent}
+						editorHeight={editorHeight}
+						action={updateStackConfigAction}
+					/>
 
 					{/* Services accordion */}
 					<StackServicesAccordion

@@ -412,15 +412,21 @@ export function StacksTableWorkspace({
 																			</div>
 																			<StatusBadge status={getContainerState(container)} />
 																		</div>
-																		<div className="mt-2 flex items-center justify-between text-xs text-muted">
-																			<div className="inline-flex items-center gap-1">
+																		<div className="mt-2 flex items-center justify-between gap-2 text-xs text-muted">
+																			<div className="inline-flex min-w-0 flex-1 items-start gap-1">
 																				<Package className="h-3.5 w-3.5" />
-																				<span className="truncate">{getPorts(container)}</span>
+																				<span
+																					className="line-clamp-2 break-all leading-relaxed"
+																					title={getPorts(container)}
+																				>
+																					{getPorts(container)}
+																				</span>
 																			</div>
 																			<LinkButton
 																				href={`/dashboard/containers/${container.ID}`}
 																				variant="ghost"
 																				size="xs"
+																				className="shrink-0"
 																			>
 																				Open
 																				<ExternalLink className="h-3 w-3" />

@@ -639,6 +639,41 @@ export async function createStack({
 	revalidatePath("/dashboard/stacks");
 }
 
+export async function updateStackConfig({
+	stackId,
+	userId,
+	composeYaml,
+	envFileContent,
+}: {
+	stackId: string;
+	userId: string;
+	composeYaml: string;
+	envFileContent?: string;
+}) {
+	const stack = await db.query.stacks.findFirst({
+		where: and(eq(stacks.id, stackId), eq(stacks.createdByUserId, userId)),
+		columns: {
+			id: true,
+		},
+	});
+
+	if (!stack) {
+		throw new Error("Stack not found");
+	}
+
+	await db
+		.update(stacks)
+		.set({
+			composeYaml,
+			envFileContent: envFileContent?.trim() || null,
+			updatedAt: now(),
+		})
+		.where(eq(stacks.id, stack.id));
+
+	revalidatePath("/dashboard/stacks");
+	revalidatePath(`/dashboard/stacks/${stack.id}`);
+}
+
 export async function adoptComposeProject({
 	userId,
 	projectName,

@@ -26,6 +26,7 @@ import {
 	queueOrRunDeployment,
 	rotateAgentRegistrationToken,
 	updateGlobalSettings,
+	updateStackConfig,
 } from "@/lib/platform";
 import { controlComposeProject, listContainers } from "@/lib/platform/docker";
 import {
@@ -194,6 +195,33 @@ export async function deployStackAction(formData: FormData) {
 		userId,
 		operation: "deploy",
 	});
+}
+
+export async function updateStackConfigAction(formData: FormData) {
+	const { userId } = await requireUserSession();
+	const stackId = getValue(formData, "stackId");
+	const composeYaml = getValue(formData, "composeYaml");
+	const envFileContent = getValue(formData, "envFileContent");
+	const mode = getValue(formData, "mode");
+
+	if (!stackId || !composeYaml) {
+		throw new Error("Stack and compose YAML are required");
+	}
+
+	await updateStackConfig({
+		stackId,
+		userId,
+		composeYaml,
+		envFileContent,
+	});
+
+	if (mode === "redeploy") {
+		await queueOrRunDeployment({
+			stackId,
+			userId,
+			operation: "deploy",
+		});
+	}
 }
 
 export async function destroyStackAction(formData: FormData) {
