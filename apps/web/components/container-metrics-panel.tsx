@@ -47,7 +47,7 @@ export function ContainerMetricsPanel({
 		return (
 			<EmptyState
 				title="Metrics unavailable"
-				description="Prometheus container metrics are not available yet for this container."
+				description="Container metrics are not available yet for this container."
 				className="p-6"
 			/>
 		);
@@ -85,43 +85,43 @@ export function ContainerMetricsPanel({
 
 			<div className="grid gap-5 xl:grid-cols-2">
 				<Panel padding="md">
-					<p className="text-sm font-semibold">CPU and memory</p>
+					<p className="text-sm font-semibold">CPU usage trend</p>
 					<ChartFrame className="mt-4 h-64">
 						{({ width, height }) => (
 							<AreaChart
 								width={width}
 								height={height}
-								data={metrics.cpuSeries.map((point, index) => ({
+								data={metrics.cpuSeries.map((point) => ({
 									time: point.time,
 									cpu: point.value,
-									memory: (metrics.memorySeries[index]?.value || 0) / 1024 / 1024,
 								}))}
 							>
-								<CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+								<defs>
+									<linearGradient id="container-cpu-fill" x1="0" y1="0" x2="0" y2="1">
+										<stop offset="5%" stopColor="var(--accent)" stopOpacity={0.4} />
+										<stop offset="95%" stopColor="var(--accent)" stopOpacity={0.05} />
+									</linearGradient>
+								</defs>
+								<CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
 								<XAxis
 									dataKey="time"
 									tick={{ fontSize: 11, fill: "var(--muted)" }}
 									axisLine={false}
+									tickLine={false}
 								/>
 								<YAxis
 									tick={{ fontSize: 11, fill: "var(--muted)" }}
 									axisLine={false}
 									tickLine={false}
+									tickFormatter={(value) => `${value.toFixed(1)}%`}
 								/>
-								<Tooltip />
+								<Tooltip formatter={(value) => [`${Number(value).toFixed(2)}%`, "CPU"]} />
 								<Area
 									type="monotone"
 									dataKey="cpu"
 									stroke="var(--accent)"
-									fill="var(--accent)"
-									fillOpacity={0.15}
-								/>
-								<Area
-									type="monotone"
-									dataKey="memory"
-									stroke="#10b981"
-									fill="#10b981"
-									fillOpacity={0.12}
+									fill="url(#container-cpu-fill)"
+									strokeWidth={2}
 								/>
 							</AreaChart>
 						)}
@@ -129,43 +129,131 @@ export function ContainerMetricsPanel({
 				</Panel>
 
 				<Panel padding="md">
-					<p className="text-sm font-semibold">Network throughput</p>
+					<p className="text-sm font-semibold">Memory usage trend</p>
 					<ChartFrame className="mt-4 h-64">
 						{({ width, height }) => (
 							<AreaChart
 								width={width}
 								height={height}
-								data={metrics.rxSeries.map((point, index) => ({
+								data={metrics.memorySeries.map((point) => ({
 									time: point.time,
-									rx: point.value / 1024,
-									tx: (metrics.txSeries[index]?.value || 0) / 1024,
+									memoryMb: point.value / 1024 / 1024,
 								}))}
 							>
-								<CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+								<defs>
+									<linearGradient id="container-memory-fill" x1="0" y1="0" x2="0" y2="1">
+										<stop offset="5%" stopColor="var(--success)" stopOpacity={0.4} />
+										<stop offset="95%" stopColor="var(--success)" stopOpacity={0.05} />
+									</linearGradient>
+								</defs>
+								<CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
 								<XAxis
 									dataKey="time"
 									tick={{ fontSize: 11, fill: "var(--muted)" }}
 									axisLine={false}
+									tickLine={false}
 								/>
 								<YAxis
 									tick={{ fontSize: 11, fill: "var(--muted)" }}
 									axisLine={false}
 									tickLine={false}
+									tickFormatter={(value) => `${value.toFixed(0)} MB`}
 								/>
-								<Tooltip />
+								<Tooltip formatter={(value) => [`${Number(value).toFixed(1)} MB`, "Memory"]} />
 								<Area
 									type="monotone"
-									dataKey="rx"
+									dataKey="memoryMb"
+									stroke="var(--success)"
+									fill="url(#container-memory-fill)"
+									strokeWidth={2}
+								/>
+							</AreaChart>
+						)}
+					</ChartFrame>
+				</Panel>
+
+				<Panel padding="md">
+					<p className="text-sm font-semibold">Network receive trend</p>
+					<ChartFrame className="mt-4 h-64">
+						{({ width, height }) => (
+							<AreaChart
+								width={width}
+								height={height}
+								data={metrics.rxSeries.map((point) => ({
+									time: point.time,
+									rxKb: point.value / 1024,
+								}))}
+							>
+								<defs>
+									<linearGradient id="container-rx-fill" x1="0" y1="0" x2="0" y2="1">
+										<stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.4} />
+										<stop offset="95%" stopColor="#0ea5e9" stopOpacity={0.05} />
+									</linearGradient>
+								</defs>
+								<CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+								<XAxis
+									dataKey="time"
+									tick={{ fontSize: 11, fill: "var(--muted)" }}
+									axisLine={false}
+									tickLine={false}
+								/>
+								<YAxis
+									tick={{ fontSize: 11, fill: "var(--muted)" }}
+									axisLine={false}
+									tickLine={false}
+									tickFormatter={(value) => `${value.toFixed(0)} KB/s`}
+								/>
+								<Tooltip formatter={(value) => [`${Number(value).toFixed(1)} KB/s`, "RX"]} />
+								<Area
+									type="monotone"
+									dataKey="rxKb"
 									stroke="#0ea5e9"
-									fill="#0ea5e9"
-									fillOpacity={0.15}
+									fill="url(#container-rx-fill)"
+									strokeWidth={2}
 								/>
+							</AreaChart>
+						)}
+					</ChartFrame>
+				</Panel>
+
+				<Panel padding="md">
+					<p className="text-sm font-semibold">Network transmit trend</p>
+					<ChartFrame className="mt-4 h-64">
+						{({ width, height }) => (
+							<AreaChart
+								width={width}
+								height={height}
+								data={metrics.txSeries.map((point) => ({
+									time: point.time,
+									txKb: point.value / 1024,
+								}))}
+							>
+								<defs>
+									<linearGradient id="container-tx-fill" x1="0" y1="0" x2="0" y2="1">
+										<stop offset="5%" stopColor="#f59e0b" stopOpacity={0.4} />
+										<stop offset="95%" stopColor="#f59e0b" stopOpacity={0.05} />
+									</linearGradient>
+								</defs>
+								<CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+								<XAxis
+									dataKey="time"
+									tick={{ fontSize: 11, fill: "var(--muted)" }}
+									axisLine={false}
+									tickLine={false}
+								/>
+								<YAxis
+									tick={{ fontSize: 11, fill: "var(--muted)" }}
+									axisLine={false}
+									tickLine={false}
+									tickFormatter={(value) => `${value.toFixed(0)} KB/s`}
+								/>
+								<Tooltip formatter={(value) => [`${Number(value).toFixed(1)} KB/s`, "TX"]} />
 								<Area
 									type="monotone"
-									dataKey="tx"
+									dataKey="txKb"
 									stroke="#f59e0b"
-									fill="#f59e0b"
-									fillOpacity={0.12}
+									fill="url(#container-tx-fill)"
+									strokeWidth={2}
 								/>
 							</AreaChart>
 						)}

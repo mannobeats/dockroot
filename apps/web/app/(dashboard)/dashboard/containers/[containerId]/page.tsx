@@ -60,17 +60,20 @@ export default async function ContainerDetailPage({
 		environmentId: environment.id,
 	});
 	const targetPath = query.path || "/";
-	const [details, metrics] = await Promise.all([
-		getContainerDetailsForEnvironment(auth.userId, containerId, environment.id),
-		environment.kind === "local"
-			? getPrometheusContainerMetrics(containerId)
-			: Promise.resolve(null),
-	]);
+	const details = await getContainerDetailsForEnvironment(auth.userId, containerId, environment.id);
 	const inspect = details.details?.inspect;
 
 	if (!inspect) {
 		return <div className="text-sm text-muted">Container not found.</div>;
 	}
+
+	const metrics =
+		environment.kind === "local"
+			? await getPrometheusContainerMetrics({
+					containerId: String(inspect.Id || containerId),
+					containerName: String(inspect.Name || "").replace(/^\//, ""),
+				})
+			: null;
 
 	const { browser } = await browseContainerPathForEnvironment(
 		auth.userId,

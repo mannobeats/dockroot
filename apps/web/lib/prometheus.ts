@@ -69,6 +69,17 @@ async function instantValue(query: string) {
 	return value ? Number.parseFloat(value) : null;
 }
 
+async function firstNonNullInstant(queries: string[]) {
+	for (const query of queries) {
+		const value = await instantValue(query);
+		if (value !== null) {
+			return value;
+		}
+	}
+
+	return null;
+}
+
 async function instantSeries(query: string) {
 	const response = await queryPrometheus(`/api/v1/query?query=${encodeURIComponent(query)}`);
 
@@ -102,6 +113,21 @@ async function rangeSeries(query: string, step = "30s", range = "30m") {
 		value: Number.parseFloat(value),
 		range,
 	}));
+}
+
+async function firstNonEmptyRange(queries: string[], step = "30s", range = "30m") {
+	for (const query of queries) {
+		const series = await rangeSeries(query, step, range);
+		if (series.length > 0) {
+			return series;
+		}
+	}
+
+	return [];
+}
+
+function escapePromRegex(value: string) {
+	return value.replaceAll(/[$()*+./?[\\\]^{|}-]/g, "\\$&");
 }
 
 export async function getPrometheusDashboardMetrics() {
@@ -156,26 +182,58 @@ export async function getPrometheusTargetHealth() {
 	);
 }
 
-export async function getPrometheusContainerMetrics(containerId: string) {
-	const escapedId = `/docker/${containerId}`;
+export async function getPrometheusContainerMetrics(input: {
+	containerId: string;
+	containerName?: string | null;
+}) {
+	const normalizedId = input.containerId.replace(/^\/docker\//, "").replace(/^\//, "");
+	const normalizedName = input.containerName?.replace(/^\//, "").trim() || "";
+	const selectors = Array.from(
+		new Set(
+			[
+				`id="/docker/${normalizedId}"`,
+				`id=~"/docker/${escapePromRegex(normalizedId)}.*"`,
+				normalizedName ? `name="/${normalizedName}"` : null,
+				normalizedName ? `name=~"/${escapePromRegex(normalizedName)}"` : null,
+			].filter(Boolean),
+		),
+	) as string[];
+
+	const cpuQueries = selectors.map(
+		(selector) => `sum(rate(container_cpu_usage_seconds_total{${selector}}[2m])) * 100`,
+	);
+	const memoryQueries = selectors.map(
+		(selector) => `container_memory_working_set_bytes{${selector}}`,
+	);
+	const rxQueries = selectors.map(
+		(selector) => `sum(rate(container_network_receive_bytes_total{${selector}}[2m]))`,
+	);
+	const txQueries = selectors.map(
+		(selector) => `sum(rate(container_network_transmit_bytes_total{${selector}}[2m]))`,
+	);
+
 	const [cpuPercent, memoryBytes, rxBytes, txBytes, cpuSeries, memorySeries, rxSeries, txSeries] =
 		await Promise.all([
-			instantValue(
-				`sum(rate(container_cpu_usage_seconds_total{id="${escapedId}",cpu="total"}[2m])) * 100`,
-			),
-			instantValue(`container_memory_working_set_bytes{id="${escapedId}"}`),
-			instantValue(`sum(rate(container_network_receive_bytes_total{id="${escapedId}"}[2m]))`),
-			instantValue(`sum(rate(container_network_transmit_bytes_total{id="${escapedId}"}[2m]))`),
-			rangeSeries(
-				`sum(rate(container_cpu_usage_seconds_total{id="${escapedId}",cpu="total"}[2m])) * 100`,
-			),
-			rangeSeries(`container_memory_working_set_bytes{id="${escapedId}"}`),
-			rangeSeries(`sum(rate(container_network_receive_bytes_total{id="${escapedId}"}[2m]))`),
-			rangeSeries(`sum(rate(container_network_transmit_bytes_total{id="${escapedId}"}[2m]))`),
+			firstNonNullInstant(cpuQueries),
+			firstNonNullInstant(memoryQueries),
+			firstNonNullInstant(rxQueries),
+			firstNonNullInstant(txQueries),
+			firstNonEmptyRange(cpuQueries),
+			firstNonEmptyRange(memoryQueries),
+			firstNonEmptyRange(rxQueries),
+			firstNonEmptyRange(txQueries),
 		]);
 
 	return {
-		available: cpuPercent !== null || memoryBytes !== null || rxBytes !== null || txBytes !== null,
+		available:
+			cpuPercent !== null ||
+			memoryBytes !== null ||
+			rxBytes !== null ||
+			txBytes !== null ||
+			cpuSeries.length > 0 ||
+			memorySeries.length > 0 ||
+			rxSeries.length > 0 ||
+			txSeries.length > 0,
 		cpuPercent,
 		memoryBytes,
 		rxBytes,

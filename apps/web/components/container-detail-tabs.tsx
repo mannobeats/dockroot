@@ -198,7 +198,7 @@ export function ContainerDetailTabs({
 					) : (
 						<EmptyState
 							title="Metrics unavailable"
-							description="Metrics are only available for local Docker environments with Prometheus configured."
+							description="Metrics are only available for local Docker environments with telemetry enabled."
 						/>
 					)
 				) : null}

@@ -68,7 +68,7 @@ export function LiveStackFeed({
 			<div className="flex items-center justify-between">
 				<div>
 					<p className="text-sm font-semibold text-console-foreground">Live logs</p>
-					<p className="text-xs text-console-foreground/50">Socket.IO powered deployment feed</p>
+					<p className="text-xs text-console-foreground/50">Live deployment output</p>
 				</div>
 				<Badge variant="accent" className="rounded-full px-2.5 py-1 text-[11px]">
 					Live

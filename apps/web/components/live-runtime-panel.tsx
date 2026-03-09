@@ -114,9 +114,7 @@ export function LiveRuntimePanel() {
 
 	const latest = useMemo(() => history.at(-1), [history]);
 	const helperLabel =
-		latest?.source === "prometheus"
-			? "Host utilization from Prometheus"
-			: "Average across running containers";
+		latest?.source === "prometheus" ? "Host-wide utilization" : "Average across running containers";
 
 	return (
 		<Panel padding="md">
@@ -142,52 +140,93 @@ export function LiveRuntimePanel() {
 					percent={latest?.memory ?? 0}
 					helper={
 						latest?.source === "prometheus"
-							? "Host memory pressure from Prometheus"
+							? "Host memory pressure"
 							: "Average usage against container limits"
 					}
 				/>
 			</div>
-			<ChartFrame className="mt-4 h-56">
-				{mounted
-					? ({ width, height }) => (
-							<AreaChart width={width} height={height} data={history}>
-								<CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-								<XAxis
-									dataKey="time"
-									tick={{ fontSize: 11, fill: "var(--muted)" }}
-									axisLine={false}
-									tickLine={false}
-								/>
-								<YAxis
-									tick={{ fontSize: 11, fill: "var(--muted)" }}
-									axisLine={false}
-									tickLine={false}
-									domain={[0, "auto"]}
-									tickFormatter={(v) => `${v}%`}
-								/>
-								<Tooltip content={<CustomTooltip />} />
-								<Area
-									type="monotone"
-									dataKey="cpu"
-									name="CPU"
-									fill="var(--foreground)"
-									fillOpacity={0.15}
-									stroke="var(--foreground)"
-									strokeWidth={2}
-								/>
-								<Area
-									type="monotone"
-									dataKey="memory"
-									name="Memory"
-									fill="var(--success)"
-									fillOpacity={0.15}
-									stroke="var(--success)"
-									strokeWidth={2}
-								/>
-							</AreaChart>
-						)
-					: () => null}
-			</ChartFrame>
+			<div className="mt-4 grid gap-4 xl:grid-cols-2">
+				<Panel padding="sm" className="bg-transparent">
+					<p className="text-xs font-medium text-muted">CPU trend</p>
+					<ChartFrame className="mt-2 h-44">
+						{mounted
+							? ({ width, height }) => (
+									<AreaChart width={width} height={height} data={history}>
+										<defs>
+											<linearGradient id="runtime-cpu-fill" x1="0" y1="0" x2="0" y2="1">
+												<stop offset="5%" stopColor="var(--foreground)" stopOpacity={0.35} />
+												<stop offset="95%" stopColor="var(--foreground)" stopOpacity={0.05} />
+											</linearGradient>
+										</defs>
+										<CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+										<XAxis
+											dataKey="time"
+											tick={{ fontSize: 11, fill: "var(--muted)" }}
+											axisLine={false}
+											tickLine={false}
+										/>
+										<YAxis
+											tick={{ fontSize: 11, fill: "var(--muted)" }}
+											axisLine={false}
+											tickLine={false}
+											domain={[0, "auto"]}
+											tickFormatter={(v) => `${v}%`}
+										/>
+										<Tooltip content={<CustomTooltip />} />
+										<Area
+											type="monotone"
+											dataKey="cpu"
+											name="CPU"
+											fill="url(#runtime-cpu-fill)"
+											stroke="var(--foreground)"
+											strokeWidth={2}
+										/>
+									</AreaChart>
+								)
+							: () => null}
+					</ChartFrame>
+				</Panel>
+				<Panel padding="sm" className="bg-transparent">
+					<p className="text-xs font-medium text-muted">Memory trend</p>
+					<ChartFrame className="mt-2 h-44">
+						{mounted
+							? ({ width, height }) => (
+									<AreaChart width={width} height={height} data={history}>
+										<defs>
+											<linearGradient id="runtime-memory-fill" x1="0" y1="0" x2="0" y2="1">
+												<stop offset="5%" stopColor="var(--success)" stopOpacity={0.35} />
+												<stop offset="95%" stopColor="var(--success)" stopOpacity={0.05} />
+											</linearGradient>
+										</defs>
+										<CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+										<XAxis
+											dataKey="time"
+											tick={{ fontSize: 11, fill: "var(--muted)" }}
+											axisLine={false}
+											tickLine={false}
+										/>
+										<YAxis
+											tick={{ fontSize: 11, fill: "var(--muted)" }}
+											axisLine={false}
+											tickLine={false}
+											domain={[0, "auto"]}
+											tickFormatter={(v) => `${v}%`}
+										/>
+										<Tooltip content={<CustomTooltip />} />
+										<Area
+											type="monotone"
+											dataKey="memory"
+											name="Memory"
+											fill="url(#runtime-memory-fill)"
+											stroke="var(--success)"
+											strokeWidth={2}
+										/>
+									</AreaChart>
+								)
+							: () => null}
+					</ChartFrame>
+				</Panel>
+			</div>
 		</Panel>
 	);
 }
