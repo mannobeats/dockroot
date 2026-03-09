@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/page-header";
 import { PrometheusOverview } from "@/components/prometheus-overview";
 import { StatCard } from "@/components/stat-card";
 import { StatusBadge } from "@/components/status-badge";
+import { Badge } from "@/components/ui/badge";
 import {
 	DataTable,
 	DataTableBody,
@@ -18,7 +19,7 @@ import {
 import { EmptyState } from "@/components/ui/empty-state";
 import { LinkButton } from "@/components/ui/link-button";
 import { Panel } from "@/components/ui/panel";
-import { Badge } from "@/components/ui/badge";
+import { UtilizationBar } from "@/components/ui/utilization-bar";
 import { isPrivilegedRole, requireUserSession } from "@/lib/authorization";
 import {
 	getRuntimeSnapshotForEnvironment,
@@ -47,6 +48,16 @@ export default async function DashboardPage({
 		includeRuntime && runtime
 			? (runtime.snapshot.host.totalMemoryGb - runtime.snapshot.host.freeMemoryGb).toFixed(1)
 			: null;
+	const memoryUsedPercent =
+		includeRuntime && runtime
+			? Number(
+					(
+						((runtime.snapshot.host.totalMemoryGb - runtime.snapshot.host.freeMemoryGb) /
+							Math.max(runtime.snapshot.host.totalMemoryGb, 1)) *
+						100
+					).toFixed(1),
+				)
+			: null;
 
 	const greeting = (() => {
 		const hour = new Date().getHours();
@@ -62,10 +73,13 @@ export default async function DashboardPage({
 				description={`${environment.name} environment`}
 				actions={
 					<>
-						<LinkButton href="/dashboard/projects" variant="secondary">
+						<LinkButton
+							href={`/dashboard/projects?environment=${environment.id}`}
+							variant="secondary"
+						>
 							Projects
 						</LinkButton>
-						<LinkButton href="/dashboard/stacks">
+						<LinkButton href={`/dashboard/stacks?environment=${environment.id}`}>
 							Deploy Stack
 						</LinkButton>
 					</>
@@ -127,6 +141,13 @@ export default async function DashboardPage({
 								<p className="text-xs text-muted">
 									{memoryUsed} / {runtime.snapshot.host.totalMemoryGb} GB
 								</p>
+								<div className="mt-2">
+									<UtilizationBar
+										label="Memory usage"
+										percent={memoryUsedPercent ?? 0}
+										valueLabel={`${memoryUsedPercent ?? 0}%`}
+									/>
+								</div>
 							</div>
 							<div className="rounded-lg bg-foreground/[0.02] p-3">
 								<p className="text-xs text-muted">Data directory</p>
@@ -148,7 +169,7 @@ export default async function DashboardPage({
 					<div className="flex items-center justify-between">
 						<h2 className="text-sm font-semibold">Recent projects</h2>
 						<Link
-							href="/dashboard/projects"
+							href={`/dashboard/projects?environment=${environment.id}`}
 							className="text-xs font-medium text-muted transition-colors hover:text-foreground"
 						>
 							View all
@@ -192,7 +213,7 @@ export default async function DashboardPage({
 				<div className="flex items-center justify-between">
 					<h2 className="text-sm font-semibold">Latest deployments</h2>
 					<Link
-						href="/dashboard/activity"
+						href={`/dashboard/activity?environment=${environment.id}`}
 						className="text-xs font-medium text-muted transition-colors hover:text-foreground"
 					>
 						View all
@@ -212,9 +233,15 @@ export default async function DashboardPage({
 							{data.recentDeployments.length ? (
 								data.recentDeployments.map((deployment) => (
 									<DataTableRow key={deployment.id} className="group">
-										<DataTableCell className="px-0 pr-4 font-medium">{deployment.stack.name}</DataTableCell>
-										<DataTableCell className="px-0 pr-4 text-muted">{deployment.environment.name}</DataTableCell>
-										<DataTableCell className="px-0 pr-4 font-mono text-xs text-muted">{deployment.version}</DataTableCell>
+										<DataTableCell className="px-0 pr-4 font-medium">
+											{deployment.stack.name}
+										</DataTableCell>
+										<DataTableCell className="px-0 pr-4 text-muted">
+											{deployment.environment.name}
+										</DataTableCell>
+										<DataTableCell className="px-0 pr-4 font-mono text-xs text-muted">
+											{deployment.version}
+										</DataTableCell>
 										<DataTableCell className="px-0">
 											<StatusBadge status={deployment.status} />
 										</DataTableCell>

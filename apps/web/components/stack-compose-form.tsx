@@ -17,6 +17,7 @@ export function StackComposeForm({
 	environments: Array<{ id: string; name: string; kind: string }>;
 	action: (formData: FormData) => void | Promise<void>;
 }) {
+	const editorHeight = "min(60vh, 640px)";
 	const [stackName, setStackName] = useState("");
 	const [composeYaml, setComposeYaml] = useState(
 		`services:\n  app:\n    image: nginx:alpine\n    ports:\n      - "8080:80"\n    restart: unless-stopped\n`,
@@ -43,11 +44,7 @@ export function StackComposeForm({
 				</Field>
 				<Field>
 					<FieldLabel htmlFor="environmentId">Target environment</FieldLabel>
-					<Select
-						id="environmentId"
-						name="environmentId"
-						required
-					>
+					<Select id="environmentId" name="environmentId" required>
 						{environments.map((environment) => (
 							<option key={environment.id} value={environment.id}>
 								{environment.name} ({environment.kind})
@@ -59,15 +56,11 @@ export function StackComposeForm({
 
 			<Field>
 				<FieldLabel htmlFor="stack-description">Description</FieldLabel>
-				<Input
-					id="stack-description"
-					name="description"
-					placeholder="Frontend + API + worker"
-				/>
+				<Input id="stack-description" name="description" placeholder="Frontend + API + worker" />
 			</Field>
 
 			<Panel className="grid gap-0 overflow-hidden xl:grid-cols-[1.4fr_0.6fr]">
-				<div className="border-b border-default/10 xl:border-b-0 xl:border-r">
+				<div className="min-h-0 border-b border-default/10 xl:border-b-0 xl:border-r">
 					<div className="border-b border-default/5 bg-surface px-4 py-2">
 						<p className="text-xs font-medium">
 							{stackName ? `${stackName}.compose.yaml` : "compose.yaml"}
@@ -78,10 +71,12 @@ export function StackComposeForm({
 						onChange={setComposeYaml}
 						language="yaml"
 						minHeight="360px"
+						maxHeight={editorHeight}
+						height={editorHeight}
 						placeholder="services:\n  app:\n    image: nginx:alpine"
 					/>
 				</div>
-				<div>
+				<div className="min-h-0">
 					<div className="border-b border-default/5 bg-surface px-4 py-2">
 						<p className="text-xs font-medium">{stackName ? `${stackName}.env` : ".env"}</p>
 					</div>
@@ -90,6 +85,8 @@ export function StackComposeForm({
 						onChange={setEnvFileContent}
 						language="env"
 						minHeight="360px"
+						maxHeight={editorHeight}
+						height={editorHeight}
 						placeholder={"APP_ENV=production\nAPP_PORT=8080"}
 					/>
 				</div>

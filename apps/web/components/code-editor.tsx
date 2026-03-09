@@ -18,6 +18,8 @@ export function CodeEditor({
 	placeholder,
 	readOnly = false,
 	minHeight = "420px",
+	maxHeight,
+	height = "100%",
 }: {
 	value: string;
 	onChange?: (value: string) => void;
@@ -25,6 +27,8 @@ export function CodeEditor({
 	placeholder?: string;
 	readOnly?: boolean;
 	minHeight?: string;
+	maxHeight?: string;
+	height?: string;
 }) {
 	const { resolvedTheme } = useTheme();
 
@@ -43,6 +47,8 @@ export function CodeEditor({
 					fontFamily:
 						"ui-monospace, SFMono-Regular, SF Mono, Menlo, Monaco, Consolas, Liberation Mono, monospace",
 					minHeight,
+					maxHeight: maxHeight || "none",
+					overflow: "auto",
 				},
 				".cm-content": {
 					padding: "16px",
@@ -53,12 +59,12 @@ export function CodeEditor({
 				},
 			}),
 		];
-	}, [language, minHeight]);
+	}, [language, maxHeight, minHeight]);
 
 	return (
 		<CodeMirror
 			value={value}
-			height="100%"
+			height={height}
 			theme={resolvedTheme === "light" ? githubLight : githubDark}
 			extensions={extensions}
 			editable={!readOnly}

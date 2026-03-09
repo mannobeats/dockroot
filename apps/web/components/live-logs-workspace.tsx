@@ -352,7 +352,7 @@ export function LiveLogsWorkspace({
 						</Button>
 						{selectedIds[0] ? (
 							<LinkButton
-								href={`/dashboard/shell?target=container&containerId=${selectedIds[0]}`}
+								href={`/dashboard/shell?target=container&containerId=${selectedIds[0]}${environmentId ? `&environment=${environmentId}` : ""}`}
 								variant="outline"
 								size="xs"
 							>

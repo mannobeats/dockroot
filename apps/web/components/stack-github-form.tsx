@@ -1,7 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronRight, RefreshCw, Search, Sparkles } from "lucide-react";
-import Link from "next/link";
+import { Check, ChevronDown, ChevronRight, RefreshCw, Search, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { CodeEditor } from "@/components/code-editor";
 import { FormSubmitButton } from "@/components/form-submit-button";
@@ -49,6 +48,7 @@ export function StackGitHubForm({
 	appConfigured: boolean;
 	action: (formData: FormData) => void | Promise<void>;
 }) {
+	const editorHeight = "min(60vh, 640px)";
 	const [installationOptions, setInstallationOptions] = useState(installations);
 	const [_installationState, setInstallationState] = useState<
 		"idle" | "refreshing" | "ready" | "error"
@@ -209,7 +209,13 @@ export function StackGitHubForm({
 
 	useEffect(() => {
 		const nextRepositoryId = repositories[0] ? String(repositories[0].id) : "";
-		setRepositoryId(nextRepositoryId);
+		setRepositoryId((current) => {
+			if (current && repositories.some((repository) => String(repository.id) === current)) {
+				return current;
+			}
+
+			return nextRepositoryId;
+		});
 	}, [repositories]);
 
 	useEffect(() => {
@@ -299,16 +305,23 @@ export function StackGitHubForm({
 							>
 								Connect GitHub App
 							</LinkButton>
-							<Button type="button" variant="outline" size="sm" onClick={() => void refreshInstallations()}>
-							<RefreshCw className="mr-1.5 h-3 w-3" />
-							Refresh
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								onClick={() => void refreshInstallations()}
+							>
+								<RefreshCw className="mr-1.5 h-3 w-3" />
+								Refresh
 							</Button>
 						</>
 					) : null
 				}
 				className="p-8"
 			>
-				{installationStateMessage ? <p className="mt-3 text-xs text-muted">{installationStateMessage}</p> : null}
+				{installationStateMessage ? (
+					<p className="mt-3 text-xs text-muted">{installationStateMessage}</p>
+				) : null}
 			</EmptyState>
 		);
 	}
@@ -360,7 +373,12 @@ export function StackGitHubForm({
 								</option>
 							))}
 						</Select>
-						<Button type="button" variant="outline" size="xs" onClick={() => void refreshInstallations()}>
+						<Button
+							type="button"
+							variant="outline"
+							size="xs"
+							onClick={() => void refreshInstallations()}
+						>
 							<RefreshCw className="h-3 w-3" />
 						</Button>
 					</div>
@@ -393,12 +411,17 @@ export function StackGitHubForm({
 										setLoadError("");
 										setIsLoaded(false);
 									}}
-									className={`flex w-full items-center justify-between border-b border-default/5 px-3 py-2 text-left text-xs last:border-b-0 ${active ? "bg-foreground/[0.06] text-foreground" : "text-muted hover:bg-foreground/[0.03] hover:text-foreground"}`}
+									className={`flex w-full items-center justify-between border-b border-default/5 px-3 py-2 text-left text-xs last:border-b-0 ${active ? "bg-foreground/[0.08] text-foreground" : "text-muted hover:bg-foreground/[0.03] hover:text-foreground"}`}
 								>
-									<span className="font-medium">{repository.full_name}</span>
-									<Badge variant={repository.private ? "warning" : "success"}>
-										{repository.private ? "private" : "public"}
-									</Badge>
+									<div className="flex min-w-0 items-center gap-2">
+										{active ? <Check className="h-3.5 w-3.5 shrink-0 text-success" /> : null}
+										<span className="truncate font-medium">{repository.full_name}</span>
+									</div>
+									<div className="flex items-center gap-1.5">
+										<Badge variant={repository.private ? "warning" : "success"}>
+											{repository.private ? "private" : "public"}
+										</Badge>
+									</div>
 								</button>
 							);
 						})
@@ -406,7 +429,15 @@ export function StackGitHubForm({
 						<p className="px-3 py-4 text-xs text-muted">No repositories match.</p>
 					)}
 				</div>
-				{activeInstallation?.repositoryError ? <Alert className="mt-2 text-xs">{activeInstallation.repositoryError}</Alert> : null}
+				{selectedRepository ? (
+					<p className="mt-2 text-xs text-muted">
+						Selected:{" "}
+						<span className="font-medium text-foreground">{selectedRepository.full_name}</span>
+					</p>
+				) : null}
+				{activeInstallation?.repositoryError ? (
+					<Alert className="mt-2 text-xs">{activeInstallation.repositoryError}</Alert>
+				) : null}
 			</Panel>
 
 			{/* Step 2: Configuration */}
@@ -429,11 +460,7 @@ export function StackGitHubForm({
 					</Field>
 					<Field className="space-y-1">
 						<FieldLabel htmlFor="github-environment-id">Environment</FieldLabel>
-						<Select
-							id="github-environment-id"
-							name="environmentId"
-							required
-						>
+						<Select id="github-environment-id" name="environmentId" required>
 							{environments.map((environment) => (
 								<option key={environment.id} value={environment.id}>
 									{environment.name} ({environment.kind})
@@ -555,7 +582,7 @@ export function StackGitHubForm({
 				</button>
 				{showEditor ? (
 					<div className="grid gap-0 border-t border-default/10 xl:grid-cols-[1.4fr_0.6fr]">
-						<div className="border-b border-default/10 xl:border-b-0 xl:border-r">
+						<div className="min-h-0 border-b border-default/10 xl:border-b-0 xl:border-r">
 							<div className="border-b border-default/5 px-4 py-2">
 								<p className="text-xs font-medium">{composePath || "compose.yaml"}</p>
 							</div>
@@ -564,10 +591,12 @@ export function StackGitHubForm({
 								onChange={setComposeYaml}
 								language="yaml"
 								minHeight="360px"
+								maxHeight={editorHeight}
+								height={editorHeight}
 								placeholder="Load a repository to populate this editor."
 							/>
 						</div>
-						<div>
+						<div className="min-h-0">
 							<div className="border-b border-default/5 px-4 py-2">
 								<p className="text-xs font-medium">{envPath || ".env"}</p>
 							</div>
@@ -576,6 +605,8 @@ export function StackGitHubForm({
 								onChange={setEnvFileContent}
 								language="env"
 								minHeight="360px"
+								maxHeight={editorHeight}
+								height={editorHeight}
 								placeholder="Optional env file."
 							/>
 						</div>
