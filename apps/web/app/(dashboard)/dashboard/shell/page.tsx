@@ -33,7 +33,6 @@ export default async function ShellPage({
 		? containers.find((container: Record<string, string>) => container.ID === params.containerId) ||
 			null
 		: null;
-	const transport = environment.kind === "local" ? "local" : "remote";
 
 	return (
 		<div className="animate-in space-y-6">
@@ -62,7 +61,6 @@ export default async function ShellPage({
 					initialContainerId={selectedContainer?.ID}
 					initialShell={shell}
 					initialCustomShell={customShell}
-					transport={transport}
 				/>
 			)}
 		</div>

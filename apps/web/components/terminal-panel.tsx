@@ -28,7 +28,6 @@ export function TerminalPanel({
 	target,
 	containerId,
 	label,
-	transport = "local",
 	environmentId,
 	shell = "sh",
 	customShell,
@@ -36,7 +35,6 @@ export function TerminalPanel({
 	target: "container";
 	containerId?: string;
 	label: string;
-	transport?: "local" | "remote";
 	environmentId?: string;
 	shell?: "sh" | "bash" | "ash" | "zsh" | "custom";
 	customShell?: string;
@@ -123,15 +121,7 @@ export function TerminalPanel({
 
 			const resizeObserver = new ResizeObserver(() => {
 				fitAddon.fit();
-				if (transport === "local" && sessionIdRef.current) {
-					const socket = getSocket();
-					socket.emit("terminal:resize", {
-						sessionId: sessionIdRef.current,
-						cols: terminal.cols,
-						rows: terminal.rows,
-					});
-				}
-				if (transport === "remote" && sessionIdRef.current && environmentId) {
+				if (sessionIdRef.current && environmentId) {
 					void fetch(
 						`/api/runtime/terminal/${encodeURIComponent(sessionIdRef.current)}?environmentId=${encodeURIComponent(environmentId)}`,
 						{
@@ -150,7 +140,7 @@ export function TerminalPanel({
 			});
 			resizeObserver.observe(terminalRef.current);
 
-			if (transport === "remote" && environmentId) {
+			if (environmentId) {
 				const createResponse = await fetch("/api/runtime/terminal", {
 					method: "POST",
 					headers: {
@@ -180,25 +170,35 @@ export function TerminalPanel({
 
 				sessionIdRef.current = createPayload.sessionId;
 				setStatus(`Connected to ${label}`);
+				let writeQueue: Promise<void> = Promise.resolve();
+				let writeQueueClosed = false;
 
 				const disposable = terminal.onData((data) => {
 					if (!sessionIdRef.current || !environmentId) {
 						return;
 					}
 
-					void fetch(
-						`/api/runtime/terminal/${encodeURIComponent(sessionIdRef.current)}?environmentId=${encodeURIComponent(environmentId)}`,
-						{
-							method: "POST",
-							headers: {
-								"content-type": "application/json",
-							},
-							body: JSON.stringify({
-								type: "input",
-								data,
-							}),
-						},
-					);
+					const activeSessionId = sessionIdRef.current;
+					writeQueue = writeQueue
+						.then(async () => {
+							if (writeQueueClosed || sessionIdRef.current !== activeSessionId) {
+								return;
+							}
+							await fetch(
+								`/api/runtime/terminal/${encodeURIComponent(activeSessionId)}?environmentId=${encodeURIComponent(environmentId)}`,
+								{
+									method: "POST",
+									headers: {
+										"content-type": "application/json",
+									},
+									body: JSON.stringify({
+										type: "input",
+										data,
+									}),
+								},
+							);
+						})
+						.catch(() => {});
 				});
 
 				const poll = async () => {
@@ -208,7 +208,7 @@ export function TerminalPanel({
 
 					try {
 						const response = await fetch(
-							`/api/runtime/terminal/${encodeURIComponent(sessionIdRef.current)}?environmentId=${encodeURIComponent(environmentId)}&cursor=${cursorRef.current}`,
+							`/api/runtime/terminal/${encodeURIComponent(sessionIdRef.current)}?environmentId=${encodeURIComponent(environmentId)}&cursor=${cursorRef.current}&waitMs=1200`,
 							{
 								cache: "no-store",
 							},
@@ -222,7 +222,7 @@ export function TerminalPanel({
 						};
 
 						if (!response.ok) {
-							setStatus(payload.error || "Remote shell disconnected.");
+							setStatus(payload.error || "Shell disconnected.");
 							return;
 						}
 
@@ -237,15 +237,17 @@ export function TerminalPanel({
 							return;
 						}
 
-						pollTimerRef.current = window.setTimeout(poll, 350);
+						const hasNewData = (payload.chunks?.length || 0) > 0;
+						pollTimerRef.current = window.setTimeout(poll, hasNewData ? 40 : 140);
 					} catch {
-						setStatus("Remote shell disconnected.");
+						setStatus("Shell disconnected.");
 					}
 				};
 
 				pollTimerRef.current = window.setTimeout(poll, 100);
 
 				cleanup = () => {
+					writeQueueClosed = true;
 					disposable.dispose();
 					resizeObserver.disconnect();
 					if (pollTimerRef.current) {
@@ -359,7 +361,7 @@ export function TerminalPanel({
 			disposed = true;
 			cleanup();
 		};
-	}, [containerId, customShell, environmentId, label, shell, target, transport]);
+	}, [containerId, customShell, environmentId, label, shell, target]);
 
 	return (
 		<Panel

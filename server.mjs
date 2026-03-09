@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { execFile, spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { chmodSync, existsSync, statSync } from "node:fs";
 import { createServer } from "node:http";
+import { createRequire } from "node:module";
+import { dirname, resolve } from "node:path";
 import { promisify } from "node:util";
 import postgres from "postgres";
 import * as pty from "node-pty";
@@ -10,7 +12,7 @@ import { Server as SocketIOServer } from "socket.io";
 import {
 	closeLocalTerminalSession,
 	createLocalTerminalSession,
-	readLocalTerminalSession,
+	readLocalTerminalSessionAsync,
 	resizeLocalTerminalSession,
 	writeLocalTerminalInput,
 } from "./local-terminal.mjs";
@@ -45,6 +47,33 @@ const dockerBinary = resolveExecutable(process.env.DOCKER_BIN, [
 const supportedShells = new Set(["sh", "bash", "ash", "zsh"]);
 const defaultShellOrder = ["sh", "bash", "ash", "zsh"];
 const prometheusUrl = process.env.PROMETHEUS_URL || "http://localhost:9090";
+let ptyHelperPermissionsChecked = false;
+
+function ensurePtySpawnHelperExecutable() {
+	if (ptyHelperPermissionsChecked) {
+		return;
+	}
+	ptyHelperPermissionsChecked = true;
+
+	try {
+		const require = createRequire(import.meta.url);
+		const utils = require("node-pty/lib/utils");
+		const utilsPath = require.resolve("node-pty/lib/utils");
+		const native = utils?.loadNativeModule?.("pty");
+		const nativeDir = native?.dir ? resolve(dirname(utilsPath), native.dir) : null;
+		const helperPath = nativeDir ? resolve(nativeDir, "spawn-helper") : null;
+		if (!helperPath || !existsSync(helperPath)) {
+			return;
+		}
+
+		const mode = statSync(helperPath).mode & 0o777;
+		if ((mode & 0o111) === 0) {
+			chmodSync(helperPath, mode | 0o755);
+		}
+	} catch {
+		// socket terminal falls back to compatibility mode when PTY remains unavailable
+	}
+}
 function resolveExecutable(primaryCandidate, fallbackCandidates) {
 	for (const candidate of [primaryCandidate, ...fallbackCandidates]) {
 		if (!candidate) {
@@ -399,7 +428,15 @@ const server = createServer(async (req, res) => {
 
 			try {
 				if (req.method === "GET") {
-					sendJson(res, 200, readLocalTerminalSession(sessionId, Number(url.searchParams.get("cursor") || 0)));
+					sendJson(
+						res,
+						200,
+						await readLocalTerminalSessionAsync(
+							sessionId,
+							Number(url.searchParams.get("cursor") || 0),
+							Number(url.searchParams.get("waitMs") || 0),
+						),
+					);
 					return;
 				}
 
@@ -521,30 +558,73 @@ io.on("connection", (socket) => {
 
 			const command = {
 				file: dockerBinary,
-				args: ["exec", "-it", payload.containerId, shell, "-i"],
+				ptyArgs: ["exec", "-it", payload.containerId, shell, "-i"],
+				pipeArgs: ["exec", "-i", payload.containerId, shell, "-i"],
 				cwd: "/",
 			};
 
-			const ptyProcess = pty.spawn(command.file, command.args, {
-				name: "xterm-color",
-				cols,
-				rows,
-				cwd: command.cwd,
-				env: {
-					...process.env,
-					TERM: process.env.TERM || "xterm-256color",
-					COLORTERM: process.env.COLORTERM || "truecolor",
-				},
-			});
+			let compatibilityMode = false;
+			let socketProcess;
+			ensurePtySpawnHelperExecutable();
+			try {
+				const ptyProcess = pty.spawn(command.file, command.ptyArgs, {
+					name: "xterm-color",
+					cols,
+					rows,
+					cwd: command.cwd,
+					env: {
+						...process.env,
+						TERM: process.env.TERM || "xterm-256color",
+						COLORTERM: process.env.COLORTERM || "truecolor",
+					},
+				});
+				socketProcess = {
+					write: (data) => ptyProcess.write(data),
+					resize: (nextCols, nextRows) =>
+						ptyProcess.resize(clampTerminalColumns(nextCols), clampTerminalRows(nextRows)),
+					kill: () => ptyProcess.kill(),
+					onData: (listener) => ptyProcess.onData(listener),
+					onExit: (listener) => ptyProcess.onExit(listener),
+				};
+			} catch {
+				compatibilityMode = true;
+				const child = spawn(command.file, command.pipeArgs, {
+					cwd: command.cwd,
+					env: {
+						...process.env,
+						TERM: process.env.TERM || "xterm-256color",
+						COLORTERM: process.env.COLORTERM || "truecolor",
+					},
+					stdio: ["pipe", "pipe", "pipe"],
+				});
+				socketProcess = {
+					write: (data) => child.stdin?.write(String(data || "").replaceAll("\r", "\n")),
+					resize: () => {},
+					kill: () => {
+						child.kill("SIGTERM");
+						setTimeout(() => {
+							child.kill("SIGKILL");
+						}, 1_000).unref?.();
+					},
+					onData: (listener) => {
+						child.stdout.on("data", (chunk) => listener(String(chunk || "")));
+						child.stderr.on("data", (chunk) => listener(String(chunk || "")));
+					},
+					onExit: (listener) => {
+						child.on("exit", (exitCode) => listener({ exitCode: exitCode ?? 0 }));
+						child.on("error", () => listener({ exitCode: 1 }));
+					},
+				};
+			}
 
 			const terminalSession = {
 				kind: "pty",
-				write: (data) => ptyProcess.write(data),
+				write: (data) => socketProcess.write(data),
 				resize: (nextCols, nextRows) =>
-					ptyProcess.resize(clampTerminalColumns(nextCols), clampTerminalRows(nextRows)),
-				kill: () => ptyProcess.kill(),
-				onData: (listener) => ptyProcess.onData(listener),
-				onExit: (listener) => ptyProcess.onExit(listener),
+					socketProcess.resize(clampTerminalColumns(nextCols), clampTerminalRows(nextRows)),
+				kill: () => socketProcess.kill(),
+				onData: (listener) => socketProcess.onData(listener),
+				onExit: (listener) => socketProcess.onExit(listener),
 			};
 
 			terminalSessions.set(sessionId, {
@@ -578,6 +658,9 @@ io.on("connection", (socket) => {
 				setTimeout(resolve, 75);
 			});
 			handshakeComplete = true;
+			if (compatibilityMode) {
+				initialOutput.unshift("Terminal is running in compatibility mode.\r\n");
+			}
 
 			callback?.({
 				sessionId,

@@ -360,11 +360,12 @@ export async function readTerminalSessionForEnvironment(
 	sessionId: string,
 	environmentId?: string,
 	cursor?: number,
+	waitMs?: number,
 ) {
 	const environment = await getEnvironmentRecord(environmentId, userId);
 	if (environment.kind === "local") {
 		return fetchLocalTerminal(
-			`/internal/local-terminal/sessions/${encodeURIComponent(sessionId)}?cursor=${Number(cursor || 0)}`,
+			`/internal/local-terminal/sessions/${encodeURIComponent(sessionId)}?cursor=${Number(cursor || 0)}&waitMs=${Number(waitMs || 0)}`,
 		);
 	}
 

@@ -19,11 +19,13 @@ export async function GET(
 		const url = new URL(request.url);
 		const environmentId = url.searchParams.get("environmentId") || undefined;
 		const cursor = Number(url.searchParams.get("cursor") || "0");
+		const waitMs = Number(url.searchParams.get("waitMs") || "0");
 		const result = await readTerminalSessionForEnvironment(
 			auth.userId,
 			sessionId,
 			environmentId,
 			cursor,
+			waitMs,
 		);
 		return NextResponse.json(result);
 	} catch (error) {

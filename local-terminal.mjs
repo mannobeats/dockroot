@@ -3,11 +3,41 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import * as pty from "node-pty";
 import { spawn } from "node:child_process";
+import { chmodSync, statSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, resolve } from "node:path";
 
 const terminalSessions = new Map();
 const supportedShells = new Set(["sh", "bash", "ash", "zsh"]);
 const defaultShellOrder = ["sh", "bash", "ash", "zsh"];
 const execFileAsync = promisify(execFile);
+let ptyHelperPermissionsChecked = false;
+
+function ensurePtySpawnHelperExecutable() {
+	if (ptyHelperPermissionsChecked) {
+		return;
+	}
+	ptyHelperPermissionsChecked = true;
+
+	try {
+		const require = createRequire(import.meta.url);
+		const utils = require("node-pty/lib/utils");
+		const utilsPath = require.resolve("node-pty/lib/utils");
+		const native = utils?.loadNativeModule?.("pty");
+		const nativeDir = native?.dir ? resolve(dirname(utilsPath), native.dir) : null;
+		const helperPath = nativeDir ? resolve(nativeDir, "spawn-helper") : null;
+		if (!helperPath || !existsSync(helperPath)) {
+			return;
+		}
+
+		const mode = statSync(helperPath).mode & 0o777;
+		if ((mode & 0o111) === 0) {
+			chmodSync(helperPath, mode | 0o755);
+		}
+	} catch {
+		// keep fallback behavior; terminal creation will use compatibility mode if PTY still fails
+	}
+}
 
 function resolveExecutable(primaryCandidate, fallbackCandidates) {
 	for (const candidate of [primaryCandidate, ...fallbackCandidates]) {
@@ -124,7 +154,7 @@ function createPipeProcess(command) {
 			});
 		},
 		write(data) {
-			child.stdin?.write(String(data || ""));
+			child.stdin?.write(String(data || "").replaceAll("\r", "\n"));
 		},
 		resize() {},
 		kill() {
@@ -137,6 +167,8 @@ function createPipeProcess(command) {
 }
 
 function createTerminalProcess(command, cols, rows) {
+	ensurePtySpawnHelperExecutable();
+
 	try {
 		return {
 			process: pty.spawn(command.file, command.ptyArgs, {
@@ -173,6 +205,7 @@ export async function createLocalTerminalSession(payload) {
 		nextCursor: 1,
 		closed: false,
 		exitCode: null,
+		waiters: [],
 	};
 
 	if (compatibilityMode) {
@@ -192,12 +225,20 @@ export async function createLocalTerminalSession(payload) {
 		if (session.events.length > 512) {
 			session.events.shift();
 		}
+		const pendingWaiters = session.waiters.splice(0, session.waiters.length);
+		for (const waiter of pendingWaiters) {
+			waiter();
+		}
 	};
 
 	processHandle.onData(onData);
 	processHandle.onExit(({ exitCode }) => {
 		session.closed = true;
 		session.exitCode = exitCode ?? 0;
+		const pendingWaiters = session.waiters.splice(0, session.waiters.length);
+		for (const waiter of pendingWaiters) {
+			waiter();
+		}
 	});
 
 	terminalSessions.set(sessionId, session);
@@ -221,6 +262,37 @@ export function readLocalTerminalSession(sessionId, cursor = 0) {
 		closed: session.closed,
 		exitCode: session.exitCode,
 	};
+}
+
+export async function readLocalTerminalSessionAsync(sessionId, cursor = 0, waitMs = 0) {
+	const session = terminalSessions.get(sessionId);
+	if (!session) {
+		throw new Error("Terminal session not found.");
+	}
+
+	const sinceCursor = Number(cursor || 0);
+	if (waitMs > 0 && !session.closed) {
+		const hasPendingData = session.events.some((entry) => entry.cursor > sinceCursor);
+		if (!hasPendingData) {
+			await new Promise((resolve) => {
+				const wake = () => {
+					clearTimeout(timeout);
+					resolve();
+				};
+				session.waiters.push(wake);
+				const timeout = setTimeout(() => {
+					const index = session.waiters.indexOf(wake);
+					if (index >= 0) {
+						session.waiters.splice(index, 1);
+					}
+					resolve();
+				}, Math.max(0, Math.min(5_000, Number(waitMs) || 0)));
+				timeout.unref?.();
+			});
+		}
+	}
+
+	return readLocalTerminalSession(sessionId, sinceCursor);
 }
 
 export function writeLocalTerminalInput(sessionId, data) {
@@ -254,6 +326,10 @@ export function closeLocalTerminalSession(sessionId) {
 
 	session.process.kill();
 	session.closed = true;
+	const pendingWaiters = session.waiters.splice(0, session.waiters.length);
+	for (const waiter of pendingWaiters) {
+		waiter();
+	}
 	setTimeout(() => {
 		terminalSessions.delete(sessionId);
 	}, 60_000).unref?.();
