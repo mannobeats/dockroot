@@ -1,12 +1,16 @@
 import {
 	adoptComposeProjectAction,
 	controlComposeProjectAction,
+	createGitHubStackAction,
+	createStackAction,
 	deployStackAction,
 	destroyStackAction,
 } from "@/app/(dashboard)/actions";
 import { DestructiveActionModal } from "@/components/destructive-action-modal";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { PageHeader } from "@/components/page-header";
+import { StackComposeForm } from "@/components/stack-compose-form";
+import { StackGitHubForm } from "@/components/stack-github-form";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,7 +27,8 @@ import { LinkButton } from "@/components/ui/link-button";
 import { MetricCard } from "@/components/ui/metric-card";
 import { Panel } from "@/components/ui/panel";
 import { isPrivilegedRole, requireUserSession } from "@/lib/authorization";
-import { listStacks } from "@/lib/platform";
+import { isGitHubAppConfigured } from "@/lib/github-app";
+import { listEnvironments, listGitHubInstallations, listStacks } from "@/lib/platform";
 
 function normalizeStatus(status: string) {
 	return status.split("(")[0]?.trim().toLowerCase() || "unknown";
@@ -44,10 +49,14 @@ export default async function StacksPage({
 	const query = await searchParams;
 	const detailEnvironmentSuffix = query.environment ? `?environment=${query.environment}` : "";
 	const search = (query.q || "").trim().toLowerCase();
-	const stacks = await listStacks(userId, { includeUntracked });
+	const [stacks, environments, githubInstallations] = await Promise.all([
+		listStacks(userId, { includeUntracked }),
+		listEnvironments(userId),
+		listGitHubInstallations(userId),
+	]);
 	const filtered = search
 		? stacks.filter((stack) =>
-				[stack.name, stack.slug, stack.projectName || "", stack.environmentName || ""]
+				[stack.name, stack.slug, stack.environmentName || ""]
 					.join(" ")
 					.toLowerCase()
 					.includes(search),
@@ -71,7 +80,7 @@ export default async function StacksPage({
 				<MetricCard
 					label="Active"
 					value={runningCount}
-					description={`${untrackedCount} untracked compose projects`}
+					description={`${untrackedCount} untracked compose stacks`}
 				/>
 			</div>
 
@@ -82,7 +91,7 @@ export default async function StacksPage({
 						type="search"
 						name="q"
 						defaultValue={query.q || ""}
-						placeholder="Search stacks, projects, environments..."
+						placeholder="Search stacks and environments..."
 						className="flex-1"
 					/>
 					{query.environment ? (
@@ -101,7 +110,6 @@ export default async function StacksPage({
 						<tr>
 							<DataTableHead>Name</DataTableHead>
 							<DataTableHead>Source</DataTableHead>
-							<DataTableHead>Project</DataTableHead>
 							<DataTableHead>Environment</DataTableHead>
 							<DataTableHead>Containers</DataTableHead>
 							<DataTableHead>Status</DataTableHead>
@@ -127,9 +135,6 @@ export default async function StacksPage({
 									</DataTableCell>
 									<DataTableCell className="text-xs text-muted">
 										{stack.type === "tracked" ? "Internal" : "Untracked"}
-									</DataTableCell>
-									<DataTableCell className="text-xs text-muted">
-										{stack.projectName || "—"}
 									</DataTableCell>
 									<DataTableCell className="text-xs text-muted">
 										{stack.environmentName || "—"}
@@ -192,7 +197,7 @@ export default async function StacksPage({
 														hiddenFields={{ stackId: stack.stackId || "" }}
 													/>
 													<LinkButton
-														href={`/dashboard/projects/${stack.projectId}/stacks/${stack.stackId}${detailEnvironmentSuffix}`}
+														href={`/dashboard/stacks/${stack.stackId}${detailEnvironmentSuffix}`}
 														variant="outline"
 														size="xs"
 													>
@@ -263,7 +268,7 @@ export default async function StacksPage({
 													<DestructiveActionModal
 														action={controlComposeProjectAction}
 														title={`Destroy compose project ${stack.slug}`}
-														description="This will run docker compose down for the selected project."
+														description="This will run docker compose down for the selected stack."
 														triggerLabel="Destroy"
 														confirmLabel="Destroy"
 														pendingLabel="Destroying..."
@@ -308,11 +313,49 @@ export default async function StacksPage({
 								</DataTableRow>
 							))
 						) : (
-							<DataTableEmpty colSpan={7}>No stacks found.</DataTableEmpty>
+							<DataTableEmpty colSpan={6}>No stacks found.</DataTableEmpty>
 						)}
 					</DataTableBody>
 				</DataTable>
 			</Panel>
+
+			<div className="grid gap-5 xl:grid-cols-2">
+				<Panel padding="md">
+					<div className="mb-4">
+						<h2 className="text-base font-semibold">Deploy from GitHub</h2>
+						<p className="mt-1 text-sm text-muted">
+							Connect a repository, review compose/env, then create a stack.
+						</p>
+					</div>
+					<StackGitHubForm
+						environments={environments.map((environment) => ({
+							id: environment.id,
+							name: environment.name,
+							kind: environment.kind,
+						}))}
+						installations={githubInstallations}
+						redirectTo="/dashboard/stacks"
+						appConfigured={isGitHubAppConfigured()}
+						action={createGitHubStackAction}
+					/>
+				</Panel>
+				<Panel padding="md">
+					<div className="mb-4">
+						<h2 className="text-base font-semibold">Deploy manually</h2>
+						<p className="mt-1 text-sm text-muted">
+							Paste compose and env content to create a tracked stack.
+						</p>
+					</div>
+					<StackComposeForm
+						environments={environments.map((environment) => ({
+							id: environment.id,
+							name: environment.name,
+							kind: environment.kind,
+						}))}
+						action={createStackAction}
+					/>
+				</Panel>
+			</div>
 		</div>
 	);
 }

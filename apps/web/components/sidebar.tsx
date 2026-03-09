@@ -6,7 +6,6 @@ import {
 	ChevronLeft,
 	ChevronRight,
 	Cpu,
-	FolderKanban,
 	HardDrive,
 	Layers3,
 	LayoutDashboard,
@@ -27,7 +26,6 @@ import { signOut, useSession } from "@/lib/auth-client";
 
 const navItems = [
 	{ href: "/dashboard", label: "Overview", icon: LayoutDashboard, group: "main" },
-	{ href: "/dashboard/projects", label: "Projects", icon: FolderKanban, group: "main" },
 	{ href: "/dashboard/stacks", label: "Stacks", icon: Layers3, group: "main" },
 	{ href: "/dashboard/environments", label: "Environments", icon: Server, group: "main" },
 	{ href: "/dashboard/containers", label: "Containers", icon: Cpu, group: "runtime" },

@@ -5,7 +5,7 @@ import { verifyGitHubAppState } from "@/lib/github-app";
 import { syncGitHubInstallation } from "@/lib/platform";
 import { getServerSession } from "@/lib/session";
 
-function useSecureCookies() {
+function shouldUseSecureCookies() {
 	return process.env.SESSION_COOKIE_SECURE === undefined
 		? process.env.NODE_ENV === "production"
 		: process.env.SESSION_COOKIE_SECURE === "true";
@@ -25,19 +25,19 @@ export async function GET(request: Request) {
 	const userIdCookie = cookieStore.get("dockroot_github_user_id")?.value;
 
 	if (!installationId) {
-		return NextResponse.redirect(new URL("/dashboard/projects?github=missing", request.url));
+		return NextResponse.redirect(new URL("/dashboard/stacks?github=missing", request.url));
 	}
 
-	let redirectTo = sanitizeInternalRedirectPath(redirectToCookie || "/dashboard/projects");
+	let redirectTo = sanitizeInternalRedirectPath(redirectToCookie || "/dashboard/stacks");
 
 	if (state) {
 		const parsedState = verifyGitHubAppState(state);
 		if (parsedState.userId !== session.user.id) {
-			return NextResponse.redirect(new URL("/dashboard/projects?github=denied", request.url));
+			return NextResponse.redirect(new URL("/dashboard/stacks?github=denied", request.url));
 		}
 		redirectTo = sanitizeInternalRedirectPath(parsedState.redirectTo);
 	} else if (userIdCookie && userIdCookie !== session.user.id) {
-		return NextResponse.redirect(new URL("/dashboard/projects?github=denied", request.url));
+		return NextResponse.redirect(new URL("/dashboard/stacks?github=denied", request.url));
 	}
 
 	await syncGitHubInstallation({
@@ -52,14 +52,14 @@ export async function GET(request: Request) {
 	response.cookies.set("dockroot_github_redirect_to", "", {
 		httpOnly: true,
 		sameSite: "lax",
-		secure: useSecureCookies(),
+		secure: shouldUseSecureCookies(),
 		path: "/",
 		maxAge: 0,
 	});
 	response.cookies.set("dockroot_github_user_id", "", {
 		httpOnly: true,
 		sameSite: "lax",
-		secure: useSecureCookies(),
+		secure: shouldUseSecureCookies(),
 		path: "/",
 		maxAge: 0,
 	});

@@ -1,17 +1,11 @@
 import "server-only";
 
-import { db, deployments, environments, projects, stacks } from "@dockroot/db";
+import { db, deployments, environments, stacks } from "@dockroot/db";
 import { count, eq } from "drizzle-orm";
 import { Counter, collectDefaultMetrics, Gauge, type Registry, register } from "prom-client";
 import { getLocalDockerSnapshot } from "@/lib/platform/docker";
 
 let initialized = false;
-
-const projectGauge = new Gauge({
-	name: "dockroot_projects_total",
-	help: "Number of projects visible to Dockroot",
-	registers: [register],
-});
 
 const stackGauge = new Gauge({
 	name: "dockroot_stacks_total",
@@ -109,12 +103,10 @@ export function incrementDeploymentEvent(status: string) {
 }
 
 async function syncAppMetrics() {
-	const [projectCount] = await db.select({ value: count() }).from(projects);
 	const [stackCount] = await db.select({ value: count() }).from(stacks);
 	const [environmentCount] = await db.select({ value: count() }).from(environments);
 	const [deploymentCount] = await db.select({ value: count() }).from(deployments);
 
-	projectGauge.set(projectCount?.value ?? 0);
 	stackGauge.set(stackCount?.value ?? 0);
 	environmentGauge.set(environmentCount?.value ?? 0);
 	deploymentGauge.set(deploymentCount?.value ?? 0);

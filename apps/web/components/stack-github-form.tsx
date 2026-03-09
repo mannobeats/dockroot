@@ -34,14 +34,12 @@ export interface InstallationOption {
 }
 
 export function StackGitHubForm({
-	projectId,
 	environments,
 	installations,
 	redirectTo,
 	appConfigured,
 	action,
 }: {
-	projectId: string;
 	environments: Array<{ id: string; name: string; kind: string }>;
 	installations: InstallationOption[];
 	redirectTo: string;
@@ -328,7 +326,6 @@ export function StackGitHubForm({
 
 	return (
 		<form action={action} className="space-y-5">
-			<input type="hidden" name="projectId" value={projectId} />
 			<input type="hidden" name="installationId" value={installationId} />
 			<input type="hidden" name="repositoryId" value={repositoryId} />
 			<input type="hidden" name="owner" value={selectedRepository?.owner.login || ""} />

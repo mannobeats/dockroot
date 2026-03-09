@@ -54,11 +54,11 @@ export async function requirePrivilegedPageSession() {
 
 export function sanitizeInternalRedirectPath(value: string | null | undefined) {
 	if (!value) {
-		return "/dashboard/projects";
+		return "/dashboard/stacks";
 	}
 
 	if (!value.startsWith("/") || value.startsWith("//")) {
-		return "/dashboard/projects";
+		return "/dashboard/stacks";
 	}
 
 	return value;

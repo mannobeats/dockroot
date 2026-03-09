@@ -9,11 +9,9 @@ import { Panel } from "@/components/ui/panel";
 import { Select } from "@/components/ui/select";
 
 export function StackComposeForm({
-	projectId,
 	environments,
 	action,
 }: {
-	projectId: string;
 	environments: Array<{ id: string; name: string; kind: string }>;
 	action: (formData: FormData) => void | Promise<void>;
 }) {
@@ -26,7 +24,6 @@ export function StackComposeForm({
 
 	return (
 		<form action={action} className="space-y-4">
-			<input type="hidden" name="projectId" value={projectId} />
 			<input type="hidden" name="composeYaml" value={composeYaml} />
 			<input type="hidden" name="envFileContent" value={envFileContent} />
 

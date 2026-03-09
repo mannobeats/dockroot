@@ -28,14 +28,14 @@ Core runtime pieces:
 
 - `Next.js 16` with App Router for the control plane UI
 - `Better Auth` for email/password auth and role-based sessions
-- `PostgreSQL` for users, projects, environments, stacks, and deployments
+- `PostgreSQL` for users, environments, stacks, and deployments
 - `Socket.IO` for live logs, terminal sessions, and runtime updates
 - `Docker Engine` access through the host socket
 - `Prometheus`, `cAdvisor`, and `node-exporter` for host and container telemetry
 
 ## Features
 
-- Project, environment, and stack management
+- Stack and environment management
 - Manual Docker Compose deployment workflows
 - Tenant-aware visibility for stacks, deployments, and runtime containers
 - Privileged host operations for images, networks, volumes, and settings

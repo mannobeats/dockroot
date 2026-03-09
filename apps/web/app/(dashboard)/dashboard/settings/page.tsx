@@ -1,4 +1,4 @@
-import { FolderKanban, HardDrive, Server, ShieldCheck } from "lucide-react";
+import { HardDrive, Layers3, Server, ShieldCheck } from "lucide-react";
 import { updateGlobalSettingsAction } from "@/app/(dashboard)/actions";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { PageHeader } from "@/components/page-header";
@@ -27,10 +27,10 @@ export default async function SettingsPage() {
 			icon: HardDrive,
 		},
 		{
-			title: "Projects",
-			value: String(settings.projects),
-			detail: "Configured in the manager.",
-			icon: FolderKanban,
+			title: "Stacks",
+			value: String(settings.stacks),
+			detail: "Tracked by Dockroot.",
+			icon: Layers3,
 		},
 		{
 			title: "Environments",

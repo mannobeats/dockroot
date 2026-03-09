@@ -26,22 +26,6 @@ export const deploymentStatusEnum = pgEnum("deployment_status", [
 ]);
 export const deploymentOperationEnum = pgEnum("deployment_operation", ["deploy", "destroy"]);
 
-export const projects = pgTable(
-	"projects",
-	{
-		id: text("id").primaryKey(),
-		name: text("name").notNull(),
-		slug: text("slug").notNull(),
-		description: text("description"),
-		createdByUserId: text("created_by_user_id")
-			.notNull()
-			.references(() => user.id, { onDelete: "cascade" }),
-		createdAt: timestamp("created_at").notNull(),
-		updatedAt: timestamp("updated_at").notNull(),
-	},
-	(table) => [uniqueIndex("projects_slug_unique").on(table.slug)],
-);
-
 export const environments = pgTable(
 	"environments",
 	{
@@ -117,9 +101,6 @@ export const stacks = pgTable(
 	"stacks",
 	{
 		id: text("id").primaryKey(),
-		projectId: text("project_id")
-			.notNull()
-			.references(() => projects.id, { onDelete: "cascade" }),
 		environmentId: text("environment_id")
 			.notNull()
 			.references(() => environments.id, { onDelete: "cascade" }),
@@ -150,7 +131,6 @@ export const stacks = pgTable(
 	},
 	(table) => [
 		uniqueIndex("stacks_slug_unique").on(table.slug),
-		index("stacks_project_idx").on(table.projectId),
 		index("stacks_environment_idx").on(table.environmentId),
 	],
 );
@@ -189,14 +169,6 @@ export const deployments = pgTable(
 	],
 );
 
-export const projectRelations = relations(projects, ({ many, one }) => ({
-	stacks: many(stacks),
-	createdBy: one(user, {
-		fields: [projects.createdByUserId],
-		references: [user.id],
-	}),
-}));
-
 export const environmentRelations = relations(environments, ({ many, one }) => ({
 	agent: many(agents),
 	stacks: many(stacks),
@@ -223,10 +195,6 @@ export const githubInstallationRelations = relations(githubInstallations, ({ man
 }));
 
 export const stackRelations = relations(stacks, ({ many, one }) => ({
-	project: one(projects, {
-		fields: [stacks.projectId],
-		references: [projects.id],
-	}),
 	environment: one(environments, {
 		fields: [stacks.environmentId],
 		references: [environments.id],

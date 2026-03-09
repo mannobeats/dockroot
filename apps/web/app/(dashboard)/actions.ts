@@ -20,10 +20,8 @@ import {
 	adoptComposeProject,
 	createEnvironment,
 	createGitHubStack,
-	createProject,
 	createStack,
 	deleteEnvironment,
-	deleteProject,
 	deleteStack,
 	queueOrRunDeployment,
 	rotateAgentRegistrationToken,
@@ -50,24 +48,6 @@ function requireDestructiveConfirmation(formData: FormData) {
 	}
 }
 
-export async function createProjectAction(formData: FormData) {
-	const { userId } = await requireUserSession();
-	const name = getValue(formData, "name");
-	const description = getValue(formData, "description");
-
-	if (!name) {
-		throw new Error("Project name is required");
-	}
-
-	await createProject({
-		userId,
-		name,
-		description,
-	});
-
-	redirect("/dashboard/projects");
-}
-
 export async function adoptComposeProjectAction(formData: FormData) {
 	const { userId } = await requirePrivilegedSession();
 	const projectName = getValue(formData, "projectName");
@@ -82,7 +62,6 @@ export async function adoptComposeProjectAction(formData: FormData) {
 		configFiles,
 	});
 
-	revalidatePath("/dashboard/projects");
 	revalidatePath("/dashboard/stacks");
 	redirect(`/dashboard/stacks?adopted=${stackId}`);
 }
@@ -142,20 +121,18 @@ export async function deleteEnvironmentAction(formData: FormData) {
 
 export async function createStackAction(formData: FormData) {
 	const { userId } = await requireUserSession();
-	const projectId = getValue(formData, "projectId");
 	const environmentId = getValue(formData, "environmentId");
 	const name = getValue(formData, "name");
 	const description = getValue(formData, "description");
 	const composeYaml = getValue(formData, "composeYaml");
 	const envFileContent = getValue(formData, "envFileContent");
 
-	if (!projectId || !environmentId || !name || !composeYaml) {
-		throw new Error("Project, environment, stack name, and compose YAML are required");
+	if (!environmentId || !name || !composeYaml) {
+		throw new Error("Environment, stack name, and compose YAML are required");
 	}
 
 	await createStack({
 		userId,
-		projectId,
 		environmentId,
 		name,
 		description,
@@ -163,12 +140,11 @@ export async function createStackAction(formData: FormData) {
 		envFileContent,
 	});
 
-	redirect(`/dashboard/projects/${projectId}`);
+	redirect("/dashboard/stacks");
 }
 
 export async function createGitHubStackAction(formData: FormData) {
 	const { userId } = await requireUserSession();
-	const projectId = getValue(formData, "projectId");
 	const environmentId = getValue(formData, "environmentId");
 	const installationId = getValue(formData, "installationId");
 	const repositoryId = getValue(formData, "repositoryId");
@@ -182,23 +158,12 @@ export async function createGitHubStackAction(formData: FormData) {
 	const name = getValue(formData, "name") || repository;
 	const description = getValue(formData, "description");
 
-	if (
-		!projectId ||
-		!environmentId ||
-		!installationId ||
-		!owner ||
-		!repository ||
-		!branch ||
-		!composePath
-	) {
-		throw new Error(
-			"Project, environment, installation, repository, branch, and compose path are required",
-		);
+	if (!environmentId || !installationId || !owner || !repository || !branch || !composePath) {
+		throw new Error("Environment, installation, repository, branch, and compose path are required");
 	}
 
 	await createGitHubStack({
 		userId,
-		projectId,
 		environmentId,
 		installationId,
 		repositoryId,
@@ -213,7 +178,7 @@ export async function createGitHubStackAction(formData: FormData) {
 		description,
 	});
 
-	redirect(`/dashboard/projects/${projectId}`);
+	redirect("/dashboard/stacks");
 }
 
 export async function deployStackAction(formData: FormData) {
@@ -251,10 +216,9 @@ export async function deleteStackAction(formData: FormData) {
 	requireDestructiveConfirmation(formData);
 	const { userId } = await requireUserSession();
 	const stackId = getValue(formData, "stackId");
-	const projectId = getValue(formData, "projectId");
 
-	if (!stackId || !projectId) {
-		throw new Error("Stack and project are required");
+	if (!stackId) {
+		throw new Error("Stack is required");
 	}
 
 	await deleteStack({
@@ -262,24 +226,7 @@ export async function deleteStackAction(formData: FormData) {
 		userId,
 	});
 
-	redirect(`/dashboard/projects/${projectId}`);
-}
-
-export async function deleteProjectAction(formData: FormData) {
-	requireDestructiveConfirmation(formData);
-	const { userId } = await requireUserSession();
-	const projectId = getValue(formData, "projectId");
-
-	if (!projectId) {
-		throw new Error("Project is required");
-	}
-
-	await deleteProject({
-		projectId,
-		userId,
-	});
-
-	redirect("/dashboard/projects");
+	redirect("/dashboard/stacks");
 }
 
 export async function controlContainerAction(formData: FormData) {

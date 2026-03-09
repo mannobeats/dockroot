@@ -1,15 +1,7 @@
 import "server-only";
 
 import { createHash } from "node:crypto";
-import {
-	agents,
-	db,
-	deployments,
-	environments,
-	githubInstallations,
-	projects,
-	stacks,
-} from "@dockroot/db";
+import { agents, db, deployments, environments, githubInstallations, stacks } from "@dockroot/db";
 import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import {
@@ -121,14 +113,6 @@ function normalizeManagerUrl(value: string | undefined) {
 	return parsed.toString().replace(/\/$/, "");
 }
 
-function matchesStoredToken(storedToken: string | null | undefined, candidate: string) {
-	if (!storedToken) {
-		return false;
-	}
-
-	return storedToken === candidate || storedToken === hashToken(candidate);
-}
-
 async function issueRegistrationToken(agentId: string) {
 	const token = randomToken(48);
 
@@ -163,21 +147,6 @@ async function findAgentByAccessToken(accessToken: string) {
 	});
 }
 
-async function requireOwnedProject(projectId: string, userId: string) {
-	const project = await db.query.projects.findFirst({
-		where: and(eq(projects.id, projectId), eq(projects.createdByUserId, userId)),
-		columns: {
-			id: true,
-		},
-	});
-
-	if (!project) {
-		throw new Error("Project not found");
-	}
-
-	return project;
-}
-
 async function requireOwnedEnvironment(environmentId: string, userId: string) {
 	const environment = await db.query.environments.findFirst({
 		where: and(eq(environments.id, environmentId), eq(environments.createdByUserId, userId)),
@@ -191,26 +160,6 @@ async function requireOwnedEnvironment(environmentId: string, userId: string) {
 	}
 
 	return environment;
-}
-
-async function ensureUniqueProjectSlug(baseValue: string) {
-	const baseSlug = slugify(baseValue) || `item-${randomToken(8)}`;
-	let slug = baseSlug;
-	let attempt = 1;
-
-	while (true) {
-		const existing = await db.query.projects.findFirst({
-			where: eq(projects.slug, slug),
-			columns: { id: true },
-		});
-
-		if (!existing) {
-			return slug;
-		}
-
-		attempt += 1;
-		slug = `${baseSlug}-${attempt}`;
-	}
 }
 
 async function ensureUniqueEnvironmentSlug(baseValue: string) {
@@ -330,10 +279,6 @@ export async function ensureDefaultLocalEnvironment(userId: string) {
 export async function getDashboardData(userId: string, options?: { includeRuntime?: boolean }) {
 	await ensureDefaultLocalEnvironment(userId);
 
-	const [projectCount] = await db
-		.select({ count: sql<number>`count(*)` })
-		.from(projects)
-		.where(eq(projects.createdByUserId, userId));
 	const [environmentCount] = await db
 		.select({ count: sql<number>`count(*)` })
 		.from(environments)
@@ -379,48 +324,35 @@ export async function getDashboardData(userId: string, options?: { includeRuntim
 			})
 		: [];
 
-	const recentProjects = await db.query.projects.findMany({
-		where: eq(projects.createdByUserId, userId),
-		orderBy: [desc(projects.updatedAt)],
+	const recentStacks = await db.query.stacks.findMany({
+		where: eq(stacks.createdByUserId, userId),
+		orderBy: [desc(stacks.updatedAt)],
 		limit: 4,
+		columns: {
+			id: true,
+			name: true,
+			description: true,
+		},
 		with: {
-			stacks: {
+			environment: {
 				columns: {
 					id: true,
 					name: true,
-					status: true,
+					slug: true,
 				},
 			},
 		},
 	});
 
 	return {
-		projectCount: Number(projectCount?.count ?? 0),
 		environmentCount: Number(environmentCount?.count ?? 0),
 		stackCount: Number(stackCount?.count ?? 0),
 		deploymentCount: Number(deploymentCount?.count ?? 0),
 		recentDeployments,
-		recentProjects,
+		recentStacks,
 		runtime: options?.includeRuntime ? await getLocalDockerSnapshot() : null,
 		dataDir: options?.includeRuntime ? getPlatformDataDir() : null,
 	};
-}
-
-export async function listProjects(userId: string) {
-	await ensureDefaultLocalEnvironment(userId);
-
-	return db.query.projects.findMany({
-		where: eq(projects.createdByUserId, userId),
-		orderBy: [desc(projects.updatedAt)],
-		with: {
-			stacks: {
-				orderBy: [desc(stacks.updatedAt)],
-				with: {
-					environment: true,
-				},
-			},
-		},
-	});
 }
 
 export async function listStacks(userId: string, options?: { includeUntracked?: boolean }) {
@@ -431,7 +363,6 @@ export async function listStacks(userId: string, options?: { includeUntracked?: 
 			where: eq(stacks.createdByUserId, userId),
 			orderBy: [desc(stacks.updatedAt)],
 			with: {
-				project: true,
 				environment: true,
 				deployments: {
 					orderBy: [desc(deployments.createdAt)],
@@ -470,8 +401,6 @@ export async function listStacks(userId: string, options?: { includeUntracked?: 
 			slug: stack.slug,
 			name: stack.name,
 			status: stack.status,
-			projectName: stack.project.name,
-			projectId: stack.project.id,
 			stackId: stack.id,
 			environmentName: stack.environment.name,
 			sourceType: stack.sourceType,
@@ -491,8 +420,6 @@ export async function listStacks(userId: string, options?: { includeUntracked?: 
 			slug: project.name,
 			name: project.name,
 			status: project.status,
-			projectName: null,
-			projectId: null,
 			stackId: null,
 			environmentName: "External compose project",
 			sourceType: "external" as const,
@@ -598,41 +525,10 @@ export async function listDeployments(userId: string) {
 	});
 }
 
-export async function getProjectById(projectId: string, userId: string) {
-	return db.query.projects.findFirst({
-		where: and(eq(projects.id, projectId), eq(projects.createdByUserId, userId)),
-		with: {
-			stacks: {
-				orderBy: [desc(stacks.updatedAt)],
-				with: {
-					environment: true,
-					deployments: {
-						orderBy: [desc(deployments.createdAt)],
-						limit: 5,
-					},
-				},
-			},
-		},
-	});
-}
-
-export async function getStackById({
-	stackId,
-	projectId,
-	userId,
-}: {
-	stackId: string;
-	projectId: string;
-	userId: string;
-}) {
+export async function getStackById({ stackId, userId }: { stackId: string; userId: string }) {
 	return db.query.stacks.findFirst({
-		where: and(
-			eq(stacks.id, stackId),
-			eq(stacks.projectId, projectId),
-			eq(stacks.createdByUserId, userId),
-		),
+		where: and(eq(stacks.id, stackId), eq(stacks.createdByUserId, userId)),
 		with: {
-			project: true,
 			environment: true,
 			deployments: {
 				orderBy: [desc(deployments.createdAt)],
@@ -659,32 +555,6 @@ export async function getEnvironmentById(environmentId: string, userId: string) 
 			},
 		},
 	});
-}
-
-export async function createProject({
-	userId,
-	name,
-	description,
-}: {
-	userId: string;
-	name: string;
-	description?: string;
-}) {
-	const createdAt = now();
-	const slug = await ensureUniqueProjectSlug(name);
-
-	await db.insert(projects).values({
-		id: crypto.randomUUID(),
-		name,
-		slug,
-		description: description?.trim() || null,
-		createdByUserId: userId,
-		createdAt,
-		updatedAt: createdAt,
-	});
-
-	revalidatePath("/dashboard");
-	revalidatePath("/dashboard/projects");
 }
 
 export async function createEnvironment({
@@ -732,7 +602,6 @@ export async function createEnvironment({
 
 export async function createStack({
 	userId,
-	projectId,
 	environmentId,
 	name,
 	description,
@@ -740,24 +609,19 @@ export async function createStack({
 	envFileContent,
 }: {
 	userId: string;
-	projectId: string;
 	environmentId: string;
 	name: string;
 	description?: string;
 	composeYaml: string;
 	envFileContent?: string;
 }) {
-	await Promise.all([
-		requireOwnedProject(projectId, userId),
-		requireOwnedEnvironment(environmentId, userId),
-	]);
+	await requireOwnedEnvironment(environmentId, userId);
 
 	const createdAt = now();
 	const slug = await ensureUniqueStackSlug(name);
 
 	await db.insert(stacks).values({
 		id: crypto.randomUUID(),
-		projectId,
 		environmentId,
 		name,
 		slug,
@@ -772,8 +636,7 @@ export async function createStack({
 	});
 
 	revalidatePath("/dashboard");
-	revalidatePath("/dashboard/projects");
-	revalidatePath(`/dashboard/projects/${projectId}`);
+	revalidatePath("/dashboard/stacks");
 }
 
 export async function adoptComposeProject({
@@ -803,27 +666,14 @@ export async function adoptComposeProject({
 	}
 	const exported = await exportComposeProjectConfig(projectName, configFiles);
 	const createdAt = now();
-	const projectId = crypto.randomUUID();
-	const projectSlug = await ensureUniqueProjectSlug(projectName);
 	const humanName = projectName
 		.split("-")
 		.map((part) => (part ? part[0].toUpperCase() + part.slice(1) : part))
 		.join(" ");
 
-	await db.insert(projects).values({
-		id: projectId,
-		name: humanName,
-		slug: projectSlug,
-		description: `Adopted from external compose project ${projectName}.`,
-		createdByUserId: userId,
-		createdAt,
-		updatedAt: createdAt,
-	});
-
 	const stackId = crypto.randomUUID();
 	await db.insert(stacks).values({
 		id: stackId,
-		projectId,
 		environmentId: environment.id,
 		name: humanName,
 		slug: projectName,
@@ -839,7 +689,6 @@ export async function adoptComposeProject({
 		updatedAt: createdAt,
 	});
 
-	revalidatePath("/dashboard/projects");
 	revalidatePath("/dashboard/stacks");
 	return stackId;
 }
@@ -972,7 +821,6 @@ async function resolveGitHubDeploymentSource(
 
 export async function createGitHubStack({
 	userId,
-	projectId,
 	environmentId,
 	name,
 	description,
@@ -987,7 +835,6 @@ export async function createGitHubStack({
 	envFileContent,
 }: {
 	userId: string;
-	projectId: string;
 	environmentId: string;
 	name: string;
 	description?: string;
@@ -1001,10 +848,7 @@ export async function createGitHubStack({
 	composeYaml?: string;
 	envFileContent?: string;
 }) {
-	await Promise.all([
-		requireOwnedProject(projectId, userId),
-		requireOwnedEnvironment(environmentId, userId),
-	]);
+	await requireOwnedEnvironment(environmentId, userId);
 
 	const installation = await db.query.githubInstallations.findFirst({
 		where: and(
@@ -1041,7 +885,6 @@ export async function createGitHubStack({
 
 	await db.insert(stacks).values({
 		id: crypto.randomUUID(),
-		projectId,
 		environmentId,
 		name,
 		slug,
@@ -1065,8 +908,7 @@ export async function createGitHubStack({
 	});
 
 	revalidatePath("/dashboard");
-	revalidatePath("/dashboard/projects");
-	revalidatePath(`/dashboard/projects/${projectId}`);
+	revalidatePath("/dashboard/stacks");
 }
 
 export async function queueOrRunDeployment({
@@ -1087,7 +929,6 @@ export async function queueOrRunDeployment({
 					agent: true,
 				},
 			},
-			project: true,
 		},
 	});
 
@@ -1156,9 +997,8 @@ export async function queueOrRunDeployment({
 	}
 
 	revalidatePath("/dashboard");
-	revalidatePath("/dashboard/projects");
-	revalidatePath(`/dashboard/projects/${stack.projectId}`);
-	revalidatePath(`/dashboard/projects/${stack.projectId}/stacks/${stack.id}`);
+	revalidatePath("/dashboard/stacks");
+	revalidatePath(`/dashboard/stacks/${stack.id}`);
 	revalidatePath("/dashboard/environments");
 	revalidatePath(`/dashboard/environments/${stack.environmentId}`);
 }
@@ -1168,7 +1008,6 @@ async function deleteOwnedStackById(stackId: string, userId: string) {
 		where: and(eq(stacks.id, stackId), eq(stacks.createdByUserId, userId)),
 		with: {
 			environment: true,
-			project: true,
 		},
 	});
 
@@ -1183,46 +1022,14 @@ async function deleteOwnedStackById(stackId: string, userId: string) {
 	await db.delete(stacks).where(eq(stacks.id, stack.id));
 
 	revalidatePath("/dashboard");
-	revalidatePath("/dashboard/projects");
-	revalidatePath(`/dashboard/projects/${stack.projectId}`);
-	revalidatePath(`/dashboard/projects/${stack.projectId}/stacks/${stack.id}`);
 	revalidatePath("/dashboard/stacks");
+	revalidatePath(`/dashboard/stacks/${stack.id}`);
 	revalidatePath("/dashboard/containers");
 	revalidatePath("/dashboard/logs");
 }
 
 export async function deleteStack({ stackId, userId }: { stackId: string; userId: string }) {
 	await deleteOwnedStackById(stackId, userId);
-}
-
-export async function deleteProject({ projectId, userId }: { projectId: string; userId: string }) {
-	const project = await db.query.projects.findFirst({
-		where: and(eq(projects.id, projectId), eq(projects.createdByUserId, userId)),
-		with: {
-			stacks: {
-				with: {
-					environment: true,
-				},
-			},
-		},
-	});
-
-	if (!project) {
-		throw new Error("Project not found");
-	}
-
-	for (const stack of project.stacks) {
-		await deleteOwnedStackById(stack.id, userId);
-	}
-
-	await db.delete(projects).where(eq(projects.id, project.id));
-
-	revalidatePath("/dashboard");
-	revalidatePath("/dashboard/projects");
-	revalidatePath(`/dashboard/projects/${project.id}`);
-	revalidatePath("/dashboard/stacks");
-	revalidatePath("/dashboard/containers");
-	revalidatePath("/dashboard/logs");
 }
 
 export async function deleteEnvironment({
@@ -1260,7 +1067,6 @@ export async function deleteEnvironment({
 	revalidatePath("/dashboard");
 	revalidatePath("/dashboard/environments");
 	revalidatePath(`/dashboard/environments/${environment.id}`);
-	revalidatePath("/dashboard/projects");
 	revalidatePath("/dashboard/stacks");
 	revalidatePath("/dashboard/containers");
 	revalidatePath("/dashboard/logs");
@@ -1518,9 +1324,8 @@ export async function completeDeployment({
 	});
 
 	revalidatePath("/dashboard");
-	revalidatePath("/dashboard/projects");
-	revalidatePath(`/dashboard/projects/${deployment.stack.projectId}`);
-	revalidatePath(`/dashboard/projects/${deployment.stack.projectId}/stacks/${deployment.stackId}`);
+	revalidatePath("/dashboard/stacks");
+	revalidatePath(`/dashboard/stacks/${deployment.stackId}`);
 	revalidatePath("/dashboard/environments");
 	revalidatePath(`/dashboard/environments/${deployment.environmentId}`);
 }
@@ -1610,14 +1415,14 @@ export async function getGlobalSettings(userId: string) {
 	await ensureDefaultLocalEnvironment(userId);
 
 	const environmentsList = await listEnvironments(userId);
-	const projectsList = await listProjects(userId);
+	const stacksList = await listStacks(userId);
 	const defaultLocal = environmentsList.find((environment) => environment.isDefaultLocal);
 
 	return {
 		managerUrl: defaultLocal?.managerUrl || publicEnv.appUrl,
 		dataDir: getPlatformDataDir(),
 		environments: environmentsList.length,
-		projects: projectsList.length,
+		stacks: stacksList.filter((stack) => stack.type === "tracked").length,
 	};
 }
 
@@ -1654,7 +1459,6 @@ export async function updateGlobalSettings({
 	revalidatePath("/dashboard/settings");
 	revalidatePath("/dashboard/containers");
 	revalidatePath("/dashboard/stacks");
-	revalidatePath("/dashboard/projects");
 }
 
 export async function getPendingDeploymentById(id: string) {

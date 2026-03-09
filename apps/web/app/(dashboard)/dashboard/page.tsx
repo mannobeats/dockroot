@@ -1,4 +1,4 @@
-import { Boxes, FolderKanban, PlayCircle, Server } from "lucide-react";
+import { Boxes, Layers3, PlayCircle, Server } from "lucide-react";
 import Link from "next/link";
 import { LiveRuntimePanel } from "@/components/live-runtime-panel";
 import { MonitoringHealthGrid } from "@/components/monitoring-health-grid";
@@ -79,10 +79,10 @@ export default async function DashboardPage({
 				actions={
 					<>
 						<LinkButton
-							href={`/dashboard/projects?environment=${environment.id}`}
+							href={`/dashboard/stacks?environment=${environment.id}`}
 							variant="secondary"
 						>
-							Projects
+							Stacks
 						</LinkButton>
 						<LinkButton href={`/dashboard/stacks?environment=${environment.id}`}>
 							Deploy Stack
@@ -94,10 +94,10 @@ export default async function DashboardPage({
 			{/* Stats Grid */}
 			<div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
 				<StatCard
-					label="Projects"
-					value={String(data.projectCount)}
-					detail={`${data.stackCount} stacks`}
-					icon={FolderKanban}
+					label="Stacks"
+					value={String(data.stackCount)}
+					detail="Tracked workspaces"
+					icon={Layers3}
 				/>
 				<StatCard
 					label="Environments"
@@ -123,7 +123,7 @@ export default async function DashboardPage({
 				/>
 			</div>
 
-			{/* Host Overview + Recent Projects */}
+			{/* Host Overview + Recent stacks */}
 			<div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
 				{includeRuntime && runtime ? (
 					<Panel padding="md">
@@ -164,45 +164,43 @@ export default async function DashboardPage({
 					<Panel padding="md">
 						<h2 className="text-sm font-semibold">Workspace overview</h2>
 						<p className="mt-2 max-w-lg text-sm text-muted">
-							Scoped to owned projects, environments, stacks, and containers. Host telemetry
-							restricted to privileged operators.
+							Scoped to owned environments, stacks, and containers. Host telemetry restricted to
+							privileged operators.
 						</p>
 					</Panel>
 				)}
 
 				<Panel padding="md">
 					<div className="flex items-center justify-between">
-						<h2 className="text-sm font-semibold">Recent projects</h2>
+						<h2 className="text-sm font-semibold">Recent stacks</h2>
 						<Link
-							href={`/dashboard/projects?environment=${environment.id}`}
+							href={`/dashboard/stacks?environment=${environment.id}`}
 							className="text-xs font-medium text-muted transition-colors hover:text-foreground"
 						>
 							View all
 						</Link>
 					</div>
 					<div className="mt-4 space-y-2">
-						{data.recentProjects.length ? (
-							data.recentProjects.map((project) => (
+						{data.recentStacks.length ? (
+							data.recentStacks.map((stack) => (
 								<Link
-									key={project.id}
-									href={`/dashboard/projects/${project.id}`}
+									key={stack.id}
+									href={`/dashboard/stacks/${stack.id}`}
 									className="block rounded-lg border border-default/10 p-3 transition-all hover:border-default/20 hover:shadow-sm"
 								>
 									<div className="flex items-start justify-between gap-3">
 										<div className="min-w-0">
-											<p className="text-sm font-medium">{project.name}</p>
+											<p className="text-sm font-medium">{stack.name}</p>
 											<p className="mt-0.5 truncate text-xs text-muted">
-												{project.description || "No description"}
+												{stack.description || stack.environment.name}
 											</p>
 										</div>
-										<Badge className="shrink-0 px-2 py-0.5 text-xs">
-											{project.stacks.length} stacks
-										</Badge>
+										<Badge className="shrink-0 px-2 py-0.5 text-xs">{stack.environment.name}</Badge>
 									</div>
 								</Link>
 							))
 						) : (
-							<EmptyState title="No projects yet" className="p-6" />
+							<EmptyState title="No stacks yet" className="p-6" />
 						)}
 					</div>
 				</Panel>
