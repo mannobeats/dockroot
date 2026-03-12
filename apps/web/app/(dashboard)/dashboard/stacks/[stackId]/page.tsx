@@ -1,4 +1,4 @@
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Lock } from "lucide-react";
 import {
 	controlContainerAction,
 	deleteStackAction,
@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/link-button";
 import { getGlobalSettings, getStackById } from "@/lib/platform";
 import { getContainerDetails, listStackContainers } from "@/lib/platform/docker";
+import { getProtectedStackLabel, isProtectedManagerStack } from "@/lib/runtime-protection";
 import { getServerSession } from "@/lib/session";
 
 export default async function StackWorkspacePage({
@@ -57,6 +58,8 @@ export default async function StackWorkspacePage({
 		}
 	}
 	const latestDeployment = stack.deployments[0];
+	const isProtected = isProtectedManagerStack(stack.slug);
+	const protectedLabel = getProtectedStackLabel(stack.slug);
 	const hasRunningContainers = containers.some((container) => container.State === "running");
 	const shouldRedeploy =
 		hasRunningContainers ||
@@ -79,6 +82,12 @@ export default async function StackWorkspacePage({
 								Stack
 							</p>
 							<StatusBadge status={stack.status} />
+							{isProtected ? (
+								<Badge title={protectedLabel || undefined} variant="warning">
+									<Lock className="h-2.5 w-2.5" />
+									Locked
+								</Badge>
+							) : null}
 						</div>
 						<h1 className="text-lg font-semibold">{stack.name}</h1>
 					</div>
@@ -90,6 +99,8 @@ export default async function StackWorkspacePage({
 							label={shouldRedeploy ? "Redeploy" : "Deploy"}
 							pendingLabel={shouldRedeploy ? "Redeploying..." : "Deploying..."}
 							size="sm"
+							disabled={isProtected}
+							title={protectedLabel || undefined}
 						/>
 					</form>
 					<DestructiveActionModal
@@ -101,6 +112,7 @@ export default async function StackWorkspacePage({
 						pendingLabel="Destroying..."
 						triggerVariant="danger"
 						triggerSize="sm"
+						disabled={isProtected}
 						hiddenFields={{ stackId: stack.id }}
 					/>
 					<DestructiveActionModal
@@ -112,6 +124,7 @@ export default async function StackWorkspacePage({
 						pendingLabel="Deleting..."
 						triggerVariant="quietDanger"
 						triggerSize="sm"
+						disabled={isProtected}
 						hiddenFields={{ stackId: stack.id }}
 					/>
 				</div>
@@ -144,6 +157,8 @@ export default async function StackWorkspacePage({
 						initialEnvFileContent={stack.envFileContent}
 						editorHeight={editorHeight}
 						action={updateStackConfigAction}
+						disabled={isProtected}
+						disabledReason={isProtected ? protectedLabel || undefined : undefined}
 					/>
 
 					{/* Services accordion */}

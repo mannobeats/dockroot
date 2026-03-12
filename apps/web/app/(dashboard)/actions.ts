@@ -23,6 +23,7 @@ import {
 	createStack,
 	deleteEnvironment,
 	deleteStack,
+	getStackById,
 	queueOrRunDeployment,
 	rotateAgentRegistrationToken,
 	updateGlobalSettings,
@@ -33,7 +34,11 @@ import {
 	listAccessibleContainersForUser,
 	requireAccessibleContainerForUser,
 } from "@/lib/runtime-access";
-import { isProtectedManagerContainer, isProtectedManagerImage } from "@/lib/runtime-protection";
+import {
+	isProtectedManagerContainer,
+	isProtectedManagerImage,
+	isProtectedManagerStack,
+} from "@/lib/runtime-protection";
 
 function getValue(formData: FormData, key: string) {
 	return String(formData.get(key) || "").trim();
@@ -190,6 +195,14 @@ export async function deployStackAction(formData: FormData) {
 		throw new Error("Stack is required");
 	}
 
+	const stack = await getStackById({ stackId, userId });
+	if (!stack) {
+		throw new Error("Stack not found");
+	}
+	if (isProtectedManagerStack(stack.slug)) {
+		throw new Error("Dockroot platform stacks are locked and cannot be controlled from the UI.");
+	}
+
 	await queueOrRunDeployment({
 		stackId,
 		userId,
@@ -206,6 +219,14 @@ export async function updateStackConfigAction(formData: FormData) {
 
 	if (!stackId || !composeYaml) {
 		throw new Error("Stack and compose YAML are required");
+	}
+
+	const stack = await getStackById({ stackId, userId });
+	if (!stack) {
+		throw new Error("Stack not found");
+	}
+	if (isProtectedManagerStack(stack.slug)) {
+		throw new Error("Dockroot platform stacks are locked and cannot be edited from the UI.");
 	}
 
 	await updateStackConfig({
@@ -233,6 +254,14 @@ export async function destroyStackAction(formData: FormData) {
 		throw new Error("Stack is required");
 	}
 
+	const stack = await getStackById({ stackId, userId });
+	if (!stack) {
+		throw new Error("Stack not found");
+	}
+	if (isProtectedManagerStack(stack.slug)) {
+		throw new Error("Dockroot platform stacks are locked and cannot be destroyed from the UI.");
+	}
+
 	await queueOrRunDeployment({
 		stackId,
 		userId,
@@ -247,6 +276,14 @@ export async function deleteStackAction(formData: FormData) {
 
 	if (!stackId) {
 		throw new Error("Stack is required");
+	}
+
+	const stack = await getStackById({ stackId, userId });
+	if (!stack) {
+		throw new Error("Stack not found");
+	}
+	if (isProtectedManagerStack(stack.slug)) {
+		throw new Error("Dockroot platform stacks are locked and cannot be deleted from the UI.");
 	}
 
 	await deleteStack({
@@ -311,6 +348,9 @@ export async function controlComposeProjectAction(formData: FormData) {
 
 	if (!projectName || !["start", "stop", "restart", "destroy"].includes(action)) {
 		throw new Error("Compose project and action are required");
+	}
+	if (isProtectedManagerStack(projectName)) {
+		throw new Error("Dockroot platform stacks are locked and cannot be controlled from the UI.");
 	}
 	if (action === "destroy") {
 		requireDestructiveConfirmation(formData);

@@ -1,10 +1,11 @@
 "use client";
 
-import { ChevronDown, ChevronRight, ExternalLink, Package } from "lucide-react";
+import { ChevronDown, ChevronRight, ExternalLink, Lock, Package } from "lucide-react";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { DestructiveActionModal } from "@/components/destructive-action-modal";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { StatusBadge } from "@/components/status-badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
 	DataTable,
@@ -18,6 +19,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { LinkButton } from "@/components/ui/link-button";
 import { Panel } from "@/components/ui/panel";
+import { getProtectedStackLabel } from "@/lib/runtime-protection";
 
 type FormAction = (formData: FormData) => void | Promise<void>;
 
@@ -35,6 +37,7 @@ type TrackedStackRow = {
 	runningCount: number;
 	containers: StackContainer[];
 	lastDeployment: { status: string } | null;
+	isProtected: boolean;
 };
 
 type UntrackedStackRow = {
@@ -50,6 +53,7 @@ type UntrackedStackRow = {
 	containers: StackContainer[];
 	configFiles: string[];
 	lastDeployment: null;
+	isProtected: boolean;
 };
 
 type StackRow = TrackedStackRow | UntrackedStackRow;
@@ -178,6 +182,7 @@ export function StacksTableWorkspace({
 								const detailEnvironmentSuffix = environmentId
 									? `?environment=${environmentId}`
 									: "";
+								const protectedLabel = getProtectedStackLabel(stack.slug);
 
 								return (
 									<Fragment key={rowKey}>
@@ -205,7 +210,15 @@ export function StacksTableWorkspace({
 											</DataTableCell>
 											<DataTableCell>
 												<div className="space-y-0.5">
-													<p className="font-medium">{stack.name}</p>
+													<div className="flex items-center gap-2">
+														<p className="font-medium">{stack.name}</p>
+														{stack.isProtected ? (
+															<Badge title={protectedLabel || undefined} variant="warning">
+																<Lock className="h-2.5 w-2.5" />
+																Locked
+															</Badge>
+														) : null}
+													</div>
 													<p className="text-xs text-muted">{stack.slug}</p>
 												</div>
 											</DataTableCell>
@@ -250,6 +263,8 @@ export function StacksTableWorkspace({
 																			: "Deploying..."
 																	}
 																	size="xs"
+																	disabled={stack.isProtected}
+																	title={protectedLabel || undefined}
 																/>
 															</form>
 															<DestructiveActionModal
@@ -261,6 +276,7 @@ export function StacksTableWorkspace({
 																pendingLabel="Destroying..."
 																triggerVariant="danger"
 																triggerSize="xs"
+																disabled={stack.isProtected}
 																hiddenFields={{ stackId: stack.stackId || "" }}
 															/>
 															<LinkButton
@@ -291,6 +307,8 @@ export function StacksTableWorkspace({
 																			pendingLabel="Stopping..."
 																			variant="outline"
 																			size="xs"
+																			disabled={stack.isProtected}
+																			title={protectedLabel || undefined}
 																		/>
 																	</form>
 																	<form action={controlComposeProjectAction}>
@@ -309,6 +327,8 @@ export function StacksTableWorkspace({
 																			pendingLabel="Restarting..."
 																			variant="outline"
 																			size="xs"
+																			disabled={stack.isProtected}
+																			title={protectedLabel || undefined}
 																		/>
 																	</form>
 																</>
@@ -329,6 +349,8 @@ export function StacksTableWorkspace({
 																		pendingLabel="Starting..."
 																		variant="outline"
 																		size="xs"
+																		disabled={stack.isProtected}
+																		title={protectedLabel || undefined}
 																	/>
 																</form>
 															)}
@@ -341,6 +363,7 @@ export function StacksTableWorkspace({
 																pendingLabel="Destroying..."
 																triggerVariant="danger"
 																triggerSize="xs"
+																disabled={stack.isProtected}
 																hiddenFields={{
 																	projectName: stack.slug,
 																	action: "destroy",
@@ -376,6 +399,8 @@ export function StacksTableWorkspace({
 																label="Adopt"
 																pendingLabel="Adopting..."
 																size="xs"
+																disabled={stack.isProtected}
+																title={protectedLabel || undefined}
 															/>
 														</form>
 													) : null}

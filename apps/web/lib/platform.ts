@@ -24,6 +24,7 @@ import {
 import { getPlatformDataDir } from "@/lib/platform/fs";
 import { publicEnv } from "@/lib/public-env";
 import { emitRealtime, emitToRoom } from "@/lib/realtime";
+import { isProtectedManagerStack } from "@/lib/runtime-protection";
 
 function now() {
 	return new Date();
@@ -409,6 +410,7 @@ export async function listStacks(userId: string, options?: { includeUntracked?: 
 			runningCount: containers.filter((container) => container.State === "running").length,
 			containers,
 			lastDeployment: stack.deployments[0] || null,
+			isProtected: isProtectedManagerStack(stack.slug),
 		};
 	});
 
@@ -429,6 +431,7 @@ export async function listStacks(userId: string, options?: { includeUntracked?: 
 			runningCount: project.runningCount,
 			containers: project.containers,
 			lastDeployment: null,
+			isProtected: isProtectedManagerStack(project.name),
 		}));
 
 	return [...tracked, ...untracked].sort((left, right) => left.name.localeCompare(right.name));
@@ -685,6 +688,10 @@ export async function adoptComposeProject({
 }) {
 	if (!projectName || !configFiles.length) {
 		throw new Error("Compose project name and config files are required.");
+	}
+
+	if (isProtectedManagerStack(projectName)) {
+		throw new Error("Dockroot platform stacks are protected and cannot be adopted.");
 	}
 
 	const existingStack = await db.query.stacks.findFirst({

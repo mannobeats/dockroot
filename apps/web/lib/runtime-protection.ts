@@ -1,5 +1,3 @@
-import "server-only";
-
 type RuntimeSummary = {
 	ID?: string;
 	Image?: string;
@@ -51,6 +49,18 @@ export function isProtectedManagerContainer(container: RuntimeSummary) {
 	return (
 		project === managerComposeProject && service !== undefined && managerServiceNames.has(service)
 	);
+}
+
+export function isProtectedManagerStack(projectName: string | undefined | null) {
+	return Boolean(projectName) && projectName === managerComposeProject;
+}
+
+export function getProtectedStackLabel(projectName: string | undefined | null) {
+	if (!isProtectedManagerStack(projectName)) {
+		return null;
+	}
+
+	return "Protected platform stack";
 }
 
 export function getProtectedContainerLabel(container: RuntimeSummary) {

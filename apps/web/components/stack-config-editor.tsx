@@ -13,6 +13,8 @@ export function StackConfigEditor({
 	initialEnvFileContent,
 	editorHeight,
 	action,
+	disabled = false,
+	disabledReason,
 }: {
 	stackId: string;
 	composeFileName: string;
@@ -21,6 +23,8 @@ export function StackConfigEditor({
 	initialEnvFileContent?: string | null;
 	editorHeight: string;
 	action: (formData: FormData) => void | Promise<void>;
+	disabled?: boolean;
+	disabledReason?: string;
 }) {
 	const initialEnv = initialEnvFileContent || "";
 	const [composeYaml, setComposeYaml] = useState(initialComposeYaml);
@@ -78,6 +82,7 @@ export function StackConfigEditor({
 					<p className="text-xs text-muted">
 						Edit compose/env, then save or redeploy. Shortcuts: Cmd/Ctrl+S and Cmd/Ctrl+Shift+S.
 					</p>
+					{disabledReason ? <p className="mt-1 text-xs text-warning">{disabledReason}</p> : null}
 					<p
 						className={`mt-1 inline-flex items-center gap-1 text-[11px] font-medium ${
 							isDirty ? "text-warning" : "text-success"
@@ -96,6 +101,7 @@ export function StackConfigEditor({
 						variant="secondary"
 						size="sm"
 						title="Cmd/Ctrl+S"
+						disabled={disabled}
 					>
 						Save
 					</Button>
@@ -106,6 +112,7 @@ export function StackConfigEditor({
 						value="redeploy"
 						size="sm"
 						title="Cmd/Ctrl+Shift+S"
+						disabled={disabled}
 					>
 						Save + Redeploy
 					</Button>
