@@ -71,14 +71,18 @@ function getBaseUrlConfig() {
 	};
 }
 
-function getTrustedOrigins(): string[] | ((request: Request) => string[]) {
+function getTrustedOrigins(): string[] | ((request?: Request) => string[]) {
 	const configured = getConfiguredOrigins();
 
 	if (configured.length > 0) {
 		return configured;
 	}
 
-	return (request: Request) => {
+	return (request?: Request) => {
+		if (!request) {
+			return [];
+		}
+
 		const origin = request.headers.get("origin");
 		const host = request.headers.get("x-forwarded-host") || request.headers.get("host");
 		if (!origin || !host) {
