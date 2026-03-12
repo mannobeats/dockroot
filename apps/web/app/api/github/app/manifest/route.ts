@@ -11,6 +11,51 @@ function inferPublicAppUrl(request: Request) {
 	return new URL(request.url).origin;
 }
 
+function isPrivateOrLocalHostname(hostname: string) {
+	const normalized = hostname.trim().toLowerCase();
+	if (!normalized) {
+		return true;
+	}
+	if (
+		normalized === "localhost" ||
+		normalized === "127.0.0.1" ||
+		normalized === "::1" ||
+		normalized.endsWith(".local")
+	) {
+		return true;
+	}
+	if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(normalized)) {
+		return true;
+	}
+	if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(normalized)) {
+		return true;
+	}
+	const match172 = normalized.match(/^172\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/);
+	if (match172) {
+		const octet = Number(match172[1]);
+		if (octet >= 16 && octet <= 31) {
+			return true;
+		}
+	}
+	return false;
+}
+
+function supportsPublicWebhook(origin: string) {
+	try {
+		const parsed = new URL(origin);
+		// GitHub must be able to reach the hook over the public internet.
+		if (isPrivateOrLocalHostname(parsed.hostname)) {
+			return false;
+		}
+		if (parsed.protocol !== "https:") {
+			return false;
+		}
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 function escapeHtmlAttr(value: string) {
 	return value
 		.replaceAll("&", "&amp;")
@@ -35,6 +80,7 @@ export async function GET(request: Request) {
 	const providerName = requestedName.slice(0, 120) || "Dockroot GitHub App";
 	const providerOwner = (url.searchParams.get("owner") || "").trim() || null;
 	const appUrl = inferPublicAppUrl(request);
+	const webhookCapable = supportsPublicWebhook(appUrl);
 	const state = await signGitHubManifestState({
 		userId,
 		redirectTo,
@@ -42,12 +88,9 @@ export async function GET(request: Request) {
 		providerOwner,
 	});
 
-	const manifest = {
+	const manifest: Record<string, unknown> = {
 		name: providerName,
 		url: appUrl,
-		hook_attributes: {
-			url: `${appUrl}/api/github/webhook`,
-		},
 		redirect_url: `${appUrl}/api/github/app/manifest/callback`,
 		callback_urls: [`${appUrl}/api/github/callback`],
 		setup_url: `${appUrl}/dashboard/stacks?github=connected`,
@@ -60,8 +103,13 @@ export async function GET(request: Request) {
 			emails: "read",
 			pull_requests: "write",
 		},
-		default_events: ["push", "installation", "installation_repositories"],
+		default_events: webhookCapable ? ["push", "pull_request"] : [],
 	};
+	if (webhookCapable) {
+		manifest.hook_attributes = {
+			url: `${appUrl}/api/github/webhook`,
+		};
+	}
 
 	const manifestPayload = JSON.stringify(manifest);
 	const baseAction = providerOwner

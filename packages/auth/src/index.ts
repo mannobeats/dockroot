@@ -17,14 +17,51 @@ function getAppUrl() {
 	);
 }
 
+function toOrigin(value: string) {
+	try {
+		return new URL(value).origin;
+	} catch {
+		return "";
+	}
+}
+
+function expandLoopbackAliases(origin: string): string[] {
+	const normalizedOrigin = toOrigin(origin);
+	if (!normalizedOrigin) {
+		return [];
+	}
+
+	let parsed: URL;
+	try {
+		parsed = new URL(normalizedOrigin);
+	} catch {
+		return [];
+	}
+
+	const hostname = parsed.hostname.toLowerCase();
+	const loopbackHosts = new Set(["localhost", "127.0.0.1", "0.0.0.0", "::1"]);
+	if (!loopbackHosts.has(hostname)) {
+		return [normalizedOrigin];
+	}
+
+	const aliases = ["localhost", "127.0.0.1", "0.0.0.0", "::1"];
+	return aliases.map((aliasHost) => {
+		const clone = new URL(normalizedOrigin);
+		clone.hostname = aliasHost;
+		return clone.origin;
+	});
+}
+
 function getTrustedOrigins(appUrl: string): string[] {
 	const fromEnv = (process.env.BETTER_AUTH_TRUSTED_ORIGINS || "")
 		.split(",")
 		.map((origin) => origin.trim())
 		.filter(Boolean);
 
-	const combined = [...(appUrl ? [appUrl] : []), ...fromEnv];
-	return combined.filter((origin, index, all) => all.indexOf(origin) === index);
+	const combined = [...(appUrl ? [appUrl] : []), ...fromEnv].flatMap((origin) =>
+		expandLoopbackAliases(origin),
+	);
+	return combined.filter(Boolean).filter((origin, index, all) => all.indexOf(origin) === index);
 }
 
 function shouldUseSecureCookies(): boolean {
