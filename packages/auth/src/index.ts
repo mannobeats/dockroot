@@ -17,7 +17,7 @@ function getAppUrl() {
 	);
 }
 
-function getTrustedOrigins() {
+function getConfiguredOrigins() {
 	return [
 		getAppUrl(),
 		process.env.BETTER_AUTH_URL,
@@ -29,13 +29,54 @@ function getTrustedOrigins() {
 		.filter((origin, index, all) => all.indexOf(origin) === index);
 }
 
+function getTrustedOrigins() {
+	return getConfiguredOrigins();
+}
+
+function originToAllowedHost(origin: string) {
+	if (!origin || origin.startsWith("/")) {
+		return null;
+	}
+
+	try {
+		return new URL(origin).host;
+	} catch {
+		return origin.replace(/^https?:\/\//u, "").replace(/\/.*$/u, "") || null;
+	}
+}
+
+function getBaseUrlConfig() {
+	const fallbackUrl = getAppUrl() || getRequiredEnv("BETTER_AUTH_URL");
+	const allowedHosts = getConfiguredOrigins()
+		.map(originToAllowedHost)
+		.filter((host): host is string => Boolean(host))
+		.filter((host, index, all) => all.indexOf(host) === index);
+
+	if (!allowedHosts.length) {
+		return fallbackUrl;
+	}
+
+	let protocol: "http" | "https" | undefined;
+	try {
+		protocol = new URL(fallbackUrl).protocol === "https:" ? "https" : "http";
+	} catch {
+		protocol = undefined;
+	}
+
+	return {
+		fallback: fallbackUrl,
+		allowedHosts,
+		...(protocol ? { protocol } : {}),
+	};
+}
+
 function publicSignupsAllowed() {
 	return process.env.DOCKROOT_ALLOW_PUBLIC_SIGNUP === "true";
 }
 
 export const auth = betterAuth({
 	secret: getRequiredEnv("BETTER_AUTH_SECRET"),
-	baseURL: getAppUrl() || getRequiredEnv("BETTER_AUTH_URL"),
+	baseURL: getBaseUrlConfig(),
 	trustedOrigins: getTrustedOrigins(),
 	database: drizzleAdapter(db, {
 		provider: "pg",
@@ -59,6 +100,7 @@ export const auth = betterAuth({
 		max: 120,
 	},
 	advanced: {
+		trustedProxyHeaders: true,
 		useSecureCookies:
 			process.env.SESSION_COOKIE_SECURE === undefined
 				? process.env.NODE_ENV === "production"
