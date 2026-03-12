@@ -72,7 +72,7 @@ Dockroot now has explicit deployment modes.
 Use this when you want live code changes and the web app running on your machine.
 
 ```bash
-cp .env.local.example .env.local
+cp .env.example .env.local
 make dev-full
 ```
 
@@ -115,14 +115,13 @@ Open Dockroot at `http://localhost:3080` or your configured domain. The first ac
   Local infrastructure only. Used by `make dev-full` and `make dev-lite`.
 - `docker-compose.yaml`
   Full Docker deployment for users and production-style single-host installs.
-- `.env.local.example`
-  Optional overrides for host development.
 - `.env.example`
-  Optional overrides for Docker deployments.
+  Optional overrides for both local development and Docker deployments.
 
 ### Environment rules
 
 - `.env.local` is optional and only used for local overrides like `APP_URL` or `GITHUB_APP_*`
+- If you want override files, use `.env.example` as the single template for both local and Docker installs
 - Docker deployments do not require a `.env` file
 - Dockroot generates its internal secrets on first boot and persists them in the data directory or Docker volume
 - Dockroot derives `BETTER_AUTH_URL`, `NEXT_PUBLIC_APP_URL`, cookie security, database credentials, and metrics auth from the bootstrap runtime config
@@ -175,7 +174,7 @@ Useful commands:
 | `make prod-logs` | Tail Docker deployment logs |
 | `pnpm dev` | Run Dockroot locally through `server.mjs` |
 | `pnpm build` | Create the production build |
-| `pnpm start` | Start the production server from `.env.local` |
+| `pnpm start` | Start the production server with bootstrapped local runtime config |
 | `pnpm lint` | Run Biome checks |
 | `pnpm lint:fix` | Apply Biome fixes |
 | `pnpm db:generate` | Generate Drizzle migrations |

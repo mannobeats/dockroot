@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 function readEnv(name) {
 	const value = process.env[name];
@@ -259,6 +260,9 @@ async function main() {
 	}
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
-	main();
+if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
+	main().catch((error) => {
+		console.error(error);
+		process.exit(1);
+	});
 }

@@ -4,6 +4,8 @@ const PLACEHOLDER_PATTERNS = [
 	/example\.com/i,
 	/your-[a-z0-9-]+/i,
 ];
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { buildDatabaseUrlFromParts } from "./database-url.mjs";
 
 function readEnv(name) {
@@ -158,6 +160,6 @@ function main() {
 	}
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
 	main();
 }
