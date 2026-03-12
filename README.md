@@ -117,9 +117,18 @@ Open Dockroot at `http://localhost:3080` or your configured domain. The first ac
 
 Dockroot uses manifest-first onboarding:
 
-1. Open stacks page, choose GitHub, then click **Create GitHub App**
-2. Complete GitHub's app creation and install flow
-3. Return to Dockroot and select repository/compose path
+1. Open stacks page, choose GitHub, and enter an app name (optional organization owner)
+2. Click **New App** to open GitHub with Dockroot manifest fields prefilled
+3. Complete GitHub's create + install flow, then return to Dockroot and pick repositories
+4. Repeat as needed to register multiple GitHub Apps in one Dockroot instance
+
+Dockroot preconfigures these manifest defaults:
+
+- webhook URL: `<APP_URL>/api/github/webhook`
+- redirect URL: `<APP_URL>/api/github/app/manifest/callback`
+- setup URL: `<APP_URL>/dashboard/stacks?github=connected`
+- repository permissions: `contents: read`, `metadata: read`, `pull_requests: write`
+- events: `push`, `installation`, `installation_repositories`
 
 Webhook push deploys are idempotent by delivery id and support per-stack auto-deploy path filters.
 

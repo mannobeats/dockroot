@@ -17,13 +17,12 @@ import { decryptSecret } from "@/lib/crypto-secrets";
 import {
 	downloadRepositoryTarball,
 	fetchRepositoryTextFile,
-	getActiveGitHubProviderConfig,
 	getGitHubInstallation,
-	getInstallationProviderConfigByGitHubInstallationId,
 	getInstallationProviderConfigByInternalInstallationId,
 	getRepositoryBranchHeadSha,
 	listChangedFilesForCompare,
 	listGitHubAppInstallations,
+	listGitHubProviderConfigs,
 	listInstallationRepositories,
 } from "@/lib/github-app";
 import { incrementDeploymentEvent } from "@/lib/monitoring";
@@ -504,19 +503,13 @@ export async function listStacks(userId: string, options?: { includeUntracked?: 
 }
 
 export async function listGitHubInstallations(userId: string) {
-	const provider = await getActiveGitHubProviderConfig();
-	if (!provider) {
+	const providers = await listGitHubProviderConfigs();
+	if (!providers.length) {
 		return [];
 	}
 
-	let installations = await db.query.githubInstallations.findMany({
-		where: eq(githubInstallations.createdByUserId, userId),
-		orderBy: [desc(githubInstallations.updatedAt)],
-	});
-
-	if (!installations.length) {
-		const remoteInstallations = await listGitHubAppInstallations(provider);
-
+	for (const provider of providers) {
+		const remoteInstallations = await listGitHubAppInstallations(provider).catch(() => []);
 		for (const installation of remoteInstallations) {
 			await syncGitHubInstallation({
 				userId,
@@ -524,12 +517,12 @@ export async function listGitHubInstallations(userId: string) {
 				providerId: provider.id || undefined,
 			});
 		}
-
-		installations = await db.query.githubInstallations.findMany({
-			where: eq(githubInstallations.createdByUserId, userId),
-			orderBy: [desc(githubInstallations.updatedAt)],
-		});
 	}
+
+	const installations = await db.query.githubInstallations.findMany({
+		where: eq(githubInstallations.createdByUserId, userId),
+		orderBy: [desc(githubInstallations.updatedAt)],
+	});
 
 	const hydrated = await Promise.all(
 		installations.map(async (installation) => {
@@ -557,10 +550,27 @@ export async function listGitHubInstallations(userId: string) {
 	return hydrated;
 }
 
+export async function listGitHubProviders(userId: string) {
+	return db.query.githubProviders.findMany({
+		where: and(eq(githubProviders.createdByUserId, userId), eq(githubProviders.isActive, true)),
+		orderBy: [desc(githubProviders.updatedAt)],
+		columns: {
+			id: true,
+			name: true,
+			appSlug: true,
+			githubAppId: true,
+			createdAt: true,
+			updatedAt: true,
+		},
+	});
+}
+
 export async function getGitHubProviderStatus() {
-	const provider = await getActiveGitHubProviderConfig();
+	const providers = await listGitHubProviderConfigs();
+	const provider = providers[0] || null;
 	return {
-		configured: Boolean(provider),
+		configured: providers.length > 0,
+		providerCount: providers.length,
 		source: provider?.source || null,
 		appSlug: provider?.appSlug || null,
 		appId: provider?.appId || null,
@@ -877,9 +887,17 @@ export async function syncGitHubInstallation({
 	return id;
 }
 
-export async function syncKnownGitHubInstallation(githubInstallationId: string) {
+export async function syncKnownGitHubInstallation(
+	githubInstallationId: string,
+	providerId?: string,
+) {
 	const existing = await db.query.githubInstallations.findFirst({
-		where: eq(githubInstallations.githubInstallationId, githubInstallationId),
+		where: providerId
+			? and(
+					eq(githubInstallations.githubInstallationId, githubInstallationId),
+					eq(githubInstallations.providerId, providerId),
+				)
+			: eq(githubInstallations.githubInstallationId, githubInstallationId),
 	});
 
 	if (!existing) {
@@ -889,13 +907,21 @@ export async function syncKnownGitHubInstallation(githubInstallationId: string) 
 	return syncGitHubInstallation({
 		userId: existing.createdByUserId,
 		githubInstallationId,
-		providerId: existing.providerId || undefined,
+		providerId: providerId || existing.providerId || undefined,
 	});
 }
 
-export async function disconnectGitHubInstallation(githubInstallationId: string) {
+export async function disconnectGitHubInstallation(
+	githubInstallationId: string,
+	providerId?: string,
+) {
 	const existing = await db.query.githubInstallations.findFirst({
-		where: eq(githubInstallations.githubInstallationId, githubInstallationId),
+		where: providerId
+			? and(
+					eq(githubInstallations.githubInstallationId, githubInstallationId),
+					eq(githubInstallations.providerId, providerId),
+				)
+			: eq(githubInstallations.githubInstallationId, githubInstallationId),
 	});
 
 	if (!existing) {
@@ -1674,6 +1700,7 @@ export async function getPendingDeploymentById(id: string) {
 
 export async function triggerGitHubPushDeploy(input: {
 	githubInstallationId: string;
+	providerId?: string;
 	owner: string;
 	repository: string;
 	branch: string;
@@ -1683,15 +1710,18 @@ export async function triggerGitHubPushDeploy(input: {
 	changedPaths?: string[];
 }) {
 	const installation = await db.query.githubInstallations.findFirst({
-		where: eq(githubInstallations.githubInstallationId, input.githubInstallationId),
+		where: input.providerId
+			? and(
+					eq(githubInstallations.githubInstallationId, input.githubInstallationId),
+					eq(githubInstallations.providerId, input.providerId),
+				)
+			: eq(githubInstallations.githubInstallationId, input.githubInstallationId),
 	});
 
 	if (!installation) {
 		return;
 	}
-	const provider = await getInstallationProviderConfigByGitHubInstallationId(
-		input.githubInstallationId,
-	);
+	const provider = await getInstallationProviderConfigByInternalInstallationId(installation.id);
 	const nowAt = now();
 
 	if (input.deliveryId) {

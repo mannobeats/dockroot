@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requirePrivilegedSession } from "@/lib/authorization";
+import { requirePrivilegedSession, sanitizeInternalRedirectPath } from "@/lib/authorization";
 import {
 	exchangeGitHubManifestCode,
 	upsertGitHubProviderFromManifest,
@@ -18,23 +18,27 @@ export async function GET(request: Request) {
 	const url = new URL(request.url);
 	const code = url.searchParams.get("code");
 	const state = url.searchParams.get("state");
+	const redirectWithStatus = (status: string, redirectTo?: string | null) => {
+		const targetPath = sanitizeInternalRedirectPath(redirectTo || "/dashboard/stacks");
+		const target = new URL(targetPath, request.url);
+		target.searchParams.set("github", status);
+		return target;
+	};
 
 	if (!code || !state) {
-		return NextResponse.redirect(new URL("/dashboard/stacks?github=manifest-missing", request.url));
+		return NextResponse.redirect(redirectWithStatus("manifest-missing"));
 	}
 
 	try {
 		const parsedState = verifyGitHubAppState(state);
 		if (parsedState.userId !== userId) {
-			return NextResponse.redirect(
-				new URL("/dashboard/stacks?github=manifest-denied", request.url),
-			);
+			return NextResponse.redirect(redirectWithStatus("manifest-denied", parsedState.redirectTo));
 		}
 
 		const converted = await exchangeGitHubManifestCode(code);
 		await upsertGitHubProviderFromManifest({
 			userId,
-			name: "GitHub App",
+			name: parsedState.providerName?.trim() || converted.slug || "GitHub App",
 			appId: String(converted.id),
 			slug: converted.slug,
 			privateKey: converted.pem,
@@ -43,8 +47,8 @@ export async function GET(request: Request) {
 			clientSecret: converted.client_secret || null,
 		});
 
-		return NextResponse.redirect(new URL("/dashboard/stacks?github=manifest-ready", request.url));
+		return NextResponse.redirect(redirectWithStatus("manifest-ready", parsedState.redirectTo));
 	} catch {
-		return NextResponse.redirect(new URL("/dashboard/stacks?github=manifest-error", request.url));
+		return NextResponse.redirect(redirectWithStatus("manifest-error"));
 	}
 }

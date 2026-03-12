@@ -12,12 +12,21 @@ type CreateTab = "manual" | "github";
 export function StackCreateModal({
 	environments,
 	installations,
+	providers,
 	appConfigured,
 	createStackAction,
 	createGitHubStackAction,
 }: {
 	environments: Array<{ id: string; name: string; kind: string }>;
 	installations: InstallationOption[];
+	providers: Array<{
+		id: string;
+		name: string;
+		appSlug: string;
+		githubAppId: string;
+		createdAt: Date;
+		updatedAt: Date;
+	}>;
 	appConfigured: boolean;
 	createStackAction: FormAction;
 	createGitHubStackAction: FormAction;
@@ -164,6 +173,7 @@ export function StackCreateModal({
 								<StackGitHubForm
 									environments={environments}
 									installations={installations}
+									providers={providers}
 									redirectTo="/dashboard/stacks"
 									appConfigured={appConfigured}
 									action={createGitHubStackAction}

@@ -12,7 +12,7 @@ import { StacksTableWorkspace } from "@/components/stacks-table-workspace";
 import { MetricCard } from "@/components/ui/metric-card";
 import { isPrivilegedRole, requireUserSession } from "@/lib/authorization";
 import { isGitHubAppConfigured } from "@/lib/github-app";
-import { listEnvironments, listGitHubInstallations, listStacks } from "@/lib/platform";
+import { listEnvironments, listGitHubInstallations, listGitHubProviders, listStacks } from "@/lib/platform";
 
 export default async function StacksPage({
 	searchParams,
@@ -23,10 +23,11 @@ export default async function StacksPage({
 	const includeUntracked = isPrivilegedRole(role);
 	const params = await searchParams;
 
-	const [stacks, environments, githubInstallations] = await Promise.all([
+	const [stacks, environments, githubInstallations, githubProviders] = await Promise.all([
 		listStacks(userId, { includeUntracked }),
 		listEnvironments(userId),
 		listGitHubInstallations(userId),
+		listGitHubProviders(userId),
 	]);
 	const appConfigured = await isGitHubAppConfigured();
 
@@ -48,6 +49,7 @@ export default async function StacksPage({
 							kind: environment.kind,
 						}))}
 						installations={githubInstallations}
+						providers={githubProviders}
 						appConfigured={appConfigured}
 						createStackAction={createStackAction}
 						createGitHubStackAction={createGitHubStackAction}

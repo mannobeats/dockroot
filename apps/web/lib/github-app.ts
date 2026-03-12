@@ -2,7 +2,7 @@ import "server-only";
 
 import crypto from "node:crypto";
 import { db, githubInstallations, githubProviders } from "@dockroot/db";
-import { and, desc, eq, isNotNull } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { decryptSecret, encryptSecret } from "@/lib/crypto-secrets";
 
 const GITHUB_API_BASE = "https://api.github.com";
@@ -38,36 +38,67 @@ function getStateSecret() {
 	return process.env.GITHUB_APP_STATE_SECRET || getRequiredEnv("BETTER_AUTH_SECRET");
 }
 
-async function loadProviderFromDatabase(): Promise<GitHubProviderConfig | null> {
+function mapDatabaseProviderToConfig(provider: {
+	id: string;
+	githubAppId: string;
+	appSlug: string;
+	appPrivateKeyEncrypted: string;
+	webhookSecretEncrypted: string;
+	appClientId: string | null;
+	appClientSecretEncrypted: string | null;
+}): GitHubProviderConfig {
+	return {
+		id: provider.id,
+		source: "database",
+		appId: provider.githubAppId,
+		appSlug: provider.appSlug,
+		privateKey: decryptSecret(provider.appPrivateKeyEncrypted),
+		webhookSecret: decryptSecret(provider.webhookSecretEncrypted),
+		clientId: provider.appClientId,
+		clientSecret: provider.appClientSecretEncrypted
+			? decryptSecret(provider.appClientSecretEncrypted)
+			: null,
+	};
+}
+
+async function loadActiveProvidersFromDatabase(): Promise<GitHubProviderConfig[]> {
 	try {
-		const provider = await db.query.githubProviders.findFirst({
+		const providers = await db.query.githubProviders.findMany({
 			where: eq(githubProviders.isActive, true),
 			orderBy: [desc(githubProviders.updatedAt)],
+		});
+
+		return providers.map((provider) => mapDatabaseProviderToConfig(provider));
+	} catch {
+		return [];
+	}
+}
+
+export async function getActiveGitHubProviderConfig(): Promise<GitHubProviderConfig | null> {
+	const providers = await loadActiveProvidersFromDatabase();
+	return providers[0] || null;
+}
+
+export async function listGitHubProviderConfigs(): Promise<GitHubProviderConfig[]> {
+	return loadActiveProvidersFromDatabase();
+}
+
+export async function getGitHubProviderConfigById(
+	providerId: string,
+): Promise<GitHubProviderConfig | null> {
+	try {
+		const provider = await db.query.githubProviders.findFirst({
+			where: and(eq(githubProviders.id, providerId), eq(githubProviders.isActive, true)),
 		});
 
 		if (!provider) {
 			return null;
 		}
 
-		return {
-			id: provider.id,
-			source: "database",
-			appId: provider.githubAppId,
-			appSlug: provider.appSlug,
-			privateKey: decryptSecret(provider.appPrivateKeyEncrypted),
-			webhookSecret: decryptSecret(provider.webhookSecretEncrypted),
-			clientId: provider.appClientId,
-			clientSecret: provider.appClientSecretEncrypted
-				? decryptSecret(provider.appClientSecretEncrypted)
-				: null,
-		};
+		return mapDatabaseProviderToConfig(provider);
 	} catch {
 		return null;
 	}
-}
-
-export async function getActiveGitHubProviderConfig(): Promise<GitHubProviderConfig | null> {
-	return loadProviderFromDatabase();
 }
 
 async function getRequiredGitHubProviderConfig() {
@@ -113,11 +144,13 @@ async function githubRequest<T>(
 }
 
 export async function isGitHubAppConfigured() {
-	return Boolean(await getActiveGitHubProviderConfig());
+	return (await listGitHubProviderConfigs()).length > 0;
 }
 
-export async function getGitHubAppInstallUrl(state: string) {
-	const provider = await getRequiredGitHubProviderConfig();
+export async function getGitHubAppInstallUrl(state: string, providerId?: string | null) {
+	const provider =
+		(providerId ? await getGitHubProviderConfigById(providerId) : null) ||
+		(await getRequiredGitHubProviderConfig());
 	return `https://github.com/apps/${provider.appSlug}/installations/new?state=${encodeURIComponent(state)}`;
 }
 
@@ -141,12 +174,22 @@ export async function createGitHubAppJwt(providerInput?: GitHubProviderConfig) {
 	return `${header}.${payload}.${encodeBase64Url(signature)}`;
 }
 
-export function signGitHubAppState(input: { userId: string; redirectTo: string; ttlMs?: number }) {
+export function signGitHubAppState(input: {
+	userId: string;
+	redirectTo: string;
+	ttlMs?: number;
+	providerId?: string | null;
+	providerName?: string | null;
+	providerOwner?: string | null;
+}) {
 	const issuedAt = Date.now();
 	const payload = encodeBase64Url(
 		JSON.stringify({
 			userId: input.userId,
 			redirectTo: input.redirectTo,
+			providerId: input.providerId || null,
+			providerName: input.providerName || null,
+			providerOwner: input.providerOwner || null,
 			iat: issuedAt,
 			expiresAt: issuedAt + (input.ttlMs ?? 10 * 60 * 1000),
 		}),
@@ -178,6 +221,9 @@ export function verifyGitHubAppState(state: string) {
 	const decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as {
 		userId: string;
 		redirectTo: string;
+		providerId?: string | null;
+		providerName?: string | null;
+		providerOwner?: string | null;
 		iat?: number;
 		expiresAt?: number;
 	};
@@ -193,20 +239,19 @@ export function verifyGitHubAppState(state: string) {
 	return decoded;
 }
 
-export async function signGitHubManifestState(input: { userId: string; redirectTo: string }) {
+export async function signGitHubManifestState(input: {
+	userId: string;
+	redirectTo: string;
+	providerName?: string | null;
+	providerOwner?: string | null;
+}) {
 	return signGitHubAppState({
 		userId: input.userId,
 		redirectTo: input.redirectTo,
+		providerName: input.providerName || null,
+		providerOwner: input.providerOwner || null,
 		ttlMs: 15 * 60 * 1000,
 	});
-}
-
-export function getGitHubManifestCreateUrl(manifest: Record<string, unknown>, state?: string) {
-	const base = `https://github.com/settings/apps/new?manifest=${encodeURIComponent(JSON.stringify(manifest))}`;
-	if (!state) {
-		return base;
-	}
-	return `${base}&state=${encodeURIComponent(state)}`;
 }
 
 export async function exchangeGitHubManifestCode(code: string) {
@@ -249,11 +294,6 @@ export async function upsertGitHubProviderFromManifest(input: {
 	clientId?: string | null;
 	clientSecret?: string | null;
 }) {
-	await db
-		.update(githubProviders)
-		.set({ isActive: false })
-		.where(eq(githubProviders.isActive, true));
-
 	const existing = await db.query.githubProviders.findFirst({
 		where: eq(githubProviders.githubAppId, input.appId),
 	});
@@ -500,23 +540,37 @@ export async function verifyGitHubWebhookSignature(
 	rawBody: string,
 	signatureHeader: string | null,
 ) {
-	const provider = await getRequiredGitHubProviderConfig();
-	const secret = provider.webhookSecret;
-
-	if (!secret) {
-		throw new Error("Missing GitHub webhook secret.");
-	}
-
 	if (!signatureHeader) {
-		return false;
+		return {
+			valid: false,
+			providerId: null as string | null,
+		};
 	}
 
-	const expected = `sha256=${crypto.createHmac("sha256", secret).update(rawBody).digest("hex")}`;
-	if (signatureHeader.length !== expected.length) {
-		return false;
+	const providers = await listGitHubProviderConfigs();
+	for (const provider of providers) {
+		const secret = provider.webhookSecret;
+		if (!secret) {
+			continue;
+		}
+
+		const expected = `sha256=${crypto.createHmac("sha256", secret).update(rawBody).digest("hex")}`;
+		if (signatureHeader.length !== expected.length) {
+			continue;
+		}
+
+		if (crypto.timingSafeEqual(Buffer.from(signatureHeader), Buffer.from(expected))) {
+			return {
+				valid: true,
+				providerId: provider.id,
+			};
+		}
 	}
 
-	return crypto.timingSafeEqual(Buffer.from(signatureHeader), Buffer.from(expected));
+	return {
+		valid: false,
+		providerId: null as string | null,
+	};
 }
 
 export async function getInstallationProviderConfigByInternalInstallationId(
@@ -529,7 +583,23 @@ export async function getInstallationProviderConfigByInternalInstallationId(
 		},
 	});
 
-	if (!installation?.provider) {
+	if (!installation) {
+		return getActiveGitHubProviderConfig();
+	}
+
+	if (!installation.provider && installation.appSlug) {
+		const matchedProvider = await db.query.githubProviders.findFirst({
+			where: and(
+				eq(githubProviders.appSlug, installation.appSlug),
+				eq(githubProviders.isActive, true),
+			),
+		});
+		if (matchedProvider) {
+			return mapDatabaseProviderToConfig(matchedProvider);
+		}
+	}
+
+	if (!installation.provider) {
 		return getActiveGitHubProviderConfig();
 	}
 
@@ -551,16 +621,29 @@ export async function getInstallationProviderConfigByGitHubInstallationId(
 	githubInstallationId: string,
 ) {
 	const installation = await db.query.githubInstallations.findFirst({
-		where: and(
-			eq(githubInstallations.githubInstallationId, githubInstallationId),
-			isNotNull(githubInstallations.providerId),
-		),
+		where: eq(githubInstallations.githubInstallationId, githubInstallationId),
 		with: {
 			provider: true,
 		},
 	});
 
-	if (!installation?.provider) {
+	if (!installation) {
+		return getActiveGitHubProviderConfig();
+	}
+
+	if (!installation.provider && installation.appSlug) {
+		const matchedProvider = await db.query.githubProviders.findFirst({
+			where: and(
+				eq(githubProviders.appSlug, installation.appSlug),
+				eq(githubProviders.isActive, true),
+			),
+		});
+		if (matchedProvider) {
+			return mapDatabaseProviderToConfig(matchedProvider);
+		}
+	}
+
+	if (!installation.provider) {
 		return getActiveGitHubProviderConfig();
 	}
 

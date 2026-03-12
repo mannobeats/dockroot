@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sanitizeInternalRedirectPath } from "@/lib/authorization";
 import {
+	getGitHubProviderConfigById,
 	getGitHubAppInstallUrl,
 	isGitHubAppConfigured,
 	signGitHubAppState,
@@ -25,11 +26,17 @@ export async function GET(request: Request) {
 
 	const url = new URL(request.url);
 	const redirectTo = sanitizeInternalRedirectPath(url.searchParams.get("redirectTo"));
+	const providerId = (url.searchParams.get("providerId") || "").trim() || null;
+
+	if (providerId && !(await getGitHubProviderConfigById(providerId))) {
+		return NextResponse.json({ error: "GitHub App provider not found." }, { status: 404 });
+	}
 	const state = signGitHubAppState({
 		userId: session.user.id,
 		redirectTo,
+		providerId,
 	});
-	const response = NextResponse.redirect(await getGitHubAppInstallUrl(state));
+	const response = NextResponse.redirect(await getGitHubAppInstallUrl(state, providerId));
 	response.cookies.set("dockroot_github_redirect_to", redirectTo, {
 		httpOnly: true,
 		sameSite: "lax",
@@ -38,6 +45,13 @@ export async function GET(request: Request) {
 		maxAge: 60 * 10,
 	});
 	response.cookies.set("dockroot_github_user_id", session.user.id, {
+		httpOnly: true,
+		sameSite: "lax",
+		secure: shouldUseSecureCookies(),
+		path: "/",
+		maxAge: 60 * 10,
+	});
+	response.cookies.set("dockroot_github_provider_id", providerId || "", {
 		httpOnly: true,
 		sameSite: "lax",
 		secure: shouldUseSecureCookies(),

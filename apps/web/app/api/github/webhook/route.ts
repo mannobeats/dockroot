@@ -12,7 +12,8 @@ export async function POST(request: Request) {
 	const event = request.headers.get("x-github-event");
 	const deliveryId = request.headers.get("x-github-delivery");
 
-	if (!(await verifyGitHubWebhookSignature(rawBody, signature))) {
+	const verification = await verifyGitHubWebhookSignature(rawBody, signature);
+	if (!verification.valid) {
 		return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
 	}
 
@@ -23,9 +24,15 @@ export async function POST(request: Request) {
 		};
 		if (payload.installation?.id) {
 			if (payload.action === "deleted" || payload.action === "suspend") {
-				await disconnectGitHubInstallation(String(payload.installation.id)).catch(() => null);
+				await disconnectGitHubInstallation(
+					String(payload.installation.id),
+					verification.providerId || undefined,
+				).catch(() => null);
 			} else {
-				await syncKnownGitHubInstallation(String(payload.installation.id)).catch(() => null);
+				await syncKnownGitHubInstallation(
+					String(payload.installation.id),
+					verification.providerId || undefined,
+				).catch(() => null);
 			}
 		}
 		return NextResponse.json({ ok: true });
@@ -68,6 +75,7 @@ export async function POST(request: Request) {
 				after: payload.after || null,
 				deliveryId,
 				changedPaths,
+				providerId: verification.providerId || undefined,
 			});
 		}
 	}

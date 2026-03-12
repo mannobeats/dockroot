@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { sanitizeInternalRedirectPath } from "@/lib/authorization";
-import { getActiveGitHubProviderConfig, verifyGitHubAppState } from "@/lib/github-app";
+import { getGitHubProviderConfigById, verifyGitHubAppState } from "@/lib/github-app";
 import { syncGitHubInstallation } from "@/lib/platform";
 import { getServerSession } from "@/lib/session";
 
@@ -23,12 +23,14 @@ export async function GET(request: Request) {
 	const cookieStore = await cookies();
 	const redirectToCookie = cookieStore.get("dockroot_github_redirect_to")?.value;
 	const userIdCookie = cookieStore.get("dockroot_github_user_id")?.value;
+	const providerIdCookie = cookieStore.get("dockroot_github_provider_id")?.value;
 
 	if (!installationId) {
 		return NextResponse.redirect(new URL("/dashboard/stacks?github=missing", request.url));
 	}
 
 	let redirectTo = sanitizeInternalRedirectPath(redirectToCookie || "/dashboard/stacks");
+	let providerId: string | null = (providerIdCookie || "").trim() || null;
 
 	if (state) {
 		const parsedState = verifyGitHubAppState(state);
@@ -36,14 +38,19 @@ export async function GET(request: Request) {
 			return NextResponse.redirect(new URL("/dashboard/stacks?github=denied", request.url));
 		}
 		redirectTo = sanitizeInternalRedirectPath(parsedState.redirectTo);
+		providerId = parsedState.providerId?.trim() || providerId;
 	} else if (userIdCookie && userIdCookie !== session.user.id) {
 		return NextResponse.redirect(new URL("/dashboard/stacks?github=denied", request.url));
+	}
+
+	if (providerId && !(await getGitHubProviderConfigById(providerId))) {
+		return NextResponse.redirect(new URL("/dashboard/stacks?github=provider-missing", request.url));
 	}
 
 	await syncGitHubInstallation({
 		userId: session.user.id,
 		githubInstallationId: installationId,
-		providerId: (await getActiveGitHubProviderConfig())?.id || undefined,
+		providerId: providerId || undefined,
 	});
 
 	const separator = redirectTo.includes("?") ? "&" : "?";
@@ -58,6 +65,13 @@ export async function GET(request: Request) {
 		maxAge: 0,
 	});
 	response.cookies.set("dockroot_github_user_id", "", {
+		httpOnly: true,
+		sameSite: "lax",
+		secure: shouldUseSecureCookies(),
+		path: "/",
+		maxAge: 0,
+	});
+	response.cookies.set("dockroot_github_provider_id", "", {
 		httpOnly: true,
 		sameSite: "lax",
 		secure: shouldUseSecureCookies(),
