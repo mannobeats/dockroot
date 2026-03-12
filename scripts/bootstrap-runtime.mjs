@@ -178,16 +178,16 @@ export async function applyRuntimeBootstrap(options = {}) {
 	const nextSecrets = {
 		postgresPassword:
 			readEnv("POSTGRES_PASSWORD") ||
-			secretState.postgresPassword ||
 			existingPostgresPassword ||
+			secretState.postgresPassword ||
 			randomSecret(24),
 		betterAuthSecret:
 			readEnv("BETTER_AUTH_SECRET") || secretState.betterAuthSecret || randomSecret(32),
 		tokenPepper: readEnv("DOCKROOT_TOKEN_PEPPER") || secretState.tokenPepper || randomSecret(32),
 		metricsBearerToken:
 			readEnv("METRICS_BEARER_TOKEN") ||
-			secretState.metricsBearerToken ||
 			existingMetricsToken ||
+			secretState.metricsBearerToken ||
 			randomSecret(32),
 	};
 
