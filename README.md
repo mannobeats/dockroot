@@ -93,16 +93,19 @@ make dev-lite
 Use this when you want the full platform to run in Docker with the published image.
 
 ```bash
-cp .env.example .env
-make env-check-compose
-make prod-up
+docker compose -f docker-compose.yaml up -d
 ```
 
 What it does:
 
 - runs Dockroot, PostgreSQL, Prometheus, cAdvisor, and node-exporter in Docker
-- injects internal service URLs from Compose
+- bootstraps internal secrets automatically on first run
 - keeps monitoring built in by default
+
+Optional production overrides:
+
+- `APP_URL=https://dockroot.example.com` when running behind a reverse proxy or custom domain
+- `GITHUB_APP_*` values only if you want GitHub-based deployments
 
 Open Dockroot at `http://localhost:3080` or your configured domain. The first account created becomes the instance `owner`.
 
@@ -113,25 +116,26 @@ Open Dockroot at `http://localhost:3080` or your configured domain. The first ac
 - `docker-compose.yaml`
   Full Docker deployment for users and production-style single-host installs.
 - `.env.local.example`
-  Template for host development.
+  Optional overrides for host development.
 - `.env.example`
-  Template for Docker deployments.
+  Optional overrides for Docker deployments.
 
 ### Environment rules
 
-- `.env.local` is only for host development
-- `.env` is only for Docker deployments
-- Dockroot derives `DATABASE_URL` from `POSTGRES_*` settings when needed
-- Docker deployments do not require you to set `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, `PROMETHEUS_URL`, or `DOCKROOT_DATA_DIR` manually
-- Compose injects those values so they stay consistent with the service topology
+- `.env.local` is optional and only used for local overrides like `APP_URL` or `GITHUB_APP_*`
+- Docker deployments do not require a `.env` file
+- Dockroot generates its internal secrets on first boot and persists them in the data directory or Docker volume
+- Dockroot derives `BETTER_AUTH_URL`, `NEXT_PUBLIC_APP_URL`, cookie security, database credentials, and metrics auth from the bootstrap runtime config
+- `APP_URL` is the only deployment-specific value most hosted installs should need
 
 ### Startup behavior
 
 On container boot, Dockroot now:
 
-1. validates runtime environment
-2. runs database migrations
-3. starts the app server
+1. bootstraps runtime config and secrets
+2. validates runtime environment
+3. runs database migrations
+4. starts the app server
 
 If Dockroot exits immediately on boot, check container logs first. Startup validation reports missing secrets, placeholder values, localhost production URLs, and malformed database credentials directly.
 
@@ -181,9 +185,9 @@ Useful commands:
 
 ## Security Notes
 
-- Disable public sign-up in production with `DOCKROOT_ALLOW_PUBLIC_SIGNUP=false`
-- Use strong random values for `BETTER_AUTH_SECRET`, `DOCKROOT_TOKEN_PEPPER`, and `METRICS_BEARER_TOKEN`
-- Put Dockroot behind TLS before enabling secure cookie mode on a public domain
+- Dockroot now generates strong internal secrets automatically and persists them in storage
+- Set `APP_URL` to an `https://` origin when deploying behind a public reverse proxy or custom domain
+- GitHub App credentials remain optional and must be supplied explicitly when enabling GitHub workflows
 - The app requires Docker socket access for host-level runtime management
 
 ## Roadmap Direction

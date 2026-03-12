@@ -11,8 +11,15 @@ function getRequiredEnv(name: string) {
 	return value;
 }
 
+function getAppUrl() {
+	return (
+		process.env.APP_URL || process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_APP_URL || ""
+	);
+}
+
 function getTrustedOrigins() {
 	return [
+		getAppUrl(),
 		process.env.BETTER_AUTH_URL,
 		process.env.NEXT_PUBLIC_APP_URL,
 		...(process.env.BETTER_AUTH_TRUSTED_ORIGINS?.split(",") ?? []),
@@ -28,7 +35,7 @@ function publicSignupsAllowed() {
 
 export const auth = betterAuth({
 	secret: getRequiredEnv("BETTER_AUTH_SECRET"),
-	baseURL: getRequiredEnv("BETTER_AUTH_URL"),
+	baseURL: getAppUrl() || getRequiredEnv("BETTER_AUTH_URL"),
 	trustedOrigins: getTrustedOrigins(),
 	database: drizzleAdapter(db, {
 		provider: "pg",

@@ -9,6 +9,7 @@ import postgres from "postgres";
 import * as pty from "node-pty";
 import next from "next";
 import { Server as SocketIOServer } from "socket.io";
+import { applyRuntimeBootstrap } from "./scripts/bootstrap-runtime.mjs";
 import {
 	closeLocalTerminalSession,
 	createLocalTerminalSession,
@@ -19,6 +20,8 @@ import {
 } from "./local-terminal.mjs";
 import { getDatabaseUrl } from "./scripts/database-url.mjs";
 import { validateRuntimeEnv } from "./scripts/runtime-env.mjs";
+
+await applyRuntimeBootstrap();
 
 const { errors: envErrors, warnings: envWarnings } = validateRuntimeEnv();
 if (envWarnings.length > 0) {
@@ -97,6 +100,7 @@ function resolveExecutable(primaryCandidate, fallbackCandidates) {
 
 function getTrustedOrigins() {
 	return [
+		process.env.APP_URL,
 		process.env.BETTER_AUTH_URL,
 		process.env.NEXT_PUBLIC_APP_URL,
 		...(process.env.BETTER_AUTH_TRUSTED_ORIGINS?.split(",") ?? []),

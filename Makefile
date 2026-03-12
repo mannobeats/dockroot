@@ -5,22 +5,20 @@ DOCKER_COMPOSE := docker compose
 DOTENV := $(PNPM) exec dotenv
 LOCAL_ENV_FILE := .env.local
 LOCAL_ENV_EXAMPLE := .env.local.example
-COMPOSE_ENV_FILE := .env
-COMPOSE_ENV_EXAMPLE := .env.example
+LOCAL_RUNTIME_ENV_FILE := .dockroot/runtime.env
 DEV_INFRA_COMPOSE_FILE := compose.dev-infra.yml
 PROD_COMPOSE_FILE := docker-compose.yaml
 LOCAL_INFRA_SERVICES := postgres prometheus cadvisor node-exporter
 NEXT_DEV_LOCK := apps/web/.next/dev/lock
 
-.PHONY: help install env-local env-compose env-check-local env-check-compose dev-prepare dev-lite dev-full dev build start lint format prod-up prod-down prod-logs docker-up docker-down docker-logs db-push db-generate db-migrate db-studio infra-up infra-down postgres-up postgres-down clean
+.PHONY: help install env-local local-bootstrap env-check-local env-check-compose dev-prepare dev-lite dev-full dev build start lint format prod-up prod-down prod-logs docker-up docker-down docker-logs db-push db-generate db-migrate db-studio infra-up infra-down postgres-up postgres-down clean
 
 help:
 	@printf "\nDockroot Commands\n\n"
 	@printf "  make install      Install workspace dependencies\n"
 	@printf "  make env-local    Create %s from %s if missing\n" "$(LOCAL_ENV_FILE)" "$(LOCAL_ENV_EXAMPLE)"
-	@printf "  make env-compose  Create %s from %s if missing\n" "$(COMPOSE_ENV_FILE)" "$(COMPOSE_ENV_EXAMPLE)"
 	@printf "  make env-check-local   Validate host development env\n"
-	@printf "  make env-check-compose Validate Docker deployment env\n"
+	@printf "  make env-check-compose Validate Docker deployment inputs\n"
 	@printf "  make dev-lite     Run host app with PostgreSQL only\n"
 	@printf "  make dev-full     Run host app with full local infra (DB + monitoring)\n"
 	@printf "  make build        Build the web app\n"
@@ -46,40 +44,44 @@ install:
 env-local:
 	@if [ ! -f "$(LOCAL_ENV_FILE)" ]; then cp "$(LOCAL_ENV_EXAMPLE)" "$(LOCAL_ENV_FILE)"; fi
 
-env-compose:
-	@if [ ! -f "$(COMPOSE_ENV_FILE)" ]; then cp "$(COMPOSE_ENV_EXAMPLE)" "$(COMPOSE_ENV_FILE)"; fi
+local-bootstrap: env-local
+	node scripts/bootstrap-runtime.mjs \
+		--env-file $(LOCAL_ENV_FILE) \
+		--write-env-file $(LOCAL_RUNTIME_ENV_FILE) \
+		--write-postgres-password-file .dockroot/bootstrap/postgres_password \
+		--write-metrics-token-file .dockroot/bootstrap/metrics_token
 
-env-check-local: env-local
-	$(DOTENV) -e $(LOCAL_ENV_FILE) -- node scripts/runtime-env.mjs
+env-check-local: local-bootstrap
+	$(DOTENV) -e $(LOCAL_ENV_FILE) -e $(LOCAL_RUNTIME_ENV_FILE) -- node scripts/runtime-env.mjs
 
-env-check-compose: env-compose
-	$(DOTENV) -e $(COMPOSE_ENV_FILE) -- node scripts/runtime-env.mjs --production --compose
+env-check-compose:
+	@node -e "const appUrl=(process.env.APP_URL||'').trim(); if (appUrl && !/^https?:\\/\\//.test(appUrl)) { console.error('APP_URL must be an absolute http/https URL.'); process.exit(1); }"
 
 dev-prepare:
 	rm -f $(NEXT_DEV_LOCK)
 
 infra-up: env-check-local
-	$(DOCKER_COMPOSE) --env-file $(LOCAL_ENV_FILE) -f $(DEV_INFRA_COMPOSE_FILE) up -d $(LOCAL_INFRA_SERVICES)
+	$(DOCKER_COMPOSE) --env-file $(LOCAL_RUNTIME_ENV_FILE) -f $(DEV_INFRA_COMPOSE_FILE) up -d $(LOCAL_INFRA_SERVICES)
 
 infra-down:
-	$(DOCKER_COMPOSE) --env-file $(LOCAL_ENV_FILE) -f $(DEV_INFRA_COMPOSE_FILE) stop $(LOCAL_INFRA_SERVICES)
+	$(DOCKER_COMPOSE) --env-file $(LOCAL_RUNTIME_ENV_FILE) -f $(DEV_INFRA_COMPOSE_FILE) stop $(LOCAL_INFRA_SERVICES)
 
 postgres-up: env-check-local
-	$(DOCKER_COMPOSE) --env-file $(LOCAL_ENV_FILE) -f $(DEV_INFRA_COMPOSE_FILE) up -d postgres
+	$(DOCKER_COMPOSE) --env-file $(LOCAL_RUNTIME_ENV_FILE) -f $(DEV_INFRA_COMPOSE_FILE) up -d postgres
 
 postgres-down:
-	$(DOCKER_COMPOSE) --env-file $(LOCAL_ENV_FILE) -f $(DEV_INFRA_COMPOSE_FILE) stop postgres
+	$(DOCKER_COMPOSE) --env-file $(LOCAL_RUNTIME_ENV_FILE) -f $(DEV_INFRA_COMPOSE_FILE) stop postgres
 
-db-push: env-check-local
+db-push: local-bootstrap
 	$(PNPM) run db:push
 
-db-generate: env-check-local
+db-generate: local-bootstrap
 	$(PNPM) run db:generate
 
-db-migrate: env-check-local
+db-migrate: local-bootstrap
 	$(PNPM) run db:migrate
 
-db-studio: env-check-local
+db-studio: local-bootstrap
 	$(PNPM) run db:studio
 
 dev-lite: dev-prepare env-local env-check-local postgres-up db-migrate
@@ -90,10 +92,10 @@ dev-full: dev-prepare env-local install env-check-local infra-up db-migrate
 
 dev: dev-full
 
-build: env-check-local
+build: local-bootstrap
 	$(PNPM) build
 
-start: env-check-local
+start: local-bootstrap
 	$(PNPM) start
 
 lint:
@@ -103,13 +105,13 @@ format:
 	$(PNPM) format
 
 prod-up: env-check-compose
-	$(DOCKER_COMPOSE) --env-file $(COMPOSE_ENV_FILE) -f $(PROD_COMPOSE_FILE) up -d
+	$(DOCKER_COMPOSE) -f $(PROD_COMPOSE_FILE) up -d
 
 prod-down:
-	$(DOCKER_COMPOSE) --env-file $(COMPOSE_ENV_FILE) -f $(PROD_COMPOSE_FILE) down
+	$(DOCKER_COMPOSE) -f $(PROD_COMPOSE_FILE) down
 
 prod-logs:
-	$(DOCKER_COMPOSE) --env-file $(COMPOSE_ENV_FILE) -f $(PROD_COMPOSE_FILE) logs -f
+	$(DOCKER_COMPOSE) -f $(PROD_COMPOSE_FILE) logs -f
 
 docker-up: prod-up
 docker-down: prod-down

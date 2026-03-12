@@ -4,14 +4,15 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-dockroot}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_USER: ${POSTGRES_USER:-dockroot}
+      POSTGRES_PASSWORD_FILE: /var/lib/dockroot/bootstrap/postgres_password
     ports:
       - "5432:5432"
     volumes:
+      - ${DOCKROOT_DATA_DIR:-.dockroot}:/var/lib/dockroot:ro
       - dockroot_dev_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-dockroot}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dockroot} -d ${POSTGRES_DB:-dockroot}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -19,18 +20,61 @@ services:
   prometheus:
     image: prom/prometheus:v3.5.0
     restart: unless-stopped
-    environment:
-      APP_METRICS_TARGET: host.docker.internal:3080
-      METRICS_BEARER_TOKEN: ${METRICS_BEARER_TOKEN}
-    entrypoint:
-      - /bin/sh
-      - /etc/dockroot/prometheus/start-prometheus.sh
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    entrypoint:
+      - /bin/sh
+      - -eu
+      - -c
+      - |
+        TOKEN_FILE="/var/lib/dockroot/bootstrap/metrics_token"
+        TOKEN=""
+        if [ -f "$$TOKEN_FILE" ]; then
+          TOKEN="$$(tr -d '\r\n' < "$$TOKEN_FILE")"
+        fi
+        cat > /tmp/prometheus.yml <<EOF
+        global:
+          scrape_interval: 15s
+          evaluation_interval: 15s
+
+        scrape_configs:
+          - job_name: prometheus
+            static_configs:
+              - targets: ["prometheus:9090"]
+
+          - job_name: dockroot_app
+            metrics_path: /api/metrics
+        EOF
+        if [ -n "$$TOKEN" ]; then
+          cat >> /tmp/prometheus.yml <<EOF
+            authorization:
+              type: Bearer
+              credentials: $$TOKEN
+        EOF
+        fi
+        cat >> /tmp/prometheus.yml <<EOF
+            static_configs:
+              - targets: ["host.docker.internal:3080"]
+                labels:
+                  service: dockroot-host-dev
+
+          - job_name: cadvisor
+            static_configs:
+              - targets: ["cadvisor:8080"]
+                labels:
+                  service: cadvisor
+
+          - job_name: node_exporter
+            static_configs:
+              - targets: ["node-exporter:9100"]
+                labels:
+                  service: node-exporter
+        EOF
+        exec /bin/prometheus --config.file=/tmp/prometheus.yml --storage.tsdb.path=/prometheus --web.enable-lifecycle
     ports:
       - "9090:9090"
     volumes:
-      - ./infra/prometheus/start-prometheus.sh:/etc/dockroot/prometheus/start-prometheus.sh:ro
+      - ${DOCKROOT_DATA_DIR:-.dockroot}:/var/lib/dockroot:ro
       - dockroot_dev_prometheus_data:/prometheus
 
   cadvisor:

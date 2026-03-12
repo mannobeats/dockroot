@@ -45,16 +45,16 @@ export function validateRuntimeEnv({
 	const warnings = [];
 
 	const databaseUrl = readEnv("DATABASE_URL") || buildDatabaseUrlFromParts(process.env);
+	const configuredAppUrl = readEnv("APP_URL");
 	const betterAuthSecret = readEnv("BETTER_AUTH_SECRET");
-	const betterAuthUrl = readEnv("BETTER_AUTH_URL");
-	const appUrl = readEnv("NEXT_PUBLIC_APP_URL");
+	const betterAuthUrl = readEnv("BETTER_AUTH_URL") || configuredAppUrl;
+	const appUrl = readEnv("NEXT_PUBLIC_APP_URL") || configuredAppUrl;
 	const tokenPepper = readEnv("DOCKROOT_TOKEN_PEPPER");
 	const metricsToken = readEnv("METRICS_BEARER_TOKEN");
 
 	const requiredPairs = [
 		["BETTER_AUTH_SECRET", betterAuthSecret],
-		["BETTER_AUTH_URL", betterAuthUrl],
-		["NEXT_PUBLIC_APP_URL", appUrl],
+		["APP_URL", configuredAppUrl || betterAuthUrl || appUrl],
 		["DOCKROOT_TOKEN_PEPPER", tokenPepper],
 		["METRICS_BEARER_TOKEN", metricsToken],
 	];
@@ -78,22 +78,22 @@ export function validateRuntimeEnv({
 	}
 
 	if (betterAuthUrl) {
-		validateUrl("BETTER_AUTH_URL", betterAuthUrl, errors);
+		validateUrl("APP_URL", betterAuthUrl, errors);
 	}
 
 	if (appUrl) {
-		validateUrl("NEXT_PUBLIC_APP_URL", appUrl, errors);
+		validateUrl("APP_URL", appUrl, errors);
 	}
 
 	if (betterAuthUrl && appUrl) {
 		try {
-			const authOrigin = new URL(betterAuthUrl).origin;
-			const appOrigin = new URL(appUrl).origin;
-			if (authOrigin !== appOrigin) {
-				warnings.push(
-					`BETTER_AUTH_URL (${authOrigin}) does not match NEXT_PUBLIC_APP_URL (${appOrigin}). This is only safe if you intentionally split auth and app origins.`,
-				);
-			}
+				const authOrigin = new URL(betterAuthUrl).origin;
+				const appOrigin = new URL(appUrl).origin;
+				if (authOrigin !== appOrigin) {
+					warnings.push(
+						`Derived auth origin (${authOrigin}) does not match derived app origin (${appOrigin}). This is only safe if you intentionally split auth and app origins.`,
+					);
+				}
 		} catch {
 			// URL parse failures are already reported above.
 		}
@@ -114,8 +114,7 @@ export function validateRuntimeEnv({
 			["BETTER_AUTH_SECRET", betterAuthSecret],
 			["DOCKROOT_TOKEN_PEPPER", tokenPepper],
 			["METRICS_BEARER_TOKEN", metricsToken],
-			["BETTER_AUTH_URL", betterAuthUrl],
-			["NEXT_PUBLIC_APP_URL", appUrl],
+			["APP_URL", configuredAppUrl || betterAuthUrl || appUrl],
 		]) {
 			if (value && looksLikePlaceholder(value)) {
 				errors.push(`${name} still uses a placeholder value.`);
@@ -123,11 +122,11 @@ export function validateRuntimeEnv({
 		}
 
 		if (betterAuthUrl && /^http:\/\/localhost(?::\d+)?$/i.test(betterAuthUrl)) {
-			errors.push("BETTER_AUTH_URL cannot use localhost in production.");
+			errors.push("APP_URL cannot use localhost in production.");
 		}
 
 		if (appUrl && /^http:\/\/localhost(?::\d+)?$/i.test(appUrl)) {
-			errors.push("NEXT_PUBLIC_APP_URL cannot use localhost in production.");
+			errors.push("APP_URL cannot use localhost in production.");
 		}
 
 		if (!isTruthy(readEnv("SESSION_COOKIE_SECURE"))) {

@@ -1,24 +1,50 @@
 services:
+  bootstrap:
+    image: ${DOCKROOT_IMAGE:-ghcr.io/mannobeats/dockroot:latest}
+    restart: "no"
+    environment:
+      APP_URL: ${APP_URL:-}
+      DOCKROOT_DATA_DIR: /var/lib/dockroot
+      DOCKROOT_RUNTIME_PROFILE: docker
+      GITHUB_APP_ID: ${GITHUB_APP_ID:-}
+      GITHUB_APP_PRIVATE_KEY: ${GITHUB_APP_PRIVATE_KEY:-}
+      GITHUB_APP_SLUG: ${GITHUB_APP_SLUG:-}
+      GITHUB_APP_STATE_SECRET: ${GITHUB_APP_STATE_SECRET:-}
+      GITHUB_APP_WEBHOOK_SECRET: ${GITHUB_APP_WEBHOOK_SECRET:-}
+      HOSTNAME: 0.0.0.0
+      NEXT_PUBLIC_APP_NAME: Dockroot
+      PORT: 3080
+    command:
+      - node
+      - /app/scripts/bootstrap-runtime.mjs
+      - --write-env-file
+      - /var/lib/dockroot/bootstrap/runtime.env
+      - --write-postgres-password-file
+      - /var/lib/dockroot/bootstrap/postgres_password
+      - --write-metrics-token-file
+      - /var/lib/dockroot/bootstrap/metrics_token
+    volumes:
+      - dockroot_data:/var/lib/dockroot
+
   app:
     image: ${DOCKROOT_IMAGE:-ghcr.io/mannobeats/dockroot:latest}
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
+      DOCKROOT_DATA_DIR: /var/lib/dockroot
+      DOCKROOT_MANAGER_COMPOSE_PROJECT: ${COMPOSE_PROJECT_NAME:-dockroot}
+      DOCKROOT_RUNTIME_PROFILE: docker
       HOSTNAME: 0.0.0.0
       PORT: 3080
+      POSTGRES_DB: dockroot
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
-      POSTGRES_DB: dockroot
       POSTGRES_USER: dockroot
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      DOCKROOT_DATA_DIR: /var/lib/dockroot
       PROMETHEUS_URL: http://prometheus:9090
-      DOCKROOT_MANAGER_COMPOSE_PROJECT: ${COMPOSE_PROJECT_NAME:-dockroot}
-      APP_METRICS_TARGET: app:3080
     ports:
       - "3080:3080"
     depends_on:
+      bootstrap:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       prometheus:
@@ -30,11 +56,15 @@ services:
   postgres:
     image: postgres:17-alpine
     restart: unless-stopped
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
     environment:
       POSTGRES_DB: dockroot
       POSTGRES_USER: dockroot
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD_FILE: /var/lib/dockroot/bootstrap/postgres_password
     volumes:
+      - dockroot_data:/var/lib/dockroot:ro
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dockroot -d dockroot"]
@@ -45,16 +75,62 @@ services:
   prometheus:
     image: prom/prometheus:v3.5.0
     restart: unless-stopped
-    environment:
-      APP_METRICS_TARGET: app:3080
-      METRICS_BEARER_TOKEN: ${METRICS_BEARER_TOKEN}
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
     entrypoint:
       - /bin/sh
-      - /etc/dockroot/prometheus/start-prometheus.sh
+      - -eu
+      - -c
+      - |
+        TOKEN_FILE="/var/lib/dockroot/bootstrap/metrics_token"
+        TOKEN=""
+        if [ -f "$$TOKEN_FILE" ]; then
+          TOKEN="$$(tr -d '\r\n' < "$$TOKEN_FILE")"
+        fi
+        cat > /tmp/prometheus.yml <<EOF
+        global:
+          scrape_interval: 15s
+          evaluation_interval: 15s
+
+        scrape_configs:
+          - job_name: prometheus
+            static_configs:
+              - targets: ["prometheus:9090"]
+
+          - job_name: dockroot_app
+            metrics_path: /api/metrics
+        EOF
+        if [ -n "$$TOKEN" ]; then
+          cat >> /tmp/prometheus.yml <<EOF
+            authorization:
+              type: Bearer
+              credentials: $$TOKEN
+        EOF
+        fi
+        cat >> /tmp/prometheus.yml <<EOF
+            static_configs:
+              - targets: ["app:3080"]
+                labels:
+                  service: dockroot-manager
+
+          - job_name: cadvisor
+            static_configs:
+              - targets: ["cadvisor:8080"]
+                labels:
+                  service: cadvisor
+
+          - job_name: node_exporter
+            static_configs:
+              - targets: ["node-exporter:9100"]
+                labels:
+                  service: node-exporter
+        EOF
+        exec /bin/prometheus --config.file=/tmp/prometheus.yml --storage.tsdb.path=/prometheus --web.enable-lifecycle
     ports:
       - "9090:9090"
     volumes:
-      - ./infra/prometheus/start-prometheus.sh:/etc/dockroot/prometheus/start-prometheus.sh:ro
+      - dockroot_data:/var/lib/dockroot:ro
       - prometheus_data:/prometheus
 
   cadvisor:

@@ -13,7 +13,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
 		return new NextResponse("Environment not found", { status: 404 });
 	}
 
-	const managerUrl = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
+	const managerUrl = (process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "").replace(
+		/\/$/,
+		"",
+	);
 	const installCommand = await getInstallCommand(environment.id, auth.userId);
 
 	const script = `#!/usr/bin/env bash
