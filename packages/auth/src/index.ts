@@ -17,6 +17,16 @@ function getAppUrl() {
 	);
 }
 
+function getTrustedOrigins(appUrl: string): string[] {
+	const fromEnv = (process.env.BETTER_AUTH_TRUSTED_ORIGINS || "")
+		.split(",")
+		.map((origin) => origin.trim())
+		.filter(Boolean);
+
+	const combined = [...(appUrl ? [appUrl] : []), ...fromEnv];
+	return combined.filter((origin, index, all) => all.indexOf(origin) === index);
+}
+
 function shouldUseSecureCookies(): boolean {
 	if (process.env.SESSION_COOKIE_SECURE !== undefined) {
 		return process.env.SESSION_COOKIE_SECURE === "true";
@@ -37,10 +47,12 @@ function publicSignupsAllowed() {
 }
 
 const appUrl = getAppUrl();
+const trustedOrigins = getTrustedOrigins(appUrl);
 
 export const auth = betterAuth({
 	secret: getRequiredEnv("BETTER_AUTH_SECRET"),
-	...(appUrl ? { baseURL: appUrl, trustedOrigins: [appUrl] } : {}),
+	...(appUrl ? { baseURL: appUrl } : {}),
+	...(trustedOrigins.length > 0 ? { trustedOrigins } : {}),
 	database: drizzleAdapter(db, {
 		provider: "pg",
 		schema,
