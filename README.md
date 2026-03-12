@@ -96,6 +96,8 @@ Use this when you want the full platform to run in Docker with the published ima
 docker compose -f docker-compose.yaml up -d
 ```
 
+Use Docker Compose v2 (`docker compose ...`). Avoid legacy `docker-compose` v1, which is deprecated and can fail on recreate with errors like `KeyError: 'ContainerConfig'`.
+
 What it does:
 
 - runs Dockroot, PostgreSQL, Prometheus, cAdvisor, and node-exporter in Docker
@@ -105,6 +107,8 @@ What it does:
 Optional production overrides:
 
 - `APP_URL=https://dockroot.example.com` when running behind a reverse proxy or custom domain
+- `BETTER_AUTH_TRUSTED_ORIGINS=https://dockroot.example.com` to explicitly trust auth request origins
+  (comma-separated when needed, for example `https://dockroot.example.com,http://10.0.10.70:3080`)
 - `GITHUB_APP_*` values only if you want GitHub-based deployments
 
 Open Dockroot at `http://localhost:3080` or your configured domain. The first account created becomes the instance `owner`.
@@ -125,7 +129,9 @@ Open Dockroot at `http://localhost:3080` or your configured domain. The first ac
 - Docker deployments do not require a `.env` file
 - Dockroot generates its internal secrets on first boot and persists them in the data directory or Docker volume
 - Dockroot derives `BETTER_AUTH_URL`, `NEXT_PUBLIC_APP_URL`, cookie security, database credentials, and metrics auth from the bootstrap runtime config
-- `APP_URL` is the only deployment-specific value most hosted installs should need
+- `APP_URL` should be the public URL users access (for reverse proxy installs, use your `https://` domain)
+- `BETTER_AUTH_TRUSTED_ORIGINS` is optional but recommended for explicit auth origin control
+- If users access Dockroot from multiple origins (for example both domain and LAN IP), set all origins in `BETTER_AUTH_TRUSTED_ORIGINS` as a comma-separated list
 
 ### Startup behavior
 
@@ -186,6 +192,7 @@ Useful commands:
 
 - Dockroot now generates strong internal secrets automatically and persists them in storage
 - Set `APP_URL` to an `https://` origin when deploying behind a public reverse proxy or custom domain
+- Keep `BETTER_AUTH_TRUSTED_ORIGINS` aligned with every origin that should be allowed to call auth endpoints
 - GitHub App credentials remain optional and must be supplied explicitly when enabling GitHub workflows
 - The app requires Docker socket access for host-level runtime management
 

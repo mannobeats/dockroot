@@ -21,6 +21,9 @@ services:
       # Optional: set only if you want a fixed URL (e.g. behind a reverse proxy).
       # When omitted, Dockroot auto-detects the URL from incoming requests.
       APP_URL: ${APP_URL:-}
+      # Optional: explicit auth origin allowlist (comma-separated), useful for
+      # multi-origin access like domain + LAN IP.
+      BETTER_AUTH_TRUSTED_ORIGINS: ${BETTER_AUTH_TRUSTED_ORIGINS:-}
       DOCKROOT_DATA_DIR: /var/lib/dockroot
       DOCKROOT_MANAGER_COMPOSE_PROJECT: ${COMPOSE_PROJECT_NAME:-dockroot}
       DOCKROOT_RUNTIME_PROFILE: docker
