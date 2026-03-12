@@ -113,6 +113,14 @@ async function readJson(filePath, fallback) {
 	}
 }
 
+async function readText(filePath) {
+	try {
+		return (await readFile(filePath, "utf8")).trim();
+	} catch {
+		return "";
+	}
+}
+
 function getDefaultDataDir() {
 	return readEnv("DOCKROOT_DATA_DIR") || path.join(process.cwd(), ".dockroot");
 }
@@ -157,18 +165,30 @@ export async function applyRuntimeBootstrap(options = {}) {
 	const dataDir = options.dataDir || getDefaultDataDir();
 	const bootstrapDir = path.join(dataDir, "bootstrap");
 	const secretStateFile = path.join(bootstrapDir, "runtime-secrets.json");
+	const existingPostgresPasswordFile =
+		options.writePostgresPasswordFile || path.join(bootstrapDir, "postgres_password");
+	const existingMetricsTokenFile =
+		options.writeMetricsTokenFile || path.join(bootstrapDir, "metrics_token");
 
 	await mkdir(bootstrapDir, { recursive: true });
 
 	const secretState = await readJson(secretStateFile, {});
+	const existingPostgresPassword = await readText(existingPostgresPasswordFile);
+	const existingMetricsToken = await readText(existingMetricsTokenFile);
 	const nextSecrets = {
 		postgresPassword:
-			readEnv("POSTGRES_PASSWORD") || secretState.postgresPassword || randomSecret(24),
+			readEnv("POSTGRES_PASSWORD") ||
+			secretState.postgresPassword ||
+			existingPostgresPassword ||
+			randomSecret(24),
 		betterAuthSecret:
 			readEnv("BETTER_AUTH_SECRET") || secretState.betterAuthSecret || randomSecret(32),
 		tokenPepper: readEnv("DOCKROOT_TOKEN_PEPPER") || secretState.tokenPepper || randomSecret(32),
 		metricsBearerToken:
-			readEnv("METRICS_BEARER_TOKEN") || secretState.metricsBearerToken || randomSecret(32),
+			readEnv("METRICS_BEARER_TOKEN") ||
+			secretState.metricsBearerToken ||
+			existingMetricsToken ||
+			randomSecret(32),
 	};
 
 	await writeFile(secretStateFile, `${JSON.stringify(nextSecrets, null, 2)}\n`, "utf8");
