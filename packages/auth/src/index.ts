@@ -17,96 +17,10 @@ function getAppUrl() {
 	);
 }
 
-function getConfiguredOrigins() {
-	return [
-		getAppUrl(),
-		process.env.BETTER_AUTH_URL,
-		process.env.NEXT_PUBLIC_APP_URL,
-		...(process.env.BETTER_AUTH_TRUSTED_ORIGINS?.split(",") ?? []),
-	]
-		.map((origin) => origin?.trim())
-		.filter((origin): origin is string => Boolean(origin))
-		.filter((origin, index, all) => all.indexOf(origin) === index);
-}
-
-function originToAllowedHost(origin: string) {
-	if (!origin || origin.startsWith("/")) {
-		return null;
-	}
-
-	try {
-		return new URL(origin).host;
-	} catch {
-		return origin.replace(/^https?:\/\//u, "").replace(/\/.*$/u, "") || null;
-	}
-}
-
-function getBaseUrlConfig() {
-	const configuredUrl = getAppUrl();
-
-	if (!configuredUrl) {
-		return `http://localhost:${process.env.PORT || "3080"}`;
-	}
-
-	const allowedHosts = getConfiguredOrigins()
-		.map(originToAllowedHost)
-		.filter((host): host is string => Boolean(host))
-		.filter((host, index, all) => all.indexOf(host) === index);
-
-	if (!allowedHosts.length) {
-		return configuredUrl;
-	}
-
-	let protocol: "http" | "https" | undefined;
-	try {
-		protocol = new URL(configuredUrl).protocol === "https:" ? "https" : "http";
-	} catch {
-		protocol = undefined;
-	}
-
-	return {
-		fallback: configuredUrl,
-		allowedHosts,
-		...(protocol ? { protocol } : {}),
-	};
-}
-
-function getTrustedOrigins(): string[] | ((request?: Request) => string[]) {
-	const configured = getConfiguredOrigins();
-
-	if (configured.length > 0) {
-		return configured;
-	}
-
-	return (request?: Request) => {
-		if (!request) {
-			return [];
-		}
-
-		const origin = request.headers.get("origin");
-		const host = request.headers.get("x-forwarded-host") || request.headers.get("host");
-		if (!origin || !host) {
-			return [];
-		}
-
-		try {
-			const originHost = new URL(origin).host;
-			if (originHost === host) {
-				return [origin];
-			}
-		} catch {
-			// invalid origin
-		}
-
-		return [];
-	};
-}
-
 function shouldUseSecureCookies(): boolean {
 	if (process.env.SESSION_COOKIE_SECURE !== undefined) {
 		return process.env.SESSION_COOKIE_SECURE === "true";
 	}
-
 	const url = getAppUrl();
 	if (url) {
 		try {
@@ -115,7 +29,6 @@ function shouldUseSecureCookies(): boolean {
 			return false;
 		}
 	}
-
 	return false;
 }
 
@@ -123,10 +36,11 @@ function publicSignupsAllowed() {
 	return process.env.DOCKROOT_ALLOW_PUBLIC_SIGNUP === "true";
 }
 
+const appUrl = getAppUrl();
+
 export const auth = betterAuth({
 	secret: getRequiredEnv("BETTER_AUTH_SECRET"),
-	baseURL: getBaseUrlConfig(),
-	trustedOrigins: getTrustedOrigins(),
+	...(appUrl ? { baseURL: appUrl, trustedOrigins: [appUrl] } : {}),
 	database: drizzleAdapter(db, {
 		provider: "pg",
 		schema,
