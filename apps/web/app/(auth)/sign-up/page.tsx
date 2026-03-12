@@ -26,12 +26,15 @@ export default function SignUpPage() {
 		try {
 			const result = await signUp.email({ name, email, password });
 			if (result.error) {
-				setError(result.error.message || "Could not create account");
+				const code = result.error.code || result.error.status;
+				const message = result.error.message || "Could not create account";
+				setError(code ? `${message} (${code})` : message);
 			} else {
 				router.push("/dashboard");
 			}
-		} catch {
-			setError("Something went wrong. Please try again.");
+		} catch (err) {
+			const message = err instanceof Error ? err.message : "Unknown error";
+			setError(`Something went wrong: ${message}`);
 		} finally {
 			setLoading(false);
 		}

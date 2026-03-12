@@ -162,52 +162,68 @@ export const auth = betterAuth({
 		user: {
 			create: {
 				before: async (user) => {
-					const [{ value: existingUsers }] = await db.select({ value: count() }).from(schema.user);
-					const ownerRows = await db.execute<{ key: string }>(sql`
-							with reset as (
-								delete from "instance_bootstrap"
-								where "key" = 'owner-bootstrap'
-								  and not exists (select 1 from "user")
-								  and not exists (select 1 from "user" where "role" = 'owner')
-								returning "key"
-							),
-							claim as (
-								insert into "instance_bootstrap" ("key")
-								select 'owner-bootstrap'
-								where not exists (select 1 from "user" where "role" = 'owner')
-								on conflict do nothing
-								returning "key"
-							)
-							select "key" from claim
-						`);
+					try {
+						const [{ value: existingUsers }] = await db
+							.select({ value: count() })
+							.from(schema.user);
+						const ownerRows = await db.execute<{ key: string }>(sql`
+								with reset as (
+									delete from "instance_bootstrap"
+									where "key" = 'owner-bootstrap'
+									  and not exists (select 1 from "user")
+									  and not exists (select 1 from "user" where "role" = 'owner')
+									returning "key"
+								),
+								claim as (
+									insert into "instance_bootstrap" ("key")
+									select 'owner-bootstrap'
+									where not exists (select 1 from "user" where "role" = 'owner')
+									on conflict do nothing
+									returning "key"
+								)
+								select "key" from claim
+							`);
 
-					if (ownerRows.length > 0) {
+						if (ownerRows.length > 0) {
+							return {
+								data: {
+									...user,
+									role: "owner",
+								},
+							};
+						}
+
+						if (!existingUsers) {
+							throw new APIError("FORBIDDEN", {
+								message: "Instance bootstrap is already in progress. Please try again.",
+							});
+						}
+
+						if (!publicSignupsAllowed()) {
+							throw new APIError("FORBIDDEN", {
+								message: "Public sign-up is disabled for this instance.",
+							});
+						}
+
 						return {
 							data: {
 								...user,
-								role: "owner",
+								role: "member",
 							},
 						};
-					}
+					} catch (error) {
+						if (error instanceof APIError) {
+							throw error;
+						}
 
-					if (!existingUsers) {
-						throw new APIError("FORBIDDEN", {
-							message: "Instance bootstrap is already in progress. Please try again.",
+						console.error("[auth] Owner bootstrap hook failed:", error);
+						throw new APIError("INTERNAL_SERVER_ERROR", {
+							message:
+								error instanceof Error
+									? `Account creation failed: ${error.message}`
+									: "Account creation failed due to an internal error.",
 						});
 					}
-
-					if (!publicSignupsAllowed()) {
-						throw new APIError("FORBIDDEN", {
-							message: "Public sign-up is disabled for this instance.",
-						});
-					}
-
-					return {
-						data: {
-							...user,
-							role: "member",
-						},
-					};
 				},
 			},
 		},
