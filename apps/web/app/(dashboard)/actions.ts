@@ -161,6 +161,8 @@ export async function createGitHubStackAction(formData: FormData) {
 	const envPath = getValue(formData, "envPath");
 	const composeYaml = getValue(formData, "composeYaml");
 	const envFileContent = getValue(formData, "envFileContent");
+	const autoDeployEnabled = getBoolValue(formData, "autoDeployEnabled");
+	const autoDeployPaths = getValue(formData, "autoDeployPaths");
 	const name = getValue(formData, "name") || repository;
 	const description = getValue(formData, "description");
 
@@ -182,6 +184,8 @@ export async function createGitHubStackAction(formData: FormData) {
 		envFileContent,
 		name,
 		description,
+		autoDeployEnabled,
+		autoDeployPaths: autoDeployPaths || undefined,
 	});
 
 	redirect("/dashboard/stacks");

@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { sanitizeInternalRedirectPath } from "@/lib/authorization";
-import { verifyGitHubAppState } from "@/lib/github-app";
+import { getActiveGitHubProviderConfig, verifyGitHubAppState } from "@/lib/github-app";
 import { syncGitHubInstallation } from "@/lib/platform";
 import { getServerSession } from "@/lib/session";
 
@@ -43,6 +43,7 @@ export async function GET(request: Request) {
 	await syncGitHubInstallation({
 		userId: session.user.id,
 		githubInstallationId: installationId,
+		providerId: (await getActiveGitHubProviderConfig())?.id || undefined,
 	});
 
 	const separator = redirectTo.includes("?") ? "&" : "?";

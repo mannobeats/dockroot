@@ -28,6 +28,7 @@ export default async function StacksPage({
 		listEnvironments(userId),
 		listGitHubInstallations(userId),
 	]);
+	const appConfigured = await isGitHubAppConfigured();
 
 	const trackedCount = stacks.filter((stack) => stack.type === "tracked").length;
 	const untrackedCount = stacks.filter((stack) => stack.type === "untracked").length;
@@ -47,7 +48,7 @@ export default async function StacksPage({
 							kind: environment.kind,
 						}))}
 						installations={githubInstallations}
-						appConfigured={isGitHubAppConfigured()}
+						appConfigured={appConfigured}
 						createStackAction={createStackAction}
 						createGitHubStackAction={createGitHubStackAction}
 					/>

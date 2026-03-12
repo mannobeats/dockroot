@@ -1,7 +1,10 @@
 import { db, githubInstallations } from "@dockroot/db";
 import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { listRepositoryTreePaths } from "@/lib/github-app";
+import {
+	getInstallationProviderConfigByInternalInstallationId,
+	listRepositoryTreePaths,
+} from "@/lib/github-app";
 import { getServerSession } from "@/lib/session";
 
 const COMPOSE_FILE_PATTERNS = [
@@ -47,6 +50,8 @@ export async function GET(request: Request) {
 			owner,
 			repository,
 			branch,
+			provider:
+				(await getInstallationProviderConfigByInternalInstallationId(installation.id)) || undefined,
 		});
 
 		const suggestions = tree

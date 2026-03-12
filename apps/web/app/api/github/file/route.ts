@@ -1,7 +1,11 @@
 import { db, githubInstallations } from "@dockroot/db";
 import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { fetchRepositoryTextFile, getRepositoryBranchHeadSha } from "@/lib/github-app";
+import {
+	fetchRepositoryTextFile,
+	getInstallationProviderConfigByInternalInstallationId,
+	getRepositoryBranchHeadSha,
+} from "@/lib/github-app";
 import { getServerSession } from "@/lib/session";
 
 export async function GET(request: Request) {
@@ -43,6 +47,8 @@ export async function GET(request: Request) {
 			repository,
 			path: composePath,
 			ref: branch,
+			provider:
+				(await getInstallationProviderConfigByInternalInstallationId(installation.id)) || undefined,
 		});
 		const envFile = envPath
 			? await fetchRepositoryTextFile({
@@ -51,6 +57,9 @@ export async function GET(request: Request) {
 					repository,
 					path: envPath,
 					ref: branch,
+					provider:
+						(await getInstallationProviderConfigByInternalInstallationId(installation.id)) ||
+						undefined,
 				})
 			: null;
 		const headSha = await getRepositoryBranchHeadSha({
@@ -58,6 +67,8 @@ export async function GET(request: Request) {
 			owner,
 			repository,
 			branch,
+			provider:
+				(await getInstallationProviderConfigByInternalInstallationId(installation.id)) || undefined,
 		});
 
 		return NextResponse.json({

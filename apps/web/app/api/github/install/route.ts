@@ -14,7 +14,7 @@ function shouldUseSecureCookies() {
 }
 
 export async function GET(request: Request) {
-	if (!isGitHubAppConfigured()) {
+	if (!(await isGitHubAppConfigured())) {
 		return NextResponse.json({ error: "GitHub App is not configured." }, { status: 503 });
 	}
 
@@ -29,7 +29,7 @@ export async function GET(request: Request) {
 		userId: session.user.id,
 		redirectTo,
 	});
-	const response = NextResponse.redirect(getGitHubAppInstallUrl(state));
+	const response = NextResponse.redirect(await getGitHubAppInstallUrl(state));
 	response.cookies.set("dockroot_github_redirect_to", redirectTo, {
 		httpOnly: true,
 		sameSite: "lax",

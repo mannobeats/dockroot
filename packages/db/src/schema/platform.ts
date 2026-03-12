@@ -26,6 +26,32 @@ export const deploymentStatusEnum = pgEnum("deployment_status", [
 ]);
 export const deploymentOperationEnum = pgEnum("deployment_operation", ["deploy", "destroy"]);
 
+export const githubProviders = pgTable(
+	"github_providers",
+	{
+		id: text("id").primaryKey(),
+		name: text("name").notNull(),
+		githubAppId: text("github_app_id").notNull(),
+		appSlug: text("app_slug").notNull(),
+		appClientId: text("app_client_id"),
+		appClientSecretEncrypted: text("app_client_secret_encrypted"),
+		appPrivateKeyEncrypted: text("app_private_key_encrypted").notNull(),
+		webhookSecretEncrypted: text("webhook_secret_encrypted").notNull(),
+		webhookPath: text("webhook_path").notNull().default("/api/github/webhook"),
+		isActive: boolean("is_active").notNull().default(true),
+		createdByUserId: text("created_by_user_id")
+			.notNull()
+			.references(() => user.id, { onDelete: "cascade" }),
+		createdAt: timestamp("created_at").notNull(),
+		updatedAt: timestamp("updated_at").notNull(),
+	},
+	(table) => [
+		uniqueIndex("github_providers_github_app_id_unique").on(table.githubAppId),
+		uniqueIndex("github_providers_app_slug_unique").on(table.appSlug),
+		index("github_providers_active_idx").on(table.isActive),
+	],
+);
+
 export const environments = pgTable(
 	"environments",
 	{
@@ -79,6 +105,9 @@ export const githubInstallations = pgTable(
 	"github_installations",
 	{
 		id: text("id").primaryKey(),
+		providerId: text("provider_id").references(() => githubProviders.id, {
+			onDelete: "set null",
+		}),
 		githubInstallationId: text("github_installation_id").notNull(),
 		accountLogin: text("account_login").notNull(),
 		accountType: text("account_type"),
@@ -122,6 +151,9 @@ export const stacks = pgTable(
 		githubBranch: text("github_branch"),
 		githubPath: text("github_path"),
 		githubEnvPath: text("github_env_path"),
+		autoDeployEnabled: boolean("auto_deploy_enabled").notNull().default(true),
+		autoDeployPaths: text("auto_deploy_paths"),
+		lastAutoDeployedCommitSha: text("last_auto_deployed_commit_sha"),
 		lastDeployedAt: timestamp("last_deployed_at"),
 		createdByUserId: text("created_by_user_id")
 			.notNull()
@@ -154,6 +186,7 @@ export const deployments = pgTable(
 		composeSnapshot: text("compose_snapshot").notNull(),
 		envSnapshot: text("env_snapshot"),
 		sourceCommitSha: text("source_commit_sha"),
+		webhookDeliveryId: text("webhook_delivery_id"),
 		log: text("log"),
 		summary: text("summary"),
 		startedAt: timestamp("started_at"),
@@ -166,6 +199,25 @@ export const deployments = pgTable(
 		index("deployments_stack_idx").on(table.stackId),
 		index("deployments_environment_idx").on(table.environmentId),
 		index("deployments_status_idx").on(table.status),
+		uniqueIndex("deployments_webhook_delivery_id_unique").on(table.webhookDeliveryId),
+	],
+);
+
+export const githubWebhookDeliveries = pgTable(
+	"github_webhook_deliveries",
+	{
+		id: text("id").primaryKey(),
+		providerId: text("provider_id").references(() => githubProviders.id, {
+			onDelete: "set null",
+		}),
+		deliveryId: text("delivery_id").notNull(),
+		event: text("event").notNull(),
+		createdAt: timestamp("created_at").notNull(),
+		processedAt: timestamp("processed_at"),
+	},
+	(table) => [
+		uniqueIndex("github_webhook_deliveries_delivery_id_unique").on(table.deliveryId),
+		index("github_webhook_deliveries_created_at_idx").on(table.createdAt),
 	],
 );
 
@@ -188,8 +240,21 @@ export const agentRelations = relations(agents, ({ one }) => ({
 
 export const githubInstallationRelations = relations(githubInstallations, ({ many, one }) => ({
 	stacks: many(stacks),
+	provider: one(githubProviders, {
+		fields: [githubInstallations.providerId],
+		references: [githubProviders.id],
+	}),
 	createdBy: one(user, {
 		fields: [githubInstallations.createdByUserId],
+		references: [user.id],
+	}),
+}));
+
+export const githubProviderRelations = relations(githubProviders, ({ many, one }) => ({
+	installations: many(githubInstallations),
+	webhookDeliveries: many(githubWebhookDeliveries),
+	createdBy: one(user, {
+		fields: [githubProviders.createdByUserId],
 		references: [user.id],
 	}),
 }));
@@ -222,5 +287,12 @@ export const deploymentRelations = relations(deployments, ({ one }) => ({
 	initiatedBy: one(user, {
 		fields: [deployments.initiatedByUserId],
 		references: [user.id],
+	}),
+}));
+
+export const githubWebhookDeliveryRelations = relations(githubWebhookDeliveries, ({ one }) => ({
+	provider: one(githubProviders, {
+		fields: [githubWebhookDeliveries.providerId],
+		references: [githubProviders.id],
 	}),
 }));

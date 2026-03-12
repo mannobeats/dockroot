@@ -1,14 +1,28 @@
 import "server-only";
 
 import { createHash } from "node:crypto";
-import { agents, db, deployments, environments, githubInstallations, stacks } from "@dockroot/db";
+import {
+	agents,
+	db,
+	deployments,
+	environments,
+	githubInstallations,
+	githubProviders,
+	githubWebhookDeliveries,
+	stacks,
+} from "@dockroot/db";
 import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { decryptSecret } from "@/lib/crypto-secrets";
 import {
 	downloadRepositoryTarball,
 	fetchRepositoryTextFile,
+	getActiveGitHubProviderConfig,
 	getGitHubInstallation,
+	getInstallationProviderConfigByGitHubInstallationId,
+	getInstallationProviderConfigByInternalInstallationId,
 	getRepositoryBranchHeadSha,
+	listChangedFilesForCompare,
 	listGitHubAppInstallations,
 	listInstallationRepositories,
 } from "@/lib/github-app";
@@ -112,6 +126,58 @@ function normalizeManagerUrl(value: string | undefined) {
 	}
 
 	return parsed.toString().replace(/\/$/, "");
+}
+
+function parseAutoDeployPathPatterns(raw: string | null | undefined) {
+	return (raw || "")
+		.split(/\r?\n|,/u)
+		.map((entry) => entry.trim())
+		.filter(Boolean);
+}
+
+function normalizePathForMatch(path: string) {
+	return path.replace(/\\/g, "/").replace(/^\.\/+/, "");
+}
+
+function pathMatchesPattern(path: string, pattern: string) {
+	const normalizedPath = normalizePathForMatch(path);
+	const normalizedPattern = normalizePathForMatch(pattern);
+	if (!normalizedPattern) {
+		return false;
+	}
+
+	if (normalizedPattern.endsWith("/**")) {
+		const prefix = normalizedPattern.slice(0, -3);
+		return normalizedPath.startsWith(prefix);
+	}
+
+	if (normalizedPattern.endsWith("/*")) {
+		const prefix = normalizedPattern.slice(0, -2);
+		if (!normalizedPath.startsWith(prefix)) {
+			return false;
+		}
+		const remainder = normalizedPath.slice(prefix.length).replace(/^\/+/, "");
+		return remainder.length > 0 && !remainder.includes("/");
+	}
+
+	return normalizedPath === normalizedPattern || normalizedPath.startsWith(`${normalizedPattern}/`);
+}
+
+function shouldTriggerAutoDeployForPaths(input: {
+	patterns: string[];
+	changedPaths: string[];
+	composePath: string | null;
+	envPath: string | null;
+}) {
+	if (!input.patterns.length) {
+		return true;
+	}
+
+	const mandatoryPaths = [input.composePath, input.envPath].filter(Boolean) as string[];
+	const effectivePaths = [...input.changedPaths, ...mandatoryPaths];
+	return effectivePaths.some((changedPath) =>
+		input.patterns.some((pattern) => pathMatchesPattern(changedPath, pattern)),
+	);
 }
 
 async function issueRegistrationToken(agentId: string) {
@@ -438,11 +504,8 @@ export async function listStacks(userId: string, options?: { includeUntracked?: 
 }
 
 export async function listGitHubInstallations(userId: string) {
-	if (
-		!process.env.GITHUB_APP_ID ||
-		!process.env.GITHUB_APP_PRIVATE_KEY ||
-		!process.env.GITHUB_APP_SLUG
-	) {
+	const provider = await getActiveGitHubProviderConfig();
+	if (!provider) {
 		return [];
 	}
 
@@ -452,12 +515,13 @@ export async function listGitHubInstallations(userId: string) {
 	});
 
 	if (!installations.length) {
-		const remoteInstallations = await listGitHubAppInstallations();
+		const remoteInstallations = await listGitHubAppInstallations(provider);
 
 		for (const installation of remoteInstallations) {
 			await syncGitHubInstallation({
 				userId,
 				githubInstallationId: String(installation.id),
+				providerId: provider.id || undefined,
 			});
 		}
 
@@ -470,7 +534,11 @@ export async function listGitHubInstallations(userId: string) {
 	const hydrated = await Promise.all(
 		installations.map(async (installation) => {
 			try {
-				const repositories = await listInstallationRepositories(installation.githubInstallationId);
+				const repositories = await listInstallationRepositories(
+					installation.githubInstallationId,
+					(await getInstallationProviderConfigByInternalInstallationId(installation.id)) ||
+						undefined,
+				);
 				return {
 					...installation,
 					repositories,
@@ -487,6 +555,16 @@ export async function listGitHubInstallations(userId: string) {
 	);
 
 	return hydrated;
+}
+
+export async function getGitHubProviderStatus() {
+	const provider = await getActiveGitHubProviderConfig();
+	return {
+		configured: Boolean(provider),
+		source: provider?.source || null,
+		appSlug: provider?.appSlug || null,
+		appId: provider?.appId || null,
+	};
 }
 
 export async function listEnvironments(userId: string) {
@@ -738,11 +816,31 @@ export async function adoptComposeProject({
 export async function syncGitHubInstallation({
 	userId,
 	githubInstallationId,
+	providerId,
 }: {
 	userId: string;
 	githubInstallationId: string;
+	providerId?: string;
 }) {
-	const installation = await getGitHubInstallation(githubInstallationId);
+	const provider =
+		providerId != null
+			? await db.query.githubProviders.findFirst({
+					where: eq(githubProviders.id, providerId),
+				})
+			: null;
+	const installation = await getGitHubInstallation(
+		githubInstallationId,
+		provider
+			? {
+					id: provider.id,
+					source: "database",
+					appId: provider.githubAppId,
+					appSlug: provider.appSlug,
+					privateKey: decryptSecret(provider.appPrivateKeyEncrypted),
+					webhookSecret: decryptSecret(provider.webhookSecretEncrypted),
+				}
+			: undefined,
+	);
 	const existing = await db.query.githubInstallations.findFirst({
 		where: eq(githubInstallations.githubInstallationId, githubInstallationId),
 	});
@@ -752,6 +850,7 @@ export async function syncGitHubInstallation({
 		await db
 			.update(githubInstallations)
 			.set({
+				providerId: providerId || existing.providerId || null,
 				accountLogin: installation.account.login,
 				accountType: installation.account.type,
 				appSlug: installation.app_slug,
@@ -765,6 +864,7 @@ export async function syncGitHubInstallation({
 	const id = crypto.randomUUID();
 	await db.insert(githubInstallations).values({
 		id,
+		providerId: providerId || null,
 		githubInstallationId,
 		accountLogin: installation.account.login,
 		accountType: installation.account.type,
@@ -777,6 +877,44 @@ export async function syncGitHubInstallation({
 	return id;
 }
 
+export async function syncKnownGitHubInstallation(githubInstallationId: string) {
+	const existing = await db.query.githubInstallations.findFirst({
+		where: eq(githubInstallations.githubInstallationId, githubInstallationId),
+	});
+
+	if (!existing) {
+		return null;
+	}
+
+	return syncGitHubInstallation({
+		userId: existing.createdByUserId,
+		githubInstallationId,
+		providerId: existing.providerId || undefined,
+	});
+}
+
+export async function disconnectGitHubInstallation(githubInstallationId: string) {
+	const existing = await db.query.githubInstallations.findFirst({
+		where: eq(githubInstallations.githubInstallationId, githubInstallationId),
+	});
+
+	if (!existing) {
+		return;
+	}
+
+	const updatedAt = now();
+	await db
+		.update(stacks)
+		.set({
+			githubInstallationId: null,
+			autoDeployEnabled: false,
+			updatedAt,
+		})
+		.where(eq(stacks.githubInstallationId, existing.id));
+
+	await db.delete(githubInstallations).where(eq(githubInstallations.id, existing.id));
+}
+
 async function materializeGitHubStackSource(input: {
 	githubInstallationId: string;
 	owner: string;
@@ -784,6 +922,7 @@ async function materializeGitHubStackSource(input: {
 	branch: string;
 	composePath: string;
 	envPath?: string;
+	provider?: Awaited<ReturnType<typeof getInstallationProviderConfigByInternalInstallationId>>;
 }) {
 	const compose = await fetchRepositoryTextFile({
 		installationId: input.githubInstallationId,
@@ -791,6 +930,7 @@ async function materializeGitHubStackSource(input: {
 		repository: input.repository,
 		path: input.composePath,
 		ref: input.branch,
+		provider: input.provider || undefined,
 	});
 	const envFile = input.envPath
 		? await fetchRepositoryTextFile({
@@ -799,6 +939,7 @@ async function materializeGitHubStackSource(input: {
 				repository: input.repository,
 				path: input.envPath,
 				ref: input.branch,
+				provider: input.provider || undefined,
 			})
 		: null;
 	const headSha = await getRepositoryBranchHeadSha({
@@ -806,6 +947,7 @@ async function materializeGitHubStackSource(input: {
 		owner: input.owner,
 		repository: input.repository,
 		branch: input.branch,
+		provider: input.provider || undefined,
 	});
 
 	return {
@@ -818,7 +960,7 @@ async function materializeGitHubStackSource(input: {
 async function resolveGitHubDeploymentSource(
 	stack: {
 		sourceType: "manual" | "github";
-		githubInstallation: { githubInstallationId: string } | null;
+		githubInstallation: { id: string; githubInstallationId: string } | null;
 		githubOwner: string | null;
 		githubRepository: string | null;
 		githubBranch: string | null;
@@ -841,11 +983,15 @@ async function resolveGitHubDeploymentSource(
 		throw new Error("GitHub stack is missing repository metadata required for source builds.");
 	}
 
+	const provider = await getInstallationProviderConfigByInternalInstallationId(
+		stack.githubInstallation.id,
+	);
 	const sourceCommitSha = await getRepositoryBranchHeadSha({
 		installationId: stack.githubInstallation.githubInstallationId,
 		owner: stack.githubOwner,
 		repository: stack.githubRepository,
 		branch: stack.githubBranch,
+		provider: provider || undefined,
 	});
 
 	return {
@@ -856,6 +1002,7 @@ async function resolveGitHubDeploymentSource(
 					owner: stack.githubOwner,
 					repository: stack.githubRepository,
 					ref: sourceCommitSha,
+					provider: provider || undefined,
 				})
 			: null,
 	};
@@ -875,6 +1022,8 @@ export async function createGitHubStack({
 	envPath,
 	composeYaml,
 	envFileContent,
+	autoDeployEnabled = true,
+	autoDeployPaths,
 }: {
 	userId: string;
 	environmentId: string;
@@ -889,6 +1038,8 @@ export async function createGitHubStack({
 	envPath?: string;
 	composeYaml?: string;
 	envFileContent?: string;
+	autoDeployEnabled?: boolean;
+	autoDeployPaths?: string | null;
 }) {
 	await requireOwnedEnvironment(environmentId, userId);
 
@@ -902,6 +1053,7 @@ export async function createGitHubStack({
 	if (!installation) {
 		throw new Error("GitHub installation not found");
 	}
+	const provider = await getInstallationProviderConfigByInternalInstallationId(installation.id);
 
 	const source = composeYaml?.trim()
 		? {
@@ -912,6 +1064,7 @@ export async function createGitHubStack({
 					owner,
 					repository,
 					branch,
+					provider: provider || undefined,
 				}),
 			}
 		: await materializeGitHubStackSource({
@@ -921,6 +1074,7 @@ export async function createGitHubStack({
 				branch,
 				composePath,
 				envPath,
+				provider: provider || undefined,
 			});
 	const createdAt = now();
 	const slug = await ensureUniqueStackSlug(name);
@@ -944,6 +1098,8 @@ export async function createGitHubStack({
 		githubBranch: branch,
 		githubPath: composePath,
 		githubEnvPath: envPath || null,
+		autoDeployEnabled,
+		autoDeployPaths: autoDeployPaths?.trim() || null,
 		createdByUserId: userId,
 		createdAt,
 		updatedAt: createdAt,
@@ -957,10 +1113,12 @@ export async function queueOrRunDeployment({
 	stackId,
 	userId,
 	operation = "deploy",
+	webhookDeliveryId,
 }: {
 	stackId: string;
 	userId: string;
 	operation?: "deploy" | "destroy";
+	webhookDeliveryId?: string | null;
 }) {
 	const stack = await db.query.stacks.findFirst({
 		where: and(eq(stacks.id, stackId), eq(stacks.createdByUserId, userId)),
@@ -1001,6 +1159,7 @@ export async function queueOrRunDeployment({
 		composeSnapshot,
 		envSnapshot,
 		sourceCommitSha: gitHubSource.sourceCommitSha,
+		webhookDeliveryId: webhookDeliveryId || null,
 		startedAt: stack.environment.kind === "local" ? createdAt : null,
 		createdAt,
 		updatedAt: createdAt,
@@ -1293,6 +1452,10 @@ export async function getDeploymentSourceArchive({
 		owner: deployment.stack.githubOwner,
 		repository: deployment.stack.githubRepository,
 		ref: deployment.sourceCommitSha,
+		provider:
+			(await getInstallationProviderConfigByInternalInstallationId(
+				deployment.stack.githubInstallation.id,
+			)) || undefined,
 	});
 }
 
@@ -1514,6 +1677,10 @@ export async function triggerGitHubPushDeploy(input: {
 	owner: string;
 	repository: string;
 	branch: string;
+	before?: string | null;
+	after?: string | null;
+	deliveryId?: string | null;
+	changedPaths?: string[];
 }) {
 	const installation = await db.query.githubInstallations.findFirst({
 		where: eq(githubInstallations.githubInstallationId, input.githubInstallationId),
@@ -1522,6 +1689,43 @@ export async function triggerGitHubPushDeploy(input: {
 	if (!installation) {
 		return;
 	}
+	const provider = await getInstallationProviderConfigByGitHubInstallationId(
+		input.githubInstallationId,
+	);
+	const nowAt = now();
+
+	if (input.deliveryId) {
+		const existingDelivery = await db.query.githubWebhookDeliveries.findFirst({
+			where: eq(githubWebhookDeliveries.deliveryId, input.deliveryId),
+		});
+		if (existingDelivery) {
+			return;
+		}
+		await db.insert(githubWebhookDeliveries).values({
+			id: crypto.randomUUID(),
+			providerId: installation.providerId || provider?.id || null,
+			deliveryId: input.deliveryId,
+			event: "push",
+			createdAt: nowAt,
+			processedAt: null,
+		});
+	}
+
+	let compareChangedPaths = input.changedPaths || [];
+	if (!compareChangedPaths.length && input.before && input.after) {
+		try {
+			compareChangedPaths = await listChangedFilesForCompare({
+				installationId: input.githubInstallationId,
+				owner: input.owner,
+				repository: input.repository,
+				base: input.before,
+				head: input.after,
+				provider: provider || undefined,
+			});
+		} catch {
+			compareChangedPaths = [];
+		}
+	}
 
 	const matchingStacks = await db.query.stacks.findMany({
 		where: and(
@@ -1529,14 +1733,39 @@ export async function triggerGitHubPushDeploy(input: {
 			eq(stacks.githubOwner, input.owner),
 			eq(stacks.githubRepository, input.repository),
 			eq(stacks.githubBranch, input.branch),
+			eq(stacks.autoDeployEnabled, true),
 		),
 		columns: {
 			id: true,
 			createdByUserId: true,
+			autoDeployPaths: true,
+			githubPath: true,
+			githubEnvPath: true,
+			lastAutoDeployedCommitSha: true,
 		},
 	});
 
 	for (const stack of matchingStacks) {
+		if (
+			input.after &&
+			stack.lastAutoDeployedCommitSha &&
+			stack.lastAutoDeployedCommitSha === input.after
+		) {
+			continue;
+		}
+
+		const patterns = parseAutoDeployPathPatterns(stack.autoDeployPaths);
+		if (
+			!shouldTriggerAutoDeployForPaths({
+				patterns,
+				changedPaths: compareChangedPaths,
+				composePath: stack.githubPath,
+				envPath: stack.githubEnvPath,
+			})
+		) {
+			continue;
+		}
+
 		const fullStack = await db.query.stacks.findFirst({
 			where: eq(stacks.id, stack.id),
 			with: {
@@ -1558,6 +1787,7 @@ export async function triggerGitHubPushDeploy(input: {
 				branch: fullStack.githubBranch,
 				composePath: fullStack.githubPath,
 				envPath: fullStack.githubEnvPath || undefined,
+				provider: provider || undefined,
 			});
 
 			await db
@@ -1565,6 +1795,7 @@ export async function triggerGitHubPushDeploy(input: {
 				.set({
 					composeYaml: source.composeYaml,
 					envFileContent: source.envFileContent,
+					lastAutoDeployedCommitSha: source.sourceCommitSha,
 					updatedAt: now(),
 				})
 				.where(eq(stacks.id, fullStack.id));
@@ -1574,6 +1805,14 @@ export async function triggerGitHubPushDeploy(input: {
 			stackId: stack.id,
 			userId: stack.createdByUserId,
 			operation: "deploy",
+			webhookDeliveryId: input.deliveryId || null,
 		});
+	}
+
+	if (input.deliveryId) {
+		await db
+			.update(githubWebhookDeliveries)
+			.set({ processedAt: now() })
+			.where(eq(githubWebhookDeliveries.deliveryId, input.deliveryId));
 	}
 }

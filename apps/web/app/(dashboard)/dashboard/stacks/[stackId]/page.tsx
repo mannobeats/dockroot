@@ -143,6 +143,14 @@ export default async function StackWorkspacePage({
 				{stack.sourceType === "github" && stack.githubBranch ? (
 					<Badge className="px-2 py-1 text-xs">{stack.githubBranch}</Badge>
 				) : null}
+				{stack.sourceType === "github" ? (
+					<Badge className="px-2 py-1 text-xs">
+						{stack.autoDeployEnabled ? "Auto-deploy: on" : "Auto-deploy: off"}
+					</Badge>
+				) : null}
+				{stack.sourceType === "github" && stack.autoDeployPaths ? (
+					<Badge className="px-2 py-1 text-xs">Paths: {stack.autoDeployPaths}</Badge>
+				) : null}
 			</div>
 
 			{/* Main grid */}

@@ -69,6 +69,8 @@ export function StackGitHubForm({
 	const [envPath, setEnvPath] = useState("");
 	const [composeYaml, setComposeYaml] = useState("");
 	const [envFileContent, setEnvFileContent] = useState("");
+	const [autoDeployEnabled, setAutoDeployEnabled] = useState(true);
+	const [autoDeployPaths, setAutoDeployPaths] = useState("");
 	const [loadError, setLoadError] = useState("");
 	const [pathSuggestions, setPathSuggestions] = useState<string[]>([]);
 	const [headSha, setHeadSha] = useState("");
@@ -298,7 +300,7 @@ export function StackGitHubForm({
 				description={
 					appConfigured
 						? "Install the GitHub App once, then deploy repositories without pasting tokens."
-						: "Set GITHUB_APP_ID, GITHUB_APP_SLUG, GITHUB_APP_PRIVATE_KEY, and GITHUB_APP_WEBHOOK_SECRET."
+						: "Create and install a GitHub App in one flow, then return here to pick a repository."
 				}
 				actions={
 					appConfigured ? (
@@ -320,7 +322,15 @@ export function StackGitHubForm({
 								Refresh
 							</Button>
 						</>
-					) : null
+					) : (
+						<LinkButton
+							href={`/api/github/app/manifest?redirectTo=${encodeURIComponent(redirectTo)}`}
+							prefetch={false}
+							size="sm"
+						>
+							Create GitHub App
+						</LinkButton>
+					)
 				}
 				className="p-8"
 			>
@@ -344,6 +354,8 @@ export function StackGitHubForm({
 			<input type="hidden" name="envPath" value={envPath} />
 			<input type="hidden" name="composeYaml" value={composeYaml} />
 			<input type="hidden" name="envFileContent" value={envFileContent} />
+			<input type="hidden" name="autoDeployEnabled" value={autoDeployEnabled ? "true" : "false"} />
+			<input type="hidden" name="autoDeployPaths" value={autoDeployPaths} />
 
 			{/* Step 1: Select repository */}
 			<div>
@@ -562,6 +574,23 @@ export function StackGitHubForm({
 						</span>
 					) : null}
 					{loadError ? <p className="text-xs text-danger">{loadError}</p> : null}
+				</div>
+				<div className="mt-4 space-y-3 rounded-xl border border-default/8 bg-background/30 p-3.5">
+					<label className="flex items-center gap-2 text-xs">
+						<input
+							type="checkbox"
+							checked={autoDeployEnabled}
+							onChange={(event) => setAutoDeployEnabled(event.target.checked)}
+						/>
+						<span className="font-medium">Auto-deploy on push to this branch</span>
+					</label>
+					<Input
+						value={autoDeployPaths}
+						onChange={(event) => setAutoDeployPaths(event.target.value)}
+						placeholder="Optional path filters, comma or newline separated (e.g. compose.yaml, apps/api/**)"
+						inputSize="sm"
+						className="text-xs"
+					/>
 				</div>
 				<p className="mt-3 text-[11px] text-muted leading-relaxed">
 					Dockroot deploys the selected commit by materializing the repository on the target host,

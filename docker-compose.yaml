@@ -27,12 +27,8 @@ services:
       DOCKROOT_DATA_DIR: /var/lib/dockroot
       DOCKROOT_MANAGER_COMPOSE_PROJECT: ${COMPOSE_PROJECT_NAME:-dockroot}
       DOCKROOT_RUNTIME_PROFILE: docker
-      # Optional: GitHub App integration
-      GITHUB_APP_ID: ${GITHUB_APP_ID:-}
-      GITHUB_APP_PRIVATE_KEY: ${GITHUB_APP_PRIVATE_KEY:-}
-      GITHUB_APP_SLUG: ${GITHUB_APP_SLUG:-}
+      # Optional: override state signing secret for GitHub App onboarding.
       GITHUB_APP_STATE_SECRET: ${GITHUB_APP_STATE_SECRET:-}
-      GITHUB_APP_WEBHOOK_SECRET: ${GITHUB_APP_WEBHOOK_SECRET:-}
       HOSTNAME: 0.0.0.0
       NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-Dockroot}
       PORT: 3080
