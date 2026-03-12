@@ -56,7 +56,6 @@ export function validateRuntimeEnv({
 
 	const requiredPairs = [
 		["BETTER_AUTH_SECRET", betterAuthSecret],
-		["APP_URL", configuredAppUrl || betterAuthUrl || appUrl],
 		["DOCKROOT_TOKEN_PEPPER", tokenPepper],
 		["METRICS_BEARER_TOKEN", metricsToken],
 	];
@@ -84,7 +83,7 @@ export function validateRuntimeEnv({
 	}
 
 	if (appUrl) {
-		validateUrl("APP_URL", appUrl, errors);
+		validateUrl("NEXT_PUBLIC_APP_URL", appUrl, errors);
 	}
 
 	if (betterAuthUrl && appUrl) {
@@ -116,23 +115,18 @@ export function validateRuntimeEnv({
 			["BETTER_AUTH_SECRET", betterAuthSecret],
 			["DOCKROOT_TOKEN_PEPPER", tokenPepper],
 			["METRICS_BEARER_TOKEN", metricsToken],
-			["APP_URL", configuredAppUrl || betterAuthUrl || appUrl],
 		]) {
 			if (value && looksLikePlaceholder(value)) {
 				errors.push(`${name} still uses a placeholder value.`);
 			}
 		}
 
-		if (betterAuthUrl && /^http:\/\/localhost(?::\d+)?$/i.test(betterAuthUrl)) {
-			errors.push("APP_URL cannot use localhost in production.");
+		if (configuredAppUrl && looksLikePlaceholder(configuredAppUrl)) {
+			errors.push("APP_URL still uses a placeholder value.");
 		}
 
-		if (appUrl && /^http:\/\/localhost(?::\d+)?$/i.test(appUrl)) {
-			errors.push("APP_URL cannot use localhost in production.");
-		}
-
-		if (!isTruthy(readEnv("SESSION_COOKIE_SECURE"))) {
-			warnings.push("SESSION_COOKIE_SECURE is false in production. Cookies will not be marked secure.");
+		if (!configuredAppUrl && !betterAuthUrl && !appUrl) {
+			warnings.push("APP_URL is not set. Dockroot will auto-detect the URL from incoming requests. Set APP_URL for explicit control.");
 		}
 	}
 

@@ -130,12 +130,7 @@ function getDefaultProfile() {
 }
 
 function getDefaultAppUrl() {
-	return (
-		readEnv("APP_URL") ||
-		readEnv("NEXT_PUBLIC_APP_URL") ||
-		readEnv("BETTER_AUTH_URL") ||
-		`http://localhost:${readEnv("PORT") || "3080"}`
-	);
+	return readEnv("APP_URL") || readEnv("NEXT_PUBLIC_APP_URL") || readEnv("BETTER_AUTH_URL") || "";
 }
 
 function shouldUseSecureCookies(appUrl) {
@@ -204,11 +199,13 @@ export async function applyRuntimeBootstrap(options = {}) {
 	writeIfMissing("DOCKROOT_ALLOW_PUBLIC_SIGNUP", "false");
 
 	const appUrl = getDefaultAppUrl();
-	writeIfMissing("APP_URL", appUrl);
-	writeIfMissing("BETTER_AUTH_URL", appUrl);
-	writeIfMissing("NEXT_PUBLIC_APP_URL", appUrl);
-	writeIfMissing("BETTER_AUTH_TRUSTED_ORIGINS", appUrl);
-	writeIfMissing("SESSION_COOKIE_SECURE", shouldUseSecureCookies(appUrl) ? "true" : "false");
+	if (appUrl) {
+		writeIfMissing("APP_URL", appUrl);
+		writeIfMissing("BETTER_AUTH_URL", appUrl);
+		writeIfMissing("NEXT_PUBLIC_APP_URL", appUrl);
+		writeIfMissing("BETTER_AUTH_TRUSTED_ORIGINS", appUrl);
+		writeIfMissing("SESSION_COOKIE_SECURE", shouldUseSecureCookies(appUrl) ? "true" : "false");
+	}
 
 	writeIfMissing("POSTGRES_PASSWORD", nextSecrets.postgresPassword);
 	writeIfMissing("BETTER_AUTH_SECRET", nextSecrets.betterAuthSecret);
@@ -216,10 +213,7 @@ export async function applyRuntimeBootstrap(options = {}) {
 	writeIfMissing("METRICS_BEARER_TOKEN", nextSecrets.metricsBearerToken);
 
 	const runtimeEnv = {
-		APP_URL: process.env.APP_URL || appUrl,
 		BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET || nextSecrets.betterAuthSecret,
-		BETTER_AUTH_TRUSTED_ORIGINS: process.env.BETTER_AUTH_TRUSTED_ORIGINS || appUrl,
-		BETTER_AUTH_URL: process.env.BETTER_AUTH_URL || appUrl,
 		DOCKROOT_ALLOW_PUBLIC_SIGNUP: process.env.DOCKROOT_ALLOW_PUBLIC_SIGNUP || "false",
 		DOCKROOT_DATA_DIR: process.env.DOCKROOT_DATA_DIR || dataDir,
 		DOCKROOT_RUNTIME_PROFILE: process.env.DOCKROOT_RUNTIME_PROFILE || profile,
@@ -231,7 +225,6 @@ export async function applyRuntimeBootstrap(options = {}) {
 		GITHUB_APP_WEBHOOK_SECRET: process.env.GITHUB_APP_WEBHOOK_SECRET || "",
 		METRICS_BEARER_TOKEN: process.env.METRICS_BEARER_TOKEN || nextSecrets.metricsBearerToken,
 		NEXT_PUBLIC_APP_NAME: process.env.NEXT_PUBLIC_APP_NAME || "Dockroot",
-		NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || appUrl,
 		PORT: process.env.PORT || "3080",
 		POSTGRES_DB: process.env.POSTGRES_DB || "dockroot",
 		POSTGRES_HOST: process.env.POSTGRES_HOST || (profile === "docker" ? "postgres" : "localhost"),
@@ -241,9 +234,16 @@ export async function applyRuntimeBootstrap(options = {}) {
 		PROMETHEUS_URL:
 			process.env.PROMETHEUS_URL ||
 			(profile === "docker" ? "http://prometheus:9090" : "http://localhost:9090"),
-		SESSION_COOKIE_SECURE:
-			process.env.SESSION_COOKIE_SECURE || (shouldUseSecureCookies(appUrl) ? "true" : "false"),
 	};
+
+	if (appUrl) {
+		runtimeEnv.APP_URL = process.env.APP_URL || appUrl;
+		runtimeEnv.BETTER_AUTH_URL = process.env.BETTER_AUTH_URL || appUrl;
+		runtimeEnv.BETTER_AUTH_TRUSTED_ORIGINS = process.env.BETTER_AUTH_TRUSTED_ORIGINS || appUrl;
+		runtimeEnv.NEXT_PUBLIC_APP_URL = process.env.NEXT_PUBLIC_APP_URL || appUrl;
+		runtimeEnv.SESSION_COOKIE_SECURE =
+			process.env.SESSION_COOKIE_SECURE || (shouldUseSecureCookies(appUrl) ? "true" : "false");
+	}
 
 	if (options.writeEnvFile) {
 		await mkdir(path.dirname(options.writeEnvFile), { recursive: true });

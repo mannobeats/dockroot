@@ -29,10 +29,6 @@ function getConfiguredOrigins() {
 		.filter((origin, index, all) => all.indexOf(origin) === index);
 }
 
-function getTrustedOrigins() {
-	return getConfiguredOrigins();
-}
-
 function originToAllowedHost(origin: string) {
 	if (!origin || origin.startsWith("/")) {
 		return null;
@@ -46,28 +42,77 @@ function originToAllowedHost(origin: string) {
 }
 
 function getBaseUrlConfig() {
-	const fallbackUrl = getAppUrl() || getRequiredEnv("BETTER_AUTH_URL");
+	const configuredUrl = getAppUrl();
+
+	if (!configuredUrl) {
+		return `http://localhost:${process.env.PORT || "3080"}`;
+	}
+
 	const allowedHosts = getConfiguredOrigins()
 		.map(originToAllowedHost)
 		.filter((host): host is string => Boolean(host))
 		.filter((host, index, all) => all.indexOf(host) === index);
 
 	if (!allowedHosts.length) {
-		return fallbackUrl;
+		return configuredUrl;
 	}
 
 	let protocol: "http" | "https" | undefined;
 	try {
-		protocol = new URL(fallbackUrl).protocol === "https:" ? "https" : "http";
+		protocol = new URL(configuredUrl).protocol === "https:" ? "https" : "http";
 	} catch {
 		protocol = undefined;
 	}
 
 	return {
-		fallback: fallbackUrl,
+		fallback: configuredUrl,
 		allowedHosts,
 		...(protocol ? { protocol } : {}),
 	};
+}
+
+function getTrustedOrigins(): string[] | ((request: Request) => string[]) {
+	const configured = getConfiguredOrigins();
+
+	if (configured.length > 0) {
+		return configured;
+	}
+
+	return (request: Request) => {
+		const origin = request.headers.get("origin");
+		const host = request.headers.get("x-forwarded-host") || request.headers.get("host");
+		if (!origin || !host) {
+			return [];
+		}
+
+		try {
+			const originHost = new URL(origin).host;
+			if (originHost === host) {
+				return [origin];
+			}
+		} catch {
+			// invalid origin
+		}
+
+		return [];
+	};
+}
+
+function shouldUseSecureCookies(): boolean {
+	if (process.env.SESSION_COOKIE_SECURE !== undefined) {
+		return process.env.SESSION_COOKIE_SECURE === "true";
+	}
+
+	const url = getAppUrl();
+	if (url) {
+		try {
+			return new URL(url).protocol === "https:";
+		} catch {
+			return false;
+		}
+	}
+
+	return false;
 }
 
 function publicSignupsAllowed() {
@@ -101,10 +146,7 @@ export const auth = betterAuth({
 	},
 	advanced: {
 		trustedProxyHeaders: true,
-		useSecureCookies:
-			process.env.SESSION_COOKIE_SECURE === undefined
-				? process.env.NODE_ENV === "production"
-				: process.env.SESSION_COOKIE_SECURE === "true",
+		useSecureCookies: shouldUseSecureCookies(),
 	},
 	session: {
 		cookieCache: {

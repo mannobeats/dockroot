@@ -99,7 +99,7 @@ function resolveExecutable(primaryCandidate, fallbackCandidates) {
 }
 
 function getTrustedOrigins() {
-	return [
+	const configured = [
 		process.env.APP_URL,
 		process.env.BETTER_AUTH_URL,
 		process.env.NEXT_PUBLIC_APP_URL,
@@ -108,6 +108,27 @@ function getTrustedOrigins() {
 		.map((origin) => origin?.trim())
 		.filter(Boolean)
 		.filter((origin, index, all) => all.indexOf(origin) === index);
+
+	if (configured.length > 0) {
+		return configured;
+	}
+
+	return undefined;
+}
+
+function getCorsConfig() {
+	const origins = getTrustedOrigins();
+
+	if (origins) {
+		return { origin: origins, credentials: true };
+	}
+
+	return {
+		origin: (requestOrigin, callback) => {
+			callback(null, requestOrigin || false);
+		},
+		credentials: true,
+	};
 }
 
 function isPrivilegedRole(role) {
@@ -415,6 +436,10 @@ await app.prepare();
 const server = createServer(async (req, res) => {
 	if (req.url) {
 		const url = new URL(req.url, getAppBaseUrl());
+		if (url.pathname === "/api/health") {
+			sendJson(res, 200, { status: "ok" });
+			return;
+		}
 		if (url.pathname === "/internal/local-terminal/sessions") {
 			if (req.headers["x-dockroot-internal-token"] !== process.env.DOCKROOT_TOKEN_PEPPER) {
 				sendJson(res, 403, { error: "Forbidden" });
@@ -485,10 +510,7 @@ const server = createServer(async (req, res) => {
 });
 const io = new SocketIOServer(server, {
 	path: "/socket.io",
-	cors: {
-		origin: getTrustedOrigins(),
-		credentials: true,
-	},
+	cors: getCorsConfig(),
 });
 
 globalThis.__dockroot_io = io;
