@@ -190,10 +190,136 @@ body {
 	white-space: nowrap;
 	pointer-events: none;
 	opacity: 0;
-	transition: opacity 0.15s, transform 0.15s;
+	transition:
+		opacity 0.15s,
+		transform 0.15s;
 	z-index: 50;
 }
 [data-tooltip]:hover::after {
 	opacity: 1;
 	transform: translateX(-50%) scale(1);
+}
+
+/* ── Landing page design layer ───────────────── */
+.landing-shell {
+	background:
+		radial-gradient(
+			circle at 14% 18%,
+			color-mix(in oklab, var(--accent) 12%, transparent),
+			transparent 38%
+		),
+		radial-gradient(
+			circle at 88% 8%,
+			color-mix(in oklab, var(--accent) 8%, transparent),
+			transparent 44%
+		),
+		var(--background);
+}
+
+.landing-grid-overlay {
+	position: absolute;
+	inset: 0;
+	z-index: -2;
+	pointer-events: none;
+	background-image:
+		linear-gradient(
+			to right,
+			color-mix(in oklab, var(--border) 40%, transparent) 1px,
+			transparent 1px
+		),
+		linear-gradient(
+			to bottom,
+			color-mix(in oklab, var(--border) 36%, transparent) 1px,
+			transparent 1px
+		);
+	background-size: clamp(28px, 4.6vw, 52px) clamp(28px, 4.6vw, 52px);
+	opacity: 0.22;
+	mask-image: radial-gradient(circle at center, black 38%, transparent 96%);
+}
+
+.landing-orb {
+	position: absolute;
+	z-index: -1;
+	border-radius: 999px;
+	filter: blur(56px);
+	opacity: 0.65;
+	will-change: transform;
+}
+
+.landing-orb--one {
+	height: clamp(180px, 32vw, 420px);
+	width: clamp(180px, 32vw, 420px);
+	top: -8%;
+	left: -5%;
+	background: color-mix(in oklab, var(--accent) 26%, transparent);
+	animation: landing-float-1 16s ease-in-out infinite alternate;
+}
+
+.landing-orb--two {
+	height: clamp(190px, 28vw, 380px);
+	width: clamp(190px, 28vw, 380px);
+	right: -8%;
+	top: 18%;
+	background: color-mix(in oklab, var(--accent) 18%, transparent);
+	animation: landing-float-2 18s ease-in-out infinite alternate;
+}
+
+.landing-panel,
+.landing-capability,
+.landing-stage {
+	backdrop-filter: blur(8px);
+}
+
+.landing-cta {
+	background:
+		linear-gradient(
+			130deg,
+			color-mix(in oklab, var(--surface) 80%, var(--accent) 9%) 0%,
+			color-mix(in oklab, var(--surface) 92%, transparent) 45%,
+			color-mix(in oklab, var(--surface) 72%, var(--accent) 12%) 100%
+		),
+		var(--surface);
+}
+
+.landing-cta__wash {
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	background:
+		radial-gradient(
+			circle at 80% 16%,
+			color-mix(in oklab, var(--accent) 20%, transparent),
+			transparent 42%
+		),
+		radial-gradient(
+			circle at 12% 88%,
+			color-mix(in oklab, var(--accent) 16%, transparent),
+			transparent 40%
+		);
+	opacity: 0.78;
+}
+
+@keyframes landing-float-1 {
+	0% {
+		transform: translate3d(0, 0, 0) scale(1);
+	}
+	100% {
+		transform: translate3d(18px, 24px, 0) scale(1.08);
+	}
+}
+
+@keyframes landing-float-2 {
+	0% {
+		transform: translate3d(0, 0, 0) scale(1);
+	}
+	100% {
+		transform: translate3d(-24px, 14px, 0) scale(1.07);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.landing-orb--one,
+	.landing-orb--two {
+		animation: none;
+	}
 }
