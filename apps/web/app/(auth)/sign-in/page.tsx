@@ -1,7 +1,7 @@
 "use client";
 
 import { Lock, LogIn, Mail } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -11,10 +11,21 @@ import { signIn } from "@/lib/auth-client";
 
 export default function SignInPage() {
 	const router = useRouter();
+	const searchParams = useSearchParams();
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
 	const [error, setError] = useState("");
 	const [loading, setLoading] = useState(false);
+
+	function sanitizeRedirectPath(value: string | null) {
+		if (!value) {
+			return "/dashboard";
+		}
+		if (!value.startsWith("/") || value.startsWith("//")) {
+			return "/dashboard";
+		}
+		return value;
+	}
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -26,7 +37,7 @@ export default function SignInPage() {
 			if (result.error) {
 				setError(result.error.message || "Invalid credentials");
 			} else {
-				router.push("/dashboard");
+				router.push(sanitizeRedirectPath(searchParams.get("redirectTo")));
 			}
 		} catch {
 			setError("Something went wrong. Please try again.");

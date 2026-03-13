@@ -269,8 +269,9 @@ export async function exchangeGitHubManifestCode(code: string) {
 	);
 
 	if (!response.ok) {
+		const details = await response.text().catch(() => "");
 		throw new Error(
-			`GitHub app manifest conversion failed (${response.status} ${response.statusText}).`,
+			`GitHub app manifest conversion failed (${response.status} ${response.statusText})${details ? `: ${details}` : ""}.`,
 		);
 	}
 
@@ -280,7 +281,7 @@ export async function exchangeGitHubManifestCode(code: string) {
 		client_id?: string;
 		client_secret?: string;
 		pem: string;
-		webhook_secret: string;
+		webhook_secret?: string | null;
 	};
 }
 
@@ -294,9 +295,13 @@ export async function upsertGitHubProviderFromManifest(input: {
 	clientId?: string | null;
 	clientSecret?: string | null;
 }) {
-	const existing = await db.query.githubProviders.findFirst({
-		where: eq(githubProviders.githubAppId, input.appId),
-	});
+	const existing =
+		(await db.query.githubProviders.findFirst({
+			where: eq(githubProviders.githubAppId, input.appId),
+		})) ||
+		(await db.query.githubProviders.findFirst({
+			where: eq(githubProviders.appSlug, input.slug),
+		}));
 	const updatedAt = new Date();
 
 	if (existing) {

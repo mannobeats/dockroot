@@ -1,5 +1,8 @@
+import crypto from "node:crypto";
 import { NextResponse } from "next/server";
-import { requirePrivilegedSession, sanitizeInternalRedirectPath } from "@/lib/authorization";
+import { db, user } from "@dockroot/db";
+import { eq } from "drizzle-orm";
+import { sanitizeInternalRedirectPath } from "@/lib/authorization";
 import {
 	exchangeGitHubManifestCode,
 	upsertGitHubProviderFromManifest,
@@ -7,21 +10,20 @@ import {
 } from "@/lib/github-app";
 
 export async function GET(request: Request) {
-	let userId = "";
-	try {
-		const auth = await requirePrivilegedSession();
-		userId = auth.userId;
-	} catch {
-		return NextResponse.redirect(new URL("/dashboard/stacks?github=forbidden", request.url));
-	}
-
 	const url = new URL(request.url);
 	const code = url.searchParams.get("code");
 	const state = url.searchParams.get("state");
-	const redirectWithStatus = (status: string, redirectTo?: string | null) => {
+	const redirectWithStatus = (
+		status: string,
+		redirectTo?: string | null,
+		errorMessage?: string | null,
+	) => {
 		const targetPath = sanitizeInternalRedirectPath(redirectTo || "/dashboard/stacks");
 		const target = new URL(targetPath, request.url);
 		target.searchParams.set("github", status);
+		if (errorMessage) {
+			target.searchParams.set("githubError", errorMessage.slice(0, 220));
+		}
 		return target;
 	};
 
@@ -31,24 +33,37 @@ export async function GET(request: Request) {
 
 	try {
 		const parsedState = verifyGitHubAppState(state);
-		if (parsedState.userId !== userId) {
+		const actor = await db.query.user.findFirst({
+			where: eq(user.id, parsedState.userId),
+			columns: {
+				id: true,
+				role: true,
+			},
+		});
+		if (!actor || !["owner", "admin"].includes(actor.role)) {
 			return NextResponse.redirect(redirectWithStatus("manifest-denied", parsedState.redirectTo));
 		}
 
 		const converted = await exchangeGitHubManifestCode(code);
+		const webhookSecret =
+			converted.webhook_secret && converted.webhook_secret.trim()
+				? converted.webhook_secret
+				: crypto.randomBytes(24).toString("hex");
 		await upsertGitHubProviderFromManifest({
-			userId,
+			userId: actor.id,
 			name: parsedState.providerName?.trim() || converted.slug || "GitHub App",
 			appId: String(converted.id),
 			slug: converted.slug,
 			privateKey: converted.pem,
-			webhookSecret: converted.webhook_secret,
+			webhookSecret,
 			clientId: converted.client_id || null,
 			clientSecret: converted.client_secret || null,
 		});
 
 		return NextResponse.redirect(redirectWithStatus("manifest-ready", parsedState.redirectTo));
-	} catch {
-		return NextResponse.redirect(redirectWithStatus("manifest-error"));
+	} catch (error) {
+		const message = error instanceof Error ? error.message : "Unknown manifest callback error.";
+		console.error("[github-manifest-callback] failed:", message);
+		return NextResponse.redirect(redirectWithStatus("manifest-error", null, message));
 	}
 }

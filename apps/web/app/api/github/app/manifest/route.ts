@@ -93,7 +93,7 @@ export async function GET(request: Request) {
 		url: appUrl,
 		redirect_url: `${appUrl}/api/github/app/manifest/callback`,
 		callback_urls: [`${appUrl}/api/github/callback`],
-		setup_url: `${appUrl}/dashboard/stacks?github=connected`,
+		setup_url: `${appUrl}/api/github/callback?redirectTo=${encodeURIComponent(redirectTo)}`,
 		setup_on_update: true,
 		public: false,
 		request_oauth_on_install: true,

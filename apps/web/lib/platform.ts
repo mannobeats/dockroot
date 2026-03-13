@@ -502,7 +502,7 @@ export async function listStacks(userId: string, options?: { includeUntracked?: 
 	return [...tracked, ...untracked].sort((left, right) => left.name.localeCompare(right.name));
 }
 
-export async function listGitHubInstallations(userId: string) {
+export async function listGitHubInstallations(_userId: string) {
 	const providers = await listGitHubProviderConfigs();
 	if (!providers.length) {
 		return [];
@@ -512,7 +512,7 @@ export async function listGitHubInstallations(userId: string) {
 		const remoteInstallations = await listGitHubAppInstallations(provider).catch(() => []);
 		for (const installation of remoteInstallations) {
 			await syncGitHubInstallation({
-				userId,
+				userId: _userId,
 				githubInstallationId: String(installation.id),
 				providerId: provider.id || undefined,
 			});
@@ -520,7 +520,6 @@ export async function listGitHubInstallations(userId: string) {
 	}
 
 	const installations = await db.query.githubInstallations.findMany({
-		where: eq(githubInstallations.createdByUserId, userId),
 		orderBy: [desc(githubInstallations.updatedAt)],
 	});
 
@@ -550,9 +549,9 @@ export async function listGitHubInstallations(userId: string) {
 	return hydrated;
 }
 
-export async function listGitHubProviders(userId: string) {
+export async function listGitHubProviders(_userId: string) {
 	return db.query.githubProviders.findMany({
-		where: and(eq(githubProviders.createdByUserId, userId), eq(githubProviders.isActive, true)),
+		where: eq(githubProviders.isActive, true),
 		orderBy: [desc(githubProviders.updatedAt)],
 		columns: {
 			id: true,
@@ -563,6 +562,45 @@ export async function listGitHubProviders(userId: string) {
 			updatedAt: true,
 		},
 	});
+}
+
+export async function deleteGitHubProvider(_userId: string, providerId: string) {
+	const provider = await db.query.githubProviders.findFirst({
+		where: eq(githubProviders.id, providerId),
+		columns: {
+			id: true,
+		},
+	});
+	if (!provider) {
+		throw new Error("GitHub provider not found.");
+	}
+
+	const providerInstallations = await db.query.githubInstallations.findMany({
+		where: eq(githubInstallations.providerId, providerId),
+		columns: {
+			id: true,
+		},
+	});
+	const installationIds = providerInstallations.map((installation) => installation.id);
+
+	if (installationIds.length) {
+		await db
+			.update(stacks)
+			.set({
+				githubInstallationId: null,
+				autoDeployEnabled: false,
+				updatedAt: now(),
+			})
+			.where(inArray(stacks.githubInstallationId, installationIds));
+
+		await db
+			.delete(githubInstallations)
+			.where(eq(githubInstallations.providerId, providerId));
+	}
+
+	await db.delete(githubProviders).where(eq(githubProviders.id, providerId));
+
+	revalidatePath("/dashboard/stacks");
 }
 
 export async function getGitHubProviderStatus() {
@@ -1070,10 +1108,7 @@ export async function createGitHubStack({
 	await requireOwnedEnvironment(environmentId, userId);
 
 	const installation = await db.query.githubInstallations.findFirst({
-		where: and(
-			eq(githubInstallations.id, installationId),
-			eq(githubInstallations.createdByUserId, userId),
-		),
+		where: eq(githubInstallations.id, installationId),
 	});
 
 	if (!installation) {

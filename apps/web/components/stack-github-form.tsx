@@ -76,6 +76,7 @@ export function StackGitHubForm({
 	const [manifestName, setManifestName] = useState("Dockroot GitHub App");
 	const [manifestOwner, setManifestOwner] = useState("");
 	const [manifestError, setManifestError] = useState("");
+	const [providerActionMessage, setProviderActionMessage] = useState("");
 	const [installationId, setInstallationId] = useState(installations[0]?.id || "");
 	const [repositoryQuery, setRepositoryQuery] = useState("");
 	const [repositoryId, setRepositoryId] = useState("");
@@ -123,6 +124,13 @@ export function StackGitHubForm({
 	}, [repositories, repositoryQuery]);
 	const selectedRepository = repositories.find(
 		(repository) => String(repository.id) === repositoryId,
+	);
+	const canCreateStack = Boolean(
+		installationId &&
+			selectedRepository?.owner.login &&
+			selectedRepository?.name &&
+			branch.trim() &&
+			composePath.trim(),
 	);
 
 	const refreshInstallations = useCallback(async () => {
@@ -203,6 +211,30 @@ export function StackGitHubForm({
 			// keep existing provider state on transient failures
 		}
 	}, [appConfigured]);
+
+	const deleteProvider = useCallback(
+		async (providerId: string) => {
+			setProviderActionMessage("");
+			try {
+				const response = await fetch(`/api/github/providers/${encodeURIComponent(providerId)}`, {
+					method: "DELETE",
+				});
+				const payload = (await response.json()) as { error?: string };
+				if (!response.ok) {
+					throw new Error(payload.error || "Unable to delete GitHub App.");
+				}
+
+				await refreshProviders();
+				await refreshInstallations();
+				setProviderActionMessage("GitHub App removed.");
+			} catch (error) {
+				setProviderActionMessage(
+					error instanceof Error ? error.message : "Unable to delete GitHub App.",
+				);
+			}
+		},
+		[refreshInstallations, refreshProviders],
+	);
 
 	async function loadRepositoryFiles(nextComposePath?: string) {
 		if (!selectedRepository || !installationId || !branch || !(nextComposePath || composePath)) {
@@ -465,7 +497,19 @@ export function StackGitHubForm({
 									key={provider.id}
 									className={`flex cursor-pointer items-center justify-between rounded-lg border px-3 py-2 text-xs ${selectedProviderId === provider.id ? "border-accent/40 bg-accent/5 text-foreground" : "border-default/10 text-muted hover:text-foreground"}`}
 								>
-									<span className="font-medium">{provider.name}</span>
+									<div className="flex items-center gap-2">
+										<span className="font-medium">{provider.name}</span>
+										<button
+											type="button"
+											className="rounded border border-danger/30 px-2 py-0.5 text-[10px] text-danger hover:bg-danger/10"
+											onClick={(event) => {
+												event.preventDefault();
+												void deleteProvider(provider.id);
+											}}
+										>
+											Delete
+										</button>
+									</div>
 									<input
 										type="radio"
 										name="providerId"
@@ -477,6 +521,9 @@ export function StackGitHubForm({
 							))}
 						</div>
 					</div>
+				) : null}
+				{providerActionMessage ? (
+					<p className="mt-2 text-xs text-muted">{providerActionMessage}</p>
 				) : null}
 				{installationStateMessage ? (
 					<p className="mt-3 text-xs text-muted">{installationStateMessage}</p>
@@ -549,6 +596,20 @@ export function StackGitHubForm({
 						>
 							Install App
 						</Button>
+						<Button
+							type="button"
+							size="xs"
+							variant="ghost"
+							onClick={() => {
+								if (!selectedProviderId) {
+									return;
+								}
+								void deleteProvider(selectedProviderId);
+							}}
+							disabled={!selectedProviderId}
+						>
+							Delete App
+						</Button>
 						<Select
 							value={installationId}
 							onChange={(event) => {
@@ -588,6 +649,11 @@ export function StackGitHubForm({
 					<Input
 						value={manifestName}
 						onChange={(event) => setManifestName(event.target.value)}
+						onKeyDown={(event) => {
+							if (event.key === "Enter") {
+								event.preventDefault();
+							}
+						}}
 						placeholder="New GitHub App name"
 						inputSize="sm"
 						className="text-xs"
@@ -595,17 +661,30 @@ export function StackGitHubForm({
 					<Input
 						value={manifestOwner}
 						onChange={(event) => setManifestOwner(event.target.value)}
+						onKeyDown={(event) => {
+							if (event.key === "Enter") {
+								event.preventDefault();
+							}
+						}}
 						placeholder="Organization (optional)"
 						inputSize="sm"
 						className="text-xs"
 					/>
 				</div>
 				{manifestError ? <p className="mt-1 text-xs text-danger">{manifestError}</p> : null}
+				{providerActionMessage ? (
+					<p className="mt-1 text-xs text-muted">{providerActionMessage}</p>
+				) : null}
 				<div className="relative mt-3">
 					<Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
 					<Input
 						value={repositoryQuery}
 						onChange={(event) => setRepositoryQuery(event.target.value)}
+						onKeyDown={(event) => {
+							if (event.key === "Enter") {
+								event.preventDefault();
+							}
+						}}
 						placeholder="Search repositories..."
 						withIcon
 						inputSize="sm"
@@ -860,7 +939,17 @@ export function StackGitHubForm({
 							? `${selectedRepository.full_name}`
 							: "Select a repository above"}
 					</p>
-					<FormSubmitButton label="Create stack" pendingLabel="Creating..." size="sm" />
+					<FormSubmitButton
+						label="Create stack"
+						pendingLabel="Creating..."
+						size="sm"
+						disabled={!canCreateStack}
+						title={
+							canCreateStack
+								? undefined
+								: "Select an installation/repository and set branch + compose path first."
+						}
+					/>
 				</div>
 			</div>
 		</form>

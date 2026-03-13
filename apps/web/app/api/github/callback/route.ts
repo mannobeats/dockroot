@@ -14,7 +14,11 @@ function shouldUseSecureCookies() {
 export async function GET(request: Request) {
 	const session = await getServerSession();
 	if (!session?.user.id) {
-		return NextResponse.redirect(new URL("/sign-in", request.url));
+		const currentPath = new URL(request.url);
+		const returnTo = `${currentPath.pathname}${currentPath.search}`;
+		return NextResponse.redirect(
+			new URL(`/sign-in?redirectTo=${encodeURIComponent(returnTo)}`, request.url),
+		);
 	}
 
 	const url = new URL(request.url);
