@@ -17,6 +17,7 @@ type ModalOption = {
 
 export function DestructiveActionModal({
 	action,
+	onConfirm,
 	title,
 	description,
 	triggerLabel,
@@ -33,6 +34,7 @@ export function DestructiveActionModal({
 	acknowledgementLabel = "I understand this action is destructive and cannot be undone.",
 }: {
 	action: FormAction;
+	onConfirm?: () => void;
 	title: string;
 	description: string;
 	triggerLabel: string;
@@ -166,6 +168,7 @@ export function DestructiveActionModal({
 							action={action}
 							className="p-4 space-y-3"
 							onSubmit={() => {
+								onConfirm?.();
 								setOpen(false);
 							}}
 						>

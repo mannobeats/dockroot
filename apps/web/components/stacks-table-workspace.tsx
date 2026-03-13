@@ -5,17 +5,21 @@ import {
 	ChevronRight,
 	ExternalLink,
 	Lock,
-	Package,
+	PanelRightClose,
+	PanelRightOpen,
 	Play,
 	RefreshCw,
 	RotateCcw,
 	Square,
+	TerminalSquare,
 	Trash2,
 	Upload,
+	X,
 } from "lucide-react";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { DestructiveActionModal } from "@/components/destructive-action-modal";
 import { FormSubmitButton } from "@/components/form-submit-button";
+import { LiveStackFeed } from "@/components/live-stack-feed";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -30,6 +34,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { LinkButton } from "@/components/ui/link-button";
 import { Panel } from "@/components/ui/panel";
+import { getSocket } from "@/lib/socket-client";
 import { getProtectedStackLabel } from "@/lib/runtime-protection";
 
 type FormAction = (formData: FormData) => void | Promise<void>;
@@ -47,7 +52,7 @@ type TrackedStackRow = {
 	containerCount: number;
 	runningCount: number;
 	containers: StackContainer[];
-	lastDeployment: { status: string } | null;
+	lastDeployment: { id: string; status: string; log?: string | null } | null;
 	isProtected: boolean;
 };
 
@@ -89,12 +94,6 @@ function getContainerImage(container: StackContainer) {
 	return container.Image || "unknown image";
 }
 
-function getPorts(container: StackContainer) {
-	const ports = container.Ports || "";
-	if (!ports) return "No published ports";
-	return ports;
-}
-
 export function StacksTableWorkspace({
 	stacks,
 	includeUntracked,
@@ -123,6 +122,8 @@ export function StacksTableWorkspace({
 	const [search, setSearch] = useState("");
 	const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
 	const [selectedRowKeys, setSelectedRowKeys] = useState<Record<string, boolean>>({});
+	const [watchedStackId, setWatchedStackId] = useState("");
+	const [logDockOpen, setLogDockOpen] = useState(false);
 
 	useEffect(() => {
 		function isTypingTarget(target: EventTarget | null) {
@@ -148,6 +149,24 @@ export function StacksTableWorkspace({
 
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);
+	}, []);
+
+	useEffect(() => {
+		const client = getSocket();
+		const onDeploymentUpdate = (event: { stackId?: string; status?: string }) => {
+			if (!event?.stackId) {
+				return;
+			}
+			if (event.status === "running" || event.status === "queued") {
+				setWatchedStackId(event.stackId);
+				setLogDockOpen(true);
+			}
+		};
+
+		client.on("deployment:update", onDeploymentUpdate);
+		return () => {
+			client.off("deployment:update", onDeploymentUpdate);
+		};
 	}, []);
 
 	const filteredStacks = useMemo(() => {
@@ -194,6 +213,12 @@ export function StacksTableWorkspace({
 	);
 	const selectedTrackedIds = selectedTracked.map((stack) => stack.stackId);
 	const selectedCount = selectedStacks.length;
+	const watchedStack = stacks.find(
+		(stack): stack is TrackedStackRow => stack.type === "tracked" && stack.stackId === watchedStackId,
+	);
+	const fallbackWatchedStack =
+		watchedStack || stacks.find((stack): stack is TrackedStackRow => stack.type === "tracked") || null;
+	const liveTargetStack = watchedStack || fallbackWatchedStack;
 	const allSelectableSelected =
 		selectableRowKeys.length > 0 && selectableRowKeys.every((rowKey) => selectedRowKeys[rowKey]);
 
@@ -214,7 +239,15 @@ export function StacksTableWorkspace({
 				<p className="mr-2 text-xs text-muted">
 					{selectedCount ? `${selectedCount} selected` : "Select one or more stacks"}
 				</p>
-				<form action={bulkRestartStacksAction}>
+				<form
+					action={bulkRestartStacksAction}
+					onSubmit={() => {
+						if (selectedTracked[0]?.stackId) {
+							setWatchedStackId(selectedTracked[0].stackId);
+							setLogDockOpen(true);
+						}
+					}}
+				>
 					{selectedTrackedIds.map((stackId) => (
 						<input key={`restart-tracked-${stackId}`} type="hidden" name="stackIds" value={stackId} />
 					))}
@@ -227,7 +260,15 @@ export function StacksTableWorkspace({
 						disabled={!selectedCount}
 					/>
 				</form>
-				<form action={bulkStopStacksAction}>
+				<form
+					action={bulkStopStacksAction}
+					onSubmit={() => {
+						if (selectedTracked[0]?.stackId) {
+							setWatchedStackId(selectedTracked[0].stackId);
+							setLogDockOpen(true);
+						}
+					}}
+				>
 					{selectedTrackedIds.map((stackId) => (
 						<input key={`stop-tracked-${stackId}`} type="hidden" name="stackIds" value={stackId} />
 					))}
@@ -242,6 +283,12 @@ export function StacksTableWorkspace({
 				</form>
 				<DestructiveActionModal
 					action={bulkDestroyStacksAction}
+					onConfirm={() => {
+						if (selectedTracked[0]?.stackId) {
+							setWatchedStackId(selectedTracked[0].stackId);
+							setLogDockOpen(true);
+						}
+					}}
 					title={`Destroy ${selectedCount} stack(s)`}
 					description="This stops and destroys runtime resources for the selected stacks."
 					triggerLabel={`Destroy${selectedCount ? ` (${selectedCount})` : ""}`}
@@ -277,6 +324,16 @@ export function StacksTableWorkspace({
 					className="ml-auto text-xs text-muted transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
 				>
 					Clear
+				</button>
+				<button
+					type="button"
+					onClick={() => setLogDockOpen((open) => !open)}
+					disabled={!liveTargetStack}
+					className="inline-flex h-7 items-center gap-1.5 rounded-md border border-default/15 px-2.5 text-xs text-muted transition-colors hover:border-default/25 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+					title="Toggle live deploy console"
+				>
+					{logDockOpen ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
+					Console
 				</button>
 			</div>
 
@@ -392,7 +449,13 @@ export function StacksTableWorkspace({
 											<div className="flex items-center justify-end gap-1">
 												{stack.type === "tracked" ? (
 													<>
-														<form action={deployStackAction}>
+														<form
+															action={deployStackAction}
+															onSubmit={() => {
+																setWatchedStackId(stack.stackId);
+																setLogDockOpen(true);
+															}}
+														>
 															<input type="hidden" name="stackId" value={stack.stackId || ""} />
 															<FormSubmitButton
 																label=""
@@ -412,6 +475,10 @@ export function StacksTableWorkspace({
 														</form>
 														<DestructiveActionModal
 															action={destroyStackAction}
+															onConfirm={() => {
+																setWatchedStackId(stack.stackId);
+																setLogDockOpen(true);
+															}}
 															title={`Destroy stack ${stack.name}`}
 															description="This will stop and remove the stack resources."
 															triggerLabel=""
@@ -626,6 +693,44 @@ export function StacksTableWorkspace({
 					)}
 				</DataTableBody>
 			</DataTable>
+
+			{logDockOpen && liveTargetStack ? (
+				<div className="fixed inset-y-4 right-4 z-40 w-[min(44rem,92vw)] max-w-xl rounded-xl border border-default/12 bg-surface/95 shadow-[var(--shadow-lg)] backdrop-blur-sm">
+					<div className="flex items-center justify-between border-b border-default/10 px-4 py-3">
+						<div className="min-w-0">
+							<p className="text-xs font-semibold uppercase tracking-wide text-muted/75">
+								Live Deploy Console
+							</p>
+							<p className="truncate text-sm font-medium">{liveTargetStack.name}</p>
+						</div>
+						<div className="flex items-center gap-1.5">
+							<LinkButton
+								href={`/dashboard/stacks/${liveTargetStack.stackId}${environmentId ? `?environment=${environmentId}` : ""}`}
+								variant="ghost"
+								size="icon-xs"
+								title="Open stack workspace"
+							>
+								<TerminalSquare className="h-3.5 w-3.5" />
+							</LinkButton>
+							<button
+								type="button"
+								onClick={() => setLogDockOpen(false)}
+								className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-foreground/[0.05] hover:text-foreground"
+								aria-label="Close deploy console"
+							>
+								<X className="h-3.5 w-3.5" />
+							</button>
+						</div>
+					</div>
+					<div className="p-3">
+						<LiveStackFeed
+							stackId={liveTargetStack.stackId}
+							initialLog={liveTargetStack.lastDeployment?.log}
+							height="min(72vh, 760px)"
+						/>
+					</div>
+				</div>
+			) : null}
 		</Panel>
 	);
 }
