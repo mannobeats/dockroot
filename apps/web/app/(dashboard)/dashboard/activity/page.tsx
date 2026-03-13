@@ -16,41 +16,39 @@ export default async function ActivityPage() {
 	const deployments = await listDeployments(session.user.id);
 
 	return (
-		<div className="animate-in space-y-6">
+		<div className="animate-in space-y-5">
 			<PageHeader
-				kicker="Operations"
 				title="Activity"
-				description={`${deployments.length} deployment operations`}
+				description={`${deployments.length} deployments`}
 			/>
 
-			<div className="space-y-3">
+			<div className="space-y-2">
 				{deployments.length ? (
 					deployments.map((deployment) => (
 						<Panel
 							key={deployment.id}
-							padding="md"
-							className="transition-all hover:border-default/20"
+							padding="sm"
+							className="transition-colors hover:border-default/20"
 						>
-							<div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-								<div>
+							<div className="flex items-start justify-between gap-3">
+								<div className="min-w-0">
 									<div className="flex items-center gap-2">
-										<h2 className="text-base font-semibold">{deployment.stack.name}</h2>
+										<h2 className="text-sm font-semibold">{deployment.stack.name}</h2>
 										<StatusBadge status={deployment.status} />
 									</div>
-									<p className="mt-1 text-sm text-muted">
-										{deployment.environment.name} · {deployment.operation}
+									<p className="mt-0.5 text-xs text-muted">
+										{deployment.environment.name} · {deployment.operation} · <span className="font-mono">{deployment.version}</span>
 									</p>
-									<p className="mt-1 font-mono text-xs text-muted">{deployment.version}</p>
 								</div>
-								<p className="shrink-0 text-xs text-muted">
+								<p className="shrink-0 text-[11px] text-muted">
 									{deployment.createdAt.toLocaleString()}
 								</p>
 							</div>
-							<p className="mt-3 text-sm text-muted">
-								{deployment.summary || "Awaiting result..."}
-							</p>
+							{deployment.summary ? (
+								<p className="mt-2 text-sm text-muted">{deployment.summary}</p>
+							) : null}
 							{deployment.log ? (
-								<LogBlock className="mt-3 max-h-48 p-4">{deployment.log}</LogBlock>
+								<LogBlock className="mt-2 max-h-40 p-3">{deployment.log}</LogBlock>
 							) : null}
 						</Panel>
 					))

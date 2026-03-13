@@ -3,12 +3,12 @@ import type { SelectHTMLAttributes } from "react";
 import { cn } from "@/lib/cn";
 
 const selectVariants = cva(
-	"w-full rounded-xl border border-default/12 bg-surface text-sm outline-none transition-all duration-200 focus:border-accent/50 focus:ring-2 focus:ring-accent/10 shadow-[var(--shadow-xs)]",
+	"w-full rounded-lg border border-default/12 bg-surface text-sm outline-none transition-all duration-150 focus:border-accent/50 focus:ring-2 focus:ring-accent/10",
 	{
 		variants: {
 			size: {
-				sm: "h-9 px-3.5",
-				md: "h-10 px-4",
+				sm: "h-8 px-3",
+				md: "h-9 px-3.5",
 			},
 		},
 		defaultVariants: {

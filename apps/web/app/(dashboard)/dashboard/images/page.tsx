@@ -1,11 +1,10 @@
-import { Lock } from "lucide-react";
+import { ExternalLink, Lock, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { pruneImagesAction, pullImageAction, removeImageAction } from "@/app/(dashboard)/actions";
 import { DestructiveActionModal } from "@/components/destructive-action-modal";
 import { PageHeader } from "@/components/page-header";
 import { PullImageModal } from "@/components/pull-image-modal";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
 	DataTable,
 	DataTableBody,
@@ -17,7 +16,6 @@ import {
 } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
 import { LinkButton } from "@/components/ui/link-button";
-import { MetricCard } from "@/components/ui/metric-card";
 import { Panel } from "@/components/ui/panel";
 import { requirePrivilegedPageSession } from "@/lib/authorization";
 import {
@@ -49,9 +47,6 @@ export default async function ImagesPage({
 	const containerImageRefs = new Set(
 		containers.map((container: Record<string, string>) => container.Image).filter(Boolean),
 	);
-	const taggedCount = filtered.filter(
-		(image: Record<string, string>) => image.Tag && image.Tag !== "<none>",
-	).length;
 	const inUseCount = filtered.filter((image: Record<string, string>) =>
 		containerImageRefs.has(`${image.Repository}:${image.Tag}`),
 	).length;
@@ -60,22 +55,21 @@ export default async function ImagesPage({
 	).length;
 
 	return (
-		<div className="animate-in space-y-6">
+		<div className="animate-in space-y-5">
 			<PageHeader
-				kicker="Runtime"
 				title="Images"
-				description={`${environment.name} — ${filtered.length} images`}
+				description={`${environment.name} · ${filtered.length} images · ${inUseCount} in use · ${danglingCount} dangling`}
 				actions={
-					<div className="flex items-center gap-2">
+					<div className="flex items-center gap-1.5">
 						<DestructiveActionModal
 							action={pruneImagesAction}
 							title="Prune dangling images"
 							description="This removes dangling images that are no longer referenced."
 							triggerLabel="Prune dangling"
-							confirmLabel="Prune dangling"
+							confirmLabel="Prune"
 							pendingLabel="Pruning..."
 							triggerVariant="outline"
-							triggerSize="sm"
+							triggerSize="xs"
 							hiddenFields={{ environmentId: environment.id }}
 						/>
 						<DestructiveActionModal
@@ -83,10 +77,10 @@ export default async function ImagesPage({
 							title="Prune unused images"
 							description="This removes all unused local images and can impact redeploy speed."
 							triggerLabel="Prune unused"
-							confirmLabel="Prune unused"
+							confirmLabel="Prune"
 							pendingLabel="Pruning..."
 							triggerVariant="warning"
-							triggerSize="sm"
+							triggerSize="xs"
 							hiddenFields={{ environmentId: environment.id, mode: "all" }}
 						/>
 						<PullImageModal action={pullImageAction} environmentId={environment.id} />
@@ -94,36 +88,17 @@ export default async function ImagesPage({
 				}
 			/>
 
-			{/* Search */}
-			<Panel padding="md">
-				<form className="flex gap-3">
+			<Panel>
+				<form className="border-b border-default/8 px-3 py-2">
 					<Input
 						type="search"
 						name="q"
 						defaultValue={params.q || ""}
 						placeholder="Search images..."
-						className="flex-1"
+						className="border-0 bg-transparent shadow-none focus:ring-0"
 					/>
-					<Button type="submit" variant="secondary">
-						Filter
-					</Button>
 				</form>
-			</Panel>
 
-			{/* Stats */}
-			<div className="grid gap-4 sm:grid-cols-3">
-				<MetricCard label="Total images" value={filtered.length} />
-				<MetricCard label="Tagged" value={taggedCount} description={`${danglingCount} dangling`} />
-				<MetricCard
-					label="In use"
-					value={inUseCount}
-					description={`${Math.max(filtered.length - inUseCount, 0)} unused`}
-					valueClassName="text-success"
-				/>
-			</div>
-
-			{/* Table */}
-			<Panel>
 				<DataTable>
 					<DataTableHeader>
 						<tr>
@@ -131,7 +106,7 @@ export default async function ImagesPage({
 							<DataTableHead>Tag</DataTableHead>
 							<DataTableHead>Size</DataTableHead>
 							<DataTableHead>Updated</DataTableHead>
-							<DataTableHead>Actions</DataTableHead>
+							<DataTableHead className="w-16 text-right">Actions</DataTableHead>
 						</tr>
 					</DataTableHeader>
 					<DataTableBody>
@@ -144,18 +119,15 @@ export default async function ImagesPage({
 								return (
 									<DataTableRow key={`${image.ID}-${imageRef}`}>
 										<DataTableCell>
-											<div className="flex items-center gap-2">
+											<div className="flex items-center gap-1.5">
 												<Link
 													href={`/dashboard/images/${encodeURIComponent(imageRef)}?environment=${environment.id}`}
-													className="font-medium transition-colors hover:text-foreground/80"
+													className="font-medium transition-colors hover:text-accent"
 												>
 													{image.Repository}
 												</Link>
 												{isProtected ? (
-													<Badge variant="warning">
-														<Lock className="h-2.5 w-2.5" />
-														Locked
-													</Badge>
+													<Badge variant="warning"><Lock className="h-2.5 w-2.5" /></Badge>
 												) : null}
 												<Badge variant={isInUse ? "success" : "default"}>
 													{isInUse ? "In use" : "Unused"}
@@ -169,25 +141,28 @@ export default async function ImagesPage({
 											{image.CreatedSince}
 										</DataTableCell>
 										<DataTableCell>
-											<div className="flex gap-1.5">
+											<div className="flex items-center justify-end gap-0.5">
 												<LinkButton
 													href={`/dashboard/images/${encodeURIComponent(imageRef)}?environment=${environment.id}`}
-													variant="outline"
-													size="xs"
+													variant="ghost"
+													size="icon-xs"
+													title="Details"
 												>
-													Details
+													<ExternalLink className="h-3.5 w-3.5" />
 												</LinkButton>
 												<DestructiveActionModal
 													action={removeImageAction}
 													title={`Delete image ${imageRef}`}
 													description="This permanently removes the image from local cache."
-													triggerLabel="Delete"
-													confirmLabel="Delete image"
+													triggerLabel=""
+													confirmLabel="Delete"
 													pendingLabel="Deleting..."
-													triggerVariant="danger"
+													triggerVariant="ghost"
 													triggerSize="xs"
 													disabled={isProtected}
 													hiddenFields={{ imageRef, environmentId: environment.id }}
+													triggerClassName="h-6 w-6 p-0 text-muted hover:text-danger"
+													triggerIcon={<Trash2 className="h-3.5 w-3.5" />}
 												/>
 											</div>
 										</DataTableCell>

@@ -14,7 +14,7 @@ export function ThemeToggle() {
 	}, []);
 
 	if (!mounted) {
-		return <div className="h-8 w-8" />;
+		return <div className="h-7 w-7" />;
 	}
 
 	return (
@@ -22,10 +22,10 @@ export function ThemeToggle() {
 			onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
 			aria-label="Toggle theme"
 			variant="ghost"
-			size="icon"
-			className="rounded-xl"
+			size="icon-sm"
+			className="rounded-lg"
 		>
-			{theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+			{theme === "dark" ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
 		</Button>
 	);
 }

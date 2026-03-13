@@ -1,4 +1,4 @@
-import { ArrowLeft, Lock } from "lucide-react";
+import { ArrowLeft, Lock, Logs as LogsIcon, Play, RefreshCw, Square, SquareTerminal, Trash2 } from "lucide-react";
 import { controlContainerAction } from "@/app/(dashboard)/actions";
 import { ContainerDetailTabs } from "@/components/container-detail-tabs";
 import { DestructiveActionModal } from "@/components/destructive-action-modal";
@@ -130,14 +130,14 @@ export default async function ContainerDetailPage({
 	const isRunning = containerState === "running";
 
 	return (
-		<div className="animate-in space-y-6">
-			{/* Header with back + actions */}
-			<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-				<div className="flex items-center gap-3">
+		<div className="animate-in space-y-5">
+			{/* Header */}
+			<div className="flex items-center justify-between gap-3">
+				<div className="flex items-center gap-2.5">
 					<LinkButton
 						href={`/dashboard/containers?environment=${environment.id}`}
-						variant="outline"
-						size="icon"
+						variant="ghost"
+						size="icon-sm"
 					>
 						<ArrowLeft className="h-4 w-4" />
 					</LinkButton>
@@ -148,16 +148,15 @@ export default async function ContainerDetailPage({
 							{isProtected ? (
 								<Badge title={protectedLabel || undefined} variant="warning">
 									<Lock className="h-2.5 w-2.5" />
-									Locked
 								</Badge>
 							) : null}
 						</div>
-						<p className="text-sm text-muted">
+						<p className="text-xs text-muted">
 							{inspect.Config?.Image} · {environment.name}
 						</p>
 					</div>
 				</div>
-				<div className="flex flex-wrap gap-1.5">
+				<div className="flex items-center gap-0.5">
 					{isRunning ? (
 						<>
 							<form action={controlContainerAction}>
@@ -165,26 +164,32 @@ export default async function ContainerDetailPage({
 								<input type="hidden" name="action" value="stop" />
 								<input type="hidden" name="environmentId" value={environment.id} />
 								<FormSubmitButton
-									label="stop"
-									pendingLabel="Stopping..."
+									label=""
+									pendingLabel=""
 									disabled={isProtected}
-									variant="outline"
+									variant="ghost"
 									size="xs"
-									className="capitalize"
-								/>
+									title="Stop"
+									className="h-8 w-8 p-0"
+								>
+									<Square className="h-4 w-4" />
+								</FormSubmitButton>
 							</form>
 							<form action={controlContainerAction}>
 								<input type="hidden" name="containerId" value={containerId} />
 								<input type="hidden" name="action" value="restart" />
 								<input type="hidden" name="environmentId" value={environment.id} />
 								<FormSubmitButton
-									label="restart"
-									pendingLabel="Restarting..."
+									label=""
+									pendingLabel=""
 									disabled={isProtected}
-									variant="outline"
+									variant="ghost"
 									size="xs"
-									className="capitalize"
-								/>
+									title="Restart"
+									className="h-8 w-8 p-0"
+								>
+									<RefreshCw className="h-4 w-4" />
+								</FormSubmitButton>
 							</form>
 						</>
 					) : (
@@ -194,25 +199,29 @@ export default async function ContainerDetailPage({
 								<input type="hidden" name="action" value="start" />
 								<input type="hidden" name="environmentId" value={environment.id} />
 								<FormSubmitButton
-									label="start"
-									pendingLabel="Starting..."
+									label=""
+									pendingLabel=""
 									disabled={isProtected}
-									variant="outline"
+									variant="ghost"
 									size="xs"
-									className="capitalize"
-								/>
+									title="Start"
+									className="h-8 w-8 p-0"
+								>
+									<Play className="h-4 w-4" />
+								</FormSubmitButton>
 							</form>
 							<DestructiveActionModal
 								action={controlContainerAction}
 								title={`Remove container ${containerName}`}
 								description="This permanently removes the container."
-								triggerLabel="remove"
+								triggerLabel=""
 								confirmLabel="Remove"
 								pendingLabel="Removing..."
-								triggerVariant="danger"
+								triggerVariant="ghost"
 								triggerSize="xs"
 								disabled={isProtected}
-								triggerClassName="capitalize"
+								triggerClassName="h-8 w-8 p-0 text-muted hover:text-danger"
+								triggerIcon={<Trash2 className="h-4 w-4" />}
 								hiddenFields={{
 									containerId,
 									action: "remove",
@@ -230,22 +239,23 @@ export default async function ContainerDetailPage({
 					)}
 					<LinkButton
 						href={`/dashboard/shell?target=container&containerId=${containerId}&environment=${environment.id}`}
-						variant="outline"
-						size="xs"
+						variant="ghost"
+						size="icon-sm"
+						title="Shell"
 					>
-						Shell
+						<SquareTerminal className="h-4 w-4" />
 					</LinkButton>
 					<LinkButton
 						href={`/dashboard/logs?mode=single&container=${containerId}&environment=${environment.id}`}
-						variant="outline"
-						size="xs"
+						variant="ghost"
+						size="icon-sm"
+						title="Logs"
 					>
-						Logs
+						<LogsIcon className="h-4 w-4" />
 					</LinkButton>
 				</div>
 			</div>
 
-			{/* Tabbed content — inspired by competitor's Overview | Metrics | Logs | Configuration | Networks | Storage tabs */}
 			<ContainerDetailTabs
 				containerId={containerId}
 				environmentId={environment.id}

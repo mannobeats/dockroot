@@ -1,3 +1,4 @@
+import { ExternalLink, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { createEnvironmentAction, deleteEnvironmentAction } from "@/app/(dashboard)/actions";
 import { CreateEnvironmentModal } from "@/components/create-environment-modal";
@@ -27,11 +28,10 @@ export default async function EnvironmentsPage() {
 	const environments = await listEnvironments(session.user.id);
 
 	return (
-		<div className="animate-in space-y-6">
+		<div className="animate-in space-y-5">
 			<PageHeader
-				kicker="Infrastructure"
 				title="Environments"
-				description={`${environments.length} environments — manage and monitor your deployment targets`}
+				description={`${environments.length} environments`}
 				actions={<CreateEnvironmentModal action={createEnvironmentAction} />}
 			/>
 
@@ -44,7 +44,7 @@ export default async function EnvironmentsPage() {
 							<DataTableHead>Kind</DataTableHead>
 							<DataTableHead>Stacks</DataTableHead>
 							<DataTableHead>Host</DataTableHead>
-							<DataTableHead>Actions</DataTableHead>
+							<DataTableHead className="w-20 text-right">Actions</DataTableHead>
 						</tr>
 					</DataTableHeader>
 					<DataTableBody>
@@ -55,11 +55,11 @@ export default async function EnvironmentsPage() {
 									<DataTableCell>
 										<Link
 											href={`/dashboard/environments/${environment.id}`}
-											className="font-medium transition-colors hover:text-foreground/80"
+											className="font-medium transition-colors hover:text-accent"
 										>
 											{environment.name}
 										</Link>
-										<p className="mt-0.5 text-xs text-muted">
+										<p className="text-[11px] text-muted">
 											{environment.description || "No description"}
 										</p>
 									</DataTableCell>
@@ -76,28 +76,28 @@ export default async function EnvironmentsPage() {
 										{agent?.hostname || "Awaiting registration"}
 									</DataTableCell>
 									<DataTableCell>
-										<div className="flex gap-1.5">
-											<LinkButton href={`/dashboard?environment=${environment.id}`} size="xs">
-												Open
-											</LinkButton>
+										<div className="flex items-center justify-end gap-0.5">
 											<LinkButton
-												href={`/dashboard/environments/${environment.id}`}
-												variant="outline"
-												size="xs"
+												href={`/dashboard?environment=${environment.id}`}
+												variant="ghost"
+												size="icon-xs"
+												title="Open workspace"
 											>
-												Details
+												<ExternalLink className="h-3.5 w-3.5" />
 											</LinkButton>
 											{environment.isDefaultLocal ? null : (
 												<DestructiveActionModal
 													action={deleteEnvironmentAction}
 													title={`Delete environment ${environment.name}`}
 													description="This will permanently remove the environment and linked runtime metadata."
-													triggerLabel="Delete"
+													triggerLabel=""
 													confirmLabel="Delete"
 													pendingLabel="Deleting..."
-													triggerVariant="quietDanger"
+													triggerVariant="ghost"
 													triggerSize="xs"
 													hiddenFields={{ environmentId: environment.id }}
+													triggerClassName="h-6 w-6 p-0 text-muted hover:text-danger"
+													triggerIcon={<Trash2 className="h-3.5 w-3.5" />}
 												/>
 											)}
 										</div>

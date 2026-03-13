@@ -32,23 +32,21 @@ export default async function VolumeDetailPage({
 	}
 
 	return (
-		<div className="animate-in space-y-6">
-			{/* Header */}
-			<div className="flex items-center gap-3">
+		<div className="animate-in space-y-5">
+			<div className="flex items-center gap-2.5">
 				<LinkButton
 					href={`/dashboard/volumes?environment=${environment.id}`}
-					variant="outline"
-					size="icon"
+					variant="ghost"
+					size="icon-sm"
 				>
 					<ArrowLeft className="h-4 w-4" />
 				</LinkButton>
 				<div>
-					<p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted">Volume</p>
 					<h1 className="text-lg font-semibold">{decodedName}</h1>
+					<p className="text-xs text-muted">{environment.name}</p>
 				</div>
 			</div>
 
-			{/* Info grid */}
 			<div className="grid gap-3 sm:grid-cols-3">
 				<MetricCard
 					label="Driver"
@@ -67,12 +65,11 @@ export default async function VolumeDetailPage({
 				/>
 			</div>
 
-			{/* Inspect payload */}
 			<Panel>
 				<PanelHeader>
 					<PanelTitle>Inspect payload</PanelTitle>
 				</PanelHeader>
-				<LogBlock className="max-h-[600px] rounded-none border-0 p-4 text-muted">
+				<LogBlock className="max-h-[600px] rounded-none border-0 p-3 text-muted">
 					{JSON.stringify(volume, null, 2)}
 				</LogBlock>
 			</Panel>

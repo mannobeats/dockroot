@@ -63,7 +63,7 @@ export default function Home() {
 								Compose-Native Control Plane
 							</div>
 							<h1 className="text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
-								Run Docker <span className="text-gradient">Operations Smarter</span>
+								Run Docker <span className="text-accent">Operations Smarter</span>
 							</h1>
 							<p className="mx-auto mt-6 max-w-lg text-[15px] leading-relaxed text-muted">
 								Dockroot gives teams a unified control plane for Docker Compose deployments, runtime
@@ -103,7 +103,7 @@ export default function Home() {
 							{features.map((feature) => (
 								<div
 									key={feature.title}
-									className="group rounded-2xl border border-default/10 bg-surface p-6 shadow-[var(--shadow-xs)] transition-all duration-300 hover:border-accent/20 hover:shadow-[var(--shadow-md)] hover:-translate-y-1"
+									className="group rounded-xl border border-default/10 bg-surface p-5 shadow-[var(--shadow-xs)] transition-all duration-200 hover:border-accent/20 hover:shadow-[var(--shadow-md)]"
 								>
 									<div className="mb-4 flex items-center gap-3">
 										<div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent/8 transition-colors group-hover:bg-accent/12">
@@ -127,8 +127,8 @@ export default function Home() {
 								Bring Dockroot up locally, configure your instance, and start managing deployments
 								from the control plane.
 							</p>
-							<div className="mt-10 overflow-hidden rounded-2xl border border-default/10 bg-console shadow-[var(--shadow-md)]">
-								<pre className="overflow-x-auto p-6 text-left text-[13px] leading-relaxed">
+							<div className="mt-10 overflow-hidden rounded-xl border border-default/10 bg-console shadow-[var(--shadow-md)]">
+								<pre className="overflow-x-auto p-4 text-left text-[13px] leading-relaxed">
 									<code className="text-console-foreground">
 										{`git clone <your-repo>
 cd dockroot

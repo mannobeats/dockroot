@@ -1,5 +1,4 @@
 import type { LucideIcon } from "lucide-react";
-import { Panel } from "@/components/ui/panel";
 
 export function StatCard({
 	label,
@@ -13,17 +12,16 @@ export function StatCard({
 	icon: LucideIcon;
 }) {
 	return (
-		<Panel className="group p-5 transition-all duration-200 hover:shadow-[var(--shadow-sm)] hover:-translate-y-0.5">
-			<div className="flex items-center justify-between">
-				<span className="text-[11px] font-medium tracking-wider uppercase text-muted">{label}</span>
-				<div className="flex h-8 w-8 items-center justify-center rounded-xl bg-foreground/[0.04] transition-colors">
-					<Icon className="h-4 w-4 text-muted" />
-				</div>
+		<div className="flex items-center gap-3 rounded-lg border border-default/10 bg-surface p-3 shadow-[var(--shadow-xs)]">
+			<div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-foreground/[0.04]">
+				<Icon className="h-4 w-4 text-muted" />
 			</div>
-			<div className="mt-3">
-				<p className="text-2xl font-bold tracking-tight">{value}</p>
-				<p className="mt-1 text-sm text-muted">{detail}</p>
+			<div className="min-w-0">
+				<p className="text-xl font-bold tracking-tight leading-none">{value}</p>
+				<p className="mt-0.5 text-[11px] text-muted">
+					{label} · {detail}
+				</p>
 			</div>
-		</Panel>
+		</div>
 	);
 }

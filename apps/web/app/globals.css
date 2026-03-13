@@ -25,9 +25,8 @@
 }
 
 :root {
-	/* ── Premium Light Mode ─────────────────────────── */
-	--background: #f8f9fb;
-	--foreground: #111827;
+	--background: #f7f8fa;
+	--foreground: #1a1d24;
 	--surface: #ffffff;
 	--surface-raised: #ffffff;
 
@@ -35,7 +34,7 @@
 	--accent-foreground: #ffffff;
 
 	--muted: #6b7280;
-	--border: #e5e7eb;
+	--border: #e2e5ea;
 
 	--success: #10b981;
 	--warning: #f59e0b;
@@ -49,25 +48,23 @@
 	--chart-4: #f59e0b;
 	--chart-5: #ec4899;
 
-	/* Elevation */
-	--shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
-	--shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
-	--shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04);
-	--shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.04);
+	--shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.03);
+	--shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03);
+	--shadow-md: 0 4px 12px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.03);
+	--shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.07), 0 2px 6px rgba(0, 0, 0, 0.03);
 }
 
 .dark {
-	/* ── Premium Dark Mode ──────────────────────────── */
-	--background: #09090b;
-	--foreground: #f9fafb;
-	--surface: #111113;
+	--background: #0a0a0c;
+	--foreground: #f0f1f3;
+	--surface: #111114;
 	--surface-raised: #18181b;
 
 	--accent: #3b82f6;
 	--accent-foreground: #ffffff;
 
 	--muted: #9ca3af;
-	--border: #1f2937;
+	--border: #1e2028;
 	--danger: #f87171;
 	--console: #050507;
 	--console-foreground: rgba(255, 255, 255, 0.88);
@@ -78,7 +75,6 @@
 	--chart-4: #fbbf24;
 	--chart-5: #f472b6;
 
-	/* Elevation */
 	--shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.2);
 	--shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
 	--shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
@@ -93,10 +89,10 @@ body {
 	-moz-osx-font-smoothing: grayscale;
 }
 
-/* ── Premium minimal scrollbar ─────────────────── */
+/* ── Minimal scrollbar ────────────────────────── */
 ::-webkit-scrollbar {
-	width: 6px;
-	height: 6px;
+	width: 5px;
+	height: 5px;
 }
 ::-webkit-scrollbar-track {
 	background: transparent;
@@ -109,7 +105,6 @@ body {
 	background: var(--muted);
 }
 
-/* Hide scrollbar on dropdown popovers */
 .dropdown__popover {
 	scrollbar-width: none;
 	overflow: hidden;
@@ -118,11 +113,11 @@ body {
 	display: none;
 }
 
-/* ── Smooth page transitions ───────────────────── */
+/* ── Page transitions ─────────────────────────── */
 @keyframes fade-in {
 	from {
 		opacity: 0;
-		transform: translateY(6px);
+		transform: translateY(4px);
 	}
 	to {
 		opacity: 1;
@@ -130,26 +125,11 @@ body {
 	}
 }
 
-@keyframes fade-in-scale {
-	from {
-		opacity: 0;
-		transform: scale(0.98) translateY(4px);
-	}
-	to {
-		opacity: 1;
-		transform: scale(1) translateY(0);
-	}
-}
-
 .animate-in {
-	animation: fade-in 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+	animation: fade-in 0.25s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.animate-in-scale {
-	animation: fade-in-scale 0.4s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-/* ── Live pulse ────────────────────────────────── */
+/* ── Live pulse ───────────────────────────────── */
 @keyframes pulse-dot {
 	0%,
 	100% {
@@ -160,28 +140,17 @@ body {
 	}
 }
 
-@keyframes pulse-ring {
-	0% {
-		transform: scale(1);
-		opacity: 0.6;
-	}
-	100% {
-		transform: scale(2.5);
-		opacity: 0;
-	}
-}
-
 .pulse-dot {
 	animation: pulse-dot 2s ease-in-out infinite;
 }
 
-/* ── Table responsive wrapper ──────────────────── */
+/* ── Table responsive wrapper ─────────────────── */
 .table-scroll {
 	overflow-x: auto;
 	-webkit-overflow-scrolling: touch;
 }
 
-/* ── Log viewport ──────────────────────────────── */
+/* ── Log viewport ─────────────────────────────── */
 .log-viewport {
 	overflow: auto;
 	white-space: pre-wrap;
@@ -189,35 +158,42 @@ body {
 	max-width: 100%;
 }
 
-/* ── Code block contained ──────────────────────── */
+/* ── Code block ───────────────────────────────── */
 .code-block {
 	overflow: auto;
 	max-width: 100%;
 }
 
-/* ── Focus ring ────────────────────────────────── */
+/* ── Focus ring ───────────────────────────────── */
 *:focus-visible {
 	outline: 2px solid var(--accent);
 	outline-offset: 2px;
+	border-radius: 4px;
+}
+
+/* ── Tooltip utility ──────────────────────────── */
+[data-tooltip] {
+	position: relative;
+}
+[data-tooltip]::after {
+	content: attr(data-tooltip);
+	position: absolute;
+	bottom: calc(100% + 6px);
+	left: 50%;
+	transform: translateX(-50%) scale(0.95);
+	padding: 4px 8px;
 	border-radius: 6px;
+	background: var(--foreground);
+	color: var(--background);
+	font-size: 11px;
+	font-weight: 500;
+	white-space: nowrap;
+	pointer-events: none;
+	opacity: 0;
+	transition: opacity 0.15s, transform 0.15s;
+	z-index: 50;
 }
-
-/* ── Micro-interaction utilities ───────────────── */
-.transition-lift {
-	transition:
-		transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
-		box-shadow 0.2s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.transition-lift:hover {
-	transform: translateY(-1px);
-	box-shadow: var(--shadow-md);
-}
-
-/* ── Gradient text utility ─────────────────────── */
-.text-gradient {
-	background: linear-gradient(135deg, var(--accent) 0%, #8b5cf6 100%);
-	-webkit-background-clip: text;
-	-webkit-text-fill-color: transparent;
-	background-clip: text;
+[data-tooltip]:hover::after {
+	opacity: 1;
+	transform: translateX(-50%) scale(1);
 }

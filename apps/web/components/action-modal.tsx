@@ -70,10 +70,10 @@ export function ActionModal({
 						role="dialog"
 						aria-modal="true"
 						aria-label={title}
-						className="relative z-10 w-full max-w-lg overflow-hidden rounded-2xl border border-default/15 bg-surface shadow-[var(--shadow-lg)]"
+						className="relative z-10 w-full max-w-lg overflow-hidden rounded-xl border border-default/15 bg-surface shadow-[var(--shadow-lg)]"
 					>
 						{/* Header */}
-						<div className="flex items-center justify-between border-b border-default/8 px-6 py-5">
+						<div className="flex items-center justify-between border-b border-default/8 px-5 py-4">
 							<div className="flex items-center gap-3">
 								{Icon ? (
 									<div className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent/8 text-accent">
@@ -88,7 +88,7 @@ export function ActionModal({
 							<button
 								type="button"
 								onClick={() => setOpen(false)}
-								className="rounded-xl p-1.5 text-muted transition-colors hover:bg-foreground/[0.04] hover:text-foreground"
+								className="rounded-lg p-1.5 text-muted transition-colors hover:bg-foreground/[0.04] hover:text-foreground"
 								aria-label="Close modal"
 							>
 								<X className="h-4 w-4" />
@@ -96,7 +96,7 @@ export function ActionModal({
 						</div>
 
 						{/* Body */}
-						<div className="p-6">{children}</div>
+						<div className="p-5">{children}</div>
 					</div>
 				</div>
 			) : null}

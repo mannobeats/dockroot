@@ -1,3 +1,4 @@
+import { ExternalLink, Trash2 } from "lucide-react";
 import Link from "next/link";
 import {
 	createVolumeAction,
@@ -7,7 +8,6 @@ import {
 import { CreateVolumeModal } from "@/components/create-volume-modal";
 import { DestructiveActionModal } from "@/components/destructive-action-modal";
 import { PageHeader } from "@/components/page-header";
-import { Button } from "@/components/ui/button";
 import {
 	DataTable,
 	DataTableBody,
@@ -19,7 +19,6 @@ import {
 } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
 import { LinkButton } from "@/components/ui/link-button";
-import { MetricCard } from "@/components/ui/metric-card";
 import { Panel } from "@/components/ui/panel";
 import { requirePrivilegedPageSession } from "@/lib/authorization";
 import { listVolumesForEnvironment, resolveRuntimeEnvironment } from "@/lib/environment-runtime";
@@ -39,27 +38,23 @@ export default async function VolumesPage({
 			? true
 			: `${volume.Name} ${volume.Driver} ${volume.Mountpoint || ""}`.toLowerCase().includes(query),
 	);
-	const localCount = filtered.filter(
-		(volume: Record<string, string>) => volume.Driver === "local",
-	).length;
 
 	return (
-		<div className="animate-in space-y-6">
+		<div className="animate-in space-y-5">
 			<PageHeader
-				kicker="Runtime"
 				title="Volumes"
-				description={`${environment.name} — ${filtered.length} volumes`}
+				description={`${environment.name} · ${filtered.length} volumes`}
 				actions={
-					<div className="flex items-center gap-2">
+					<div className="flex items-center gap-1.5">
 						<DestructiveActionModal
 							action={pruneVolumesAction}
 							title="Prune unused volumes"
 							description="This removes all dangling Docker volumes and may delete persisted data."
 							triggerLabel="Prune"
-							confirmLabel="Prune volumes"
+							confirmLabel="Prune"
 							pendingLabel="Pruning..."
 							triggerVariant="outline"
-							triggerSize="sm"
+							triggerSize="xs"
 							hiddenFields={{ environmentId: environment.id }}
 						/>
 						<CreateVolumeModal action={createVolumeAction} environmentId={environment.id} />
@@ -67,38 +62,24 @@ export default async function VolumesPage({
 				}
 			/>
 
-			{/* Search */}
-			<Panel padding="md">
-				<form className="flex gap-3">
+			<Panel>
+				<form className="border-b border-default/8 px-3 py-2">
 					<Input
 						type="search"
 						name="q"
 						defaultValue={params.q || ""}
 						placeholder="Search volumes..."
-						className="flex-1"
+						className="border-0 bg-transparent shadow-none focus:ring-0"
 					/>
-					<Button type="submit" variant="secondary">
-						Filter
-					</Button>
 				</form>
-			</Panel>
 
-			{/* Stats */}
-			<div className="grid gap-4 sm:grid-cols-3">
-				<MetricCard label="Total" value={filtered.length} />
-				<MetricCard label="Local driver" value={localCount} />
-				<MetricCard label="Custom drivers" value={filtered.length - localCount} />
-			</div>
-
-			{/* Table */}
-			<Panel>
 				<DataTable>
 					<DataTableHeader>
 						<tr>
 							<DataTableHead>Name</DataTableHead>
 							<DataTableHead>Driver</DataTableHead>
 							<DataTableHead>Mount point</DataTableHead>
-							<DataTableHead>Actions</DataTableHead>
+							<DataTableHead className="w-16 text-right">Actions</DataTableHead>
 						</tr>
 					</DataTableHeader>
 					<DataTableBody>
@@ -108,34 +89,37 @@ export default async function VolumesPage({
 									<DataTableCell>
 										<Link
 											href={`/dashboard/volumes/${encodeURIComponent(volume.Name)}?environment=${environment.id}`}
-											className="font-medium transition-colors hover:text-foreground/80"
+											className="font-medium transition-colors hover:text-accent"
 										>
 											{volume.Name}
 										</Link>
 									</DataTableCell>
 									<DataTableCell className="text-xs text-muted">{volume.Driver}</DataTableCell>
-									<DataTableCell className="text-xs text-muted">
+									<DataTableCell className="text-xs text-muted max-w-[240px] truncate">
 										{volume.Mountpoint || "Docker managed"}
 									</DataTableCell>
 									<DataTableCell>
-										<div className="flex gap-1.5">
+										<div className="flex items-center justify-end gap-0.5">
 											<LinkButton
 												href={`/dashboard/volumes/${encodeURIComponent(volume.Name)}?environment=${environment.id}`}
-												variant="outline"
-												size="xs"
+												variant="ghost"
+												size="icon-xs"
+												title="Details"
 											>
-												Details
+												<ExternalLink className="h-3.5 w-3.5" />
 											</LinkButton>
 											<DestructiveActionModal
 												action={removeVolumeAction}
 												title={`Delete volume ${volume.Name}`}
 												description="This permanently removes the volume and all data it contains."
-												triggerLabel="Delete"
-												confirmLabel="Delete volume"
+												triggerLabel=""
+												confirmLabel="Delete"
 												pendingLabel="Deleting..."
-												triggerVariant="danger"
+												triggerVariant="ghost"
 												triggerSize="xs"
 												hiddenFields={{ name: volume.Name, environmentId: environment.id }}
+												triggerClassName="h-6 w-6 p-0 text-muted hover:text-danger"
+												triggerIcon={<Trash2 className="h-3.5 w-3.5" />}
 											/>
 										</div>
 									</DataTableCell>

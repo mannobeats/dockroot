@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, X } from "lucide-react";
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useId, useMemo, useState } from "react";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
@@ -20,6 +20,7 @@ export function DestructiveActionModal({
 	title,
 	description,
 	triggerLabel,
+	triggerIcon,
 	confirmLabel = "Confirm",
 	pendingLabel = "Working...",
 	triggerVariant = "danger",
@@ -35,9 +36,10 @@ export function DestructiveActionModal({
 	title: string;
 	description: string;
 	triggerLabel: string;
+	triggerIcon?: ReactNode;
 	confirmLabel?: string;
 	pendingLabel?: string;
-	triggerVariant?: "danger" | "warning" | "quietDanger" | "outline";
+	triggerVariant?: "danger" | "warning" | "quietDanger" | "outline" | "ghost";
 	triggerSize?: "xs" | "sm" | "md";
 	triggerClassName?: string;
 	disabled?: boolean;
@@ -112,7 +114,7 @@ export function DestructiveActionModal({
 					triggerClassName,
 				)}
 			>
-				{triggerLabel}
+				{triggerIcon || triggerLabel}
 			</button>
 
 			{open ? (
@@ -128,34 +130,33 @@ export function DestructiveActionModal({
 						aria-modal="true"
 						aria-labelledby={titleId}
 						aria-describedby={descriptionId}
-						className="relative z-10 w-full max-w-2xl rounded-2xl border border-danger/20 bg-surface p-6 shadow-2xl"
+						className="relative z-10 w-full max-w-lg rounded-xl border border-danger/20 bg-surface p-5 shadow-2xl"
 					>
 						<div className="flex items-start justify-between gap-4">
 							<div className="flex items-start gap-3">
-								<div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-danger/10 text-danger">
-									<AlertTriangle className="h-4 w-4" />
+								<div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-danger/10 text-danger">
+									<AlertTriangle className="h-3.5 w-3.5" />
 								</div>
 								<div>
-									<h2 id={titleId} className="text-xl font-semibold">
+									<h2 id={titleId} className="text-base font-semibold">
 										{title}
 									</h2>
+									<p id={descriptionId} className="mt-1 text-sm text-muted">
+										{description}
+									</p>
 								</div>
 							</div>
 							<button
 								type="button"
 								onClick={resetState}
 								className="rounded-md p-1 text-muted transition-colors hover:bg-foreground/[0.04] hover:text-foreground"
-								aria-label="Close confirmation dialog"
+								aria-label="Close"
 							>
 								<X className="h-4 w-4" />
 							</button>
 						</div>
 
-						<p id={descriptionId} className="mt-4 text-sm text-muted">
-							{description}
-						</p>
-
-						<form action={action} className="mt-6 space-y-4">
+						<form action={action} className="mt-4 space-y-3">
 							<input
 								type="hidden"
 								name="__confirmDestructive"
@@ -169,9 +170,9 @@ export function DestructiveActionModal({
 							})}
 
 							{options.length ? (
-								<div className="space-y-3 rounded-xl border border-default/10 p-4" id={optionsId}>
+								<div className="space-y-2.5 rounded-lg border border-default/10 p-3" id={optionsId}>
 									{options.map((option) => (
-										<label key={option.name} className="flex items-start gap-3">
+										<label key={option.name} className="flex items-start gap-2.5">
 											<input
 												type="checkbox"
 												name={option.name}
@@ -197,7 +198,7 @@ export function DestructiveActionModal({
 							) : null}
 
 							{requireAcknowledgement ? (
-								<label className="flex items-start gap-3 rounded-xl border border-default/10 p-4">
+								<label className="flex items-start gap-2.5 rounded-lg border border-default/10 p-3">
 									<input
 										type="checkbox"
 										checked={acknowledged}

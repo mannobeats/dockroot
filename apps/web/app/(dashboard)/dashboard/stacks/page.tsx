@@ -11,7 +11,7 @@ import { StackCreateModal } from "@/components/stack-create-modal";
 import { StacksTableWorkspace } from "@/components/stacks-table-workspace";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { MetricCard } from "@/components/ui/metric-card";
+import { Panel } from "@/components/ui/panel";
 import { isPrivilegedRole, requireUserSession } from "@/lib/authorization";
 import { isGitHubAppConfigured } from "@/lib/github-app";
 import { listEnvironments, listGitHubInstallations, listGitHubProviders, listStacks } from "@/lib/platform";
@@ -34,7 +34,6 @@ export default async function StacksPage({
 	const appConfigured = await isGitHubAppConfigured();
 
 	const trackedCount = stacks.filter((stack) => stack.type === "tracked").length;
-	const untrackedCount = stacks.filter((stack) => stack.type === "untracked").length;
 	const runningCount = stacks.filter((stack) => stack.runningCount > 0).length;
 	const githubStatus = params.github || "";
 	const githubError = params.githubError || "";
@@ -48,11 +47,10 @@ export default async function StacksPage({
 	}
 
 	return (
-		<div className="animate-in space-y-6">
+		<div className="animate-in space-y-5">
 			<PageHeader
-				kicker="Operations"
 				title="Stacks"
-				description={`${stacks.length} compose stacks across all environments`}
+				description={`${stacks.length} stacks · ${trackedCount} tracked · ${runningCount} active`}
 				actions={
 					<StackCreateModal
 						environments={environments.map((environment) => ({
@@ -69,16 +67,6 @@ export default async function StacksPage({
 				}
 			/>
 
-			<div className="grid gap-4 sm:grid-cols-3">
-				<MetricCard label="Stacks" value={stacks.length} description="Visible after filters" />
-				<MetricCard label="Tracked" value={trackedCount} description="Managed by Dockroot" />
-				<MetricCard
-					label="Active"
-					value={runningCount}
-					description={`${untrackedCount} untracked compose stacks`}
-				/>
-			</div>
-
 			{githubStatus ? (
 				<Alert>
 					{githubStatus === "manifest-ready"
@@ -90,34 +78,17 @@ export default async function StacksPage({
 				</Alert>
 			) : null}
 
-			<div className="rounded-xl border border-default/10 bg-background/30 p-4">
-				<div className="flex items-center justify-between">
-					<p className="text-sm font-semibold">GitHub Apps</p>
-					<Badge className="text-xs">{githubProviders.length} configured</Badge>
+			{/* GitHub Apps — compact inline */}
+			{githubProviders.length ? (
+				<div className="flex flex-wrap items-center gap-2 text-xs">
+					<span className="font-medium text-muted">GitHub:</span>
+					{githubProviders.map((provider) => (
+						<Badge key={provider.id}>
+							{provider.name} · {providerInstallCount.get(provider.id) || 0} installs
+						</Badge>
+					))}
 				</div>
-				<div className="mt-3 space-y-2">
-					{githubProviders.length ? (
-						githubProviders.map((provider) => (
-							<div
-								key={provider.id}
-								className="flex items-center justify-between rounded-lg border border-default/10 px-3 py-2 text-xs"
-							>
-								<div>
-									<p className="font-medium">{provider.name}</p>
-									<p className="text-muted">{provider.appSlug}</p>
-								</div>
-								<Badge className="text-[10px]">
-									{providerInstallCount.get(provider.id) || 0} installations
-								</Badge>
-							</div>
-						))
-					) : (
-						<p className="text-xs text-muted">
-							No GitHub Apps found in Dockroot yet. Use From GitHub to create one.
-						</p>
-					)}
-				</div>
-			</div>
+			) : null}
 
 			<StacksTableWorkspace
 				stacks={stacks}

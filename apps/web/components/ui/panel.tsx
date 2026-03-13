@@ -2,13 +2,13 @@ import { cva, type VariantProps } from "class-variance-authority";
 import type { HTMLAttributes, ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
-const panelVariants = cva("rounded-2xl border bg-surface transition-all duration-200", {
+const panelVariants = cva("rounded-xl border bg-surface transition-colors duration-150", {
 	variants: {
 		padding: {
 			none: "",
-			sm: "p-4",
-			md: "p-5",
-			lg: "p-6",
+			sm: "p-3",
+			md: "p-4",
+			lg: "p-5",
 		},
 		tone: {
 			default: "border-default/10 shadow-[var(--shadow-xs)]",
@@ -17,7 +17,7 @@ const panelVariants = cva("rounded-2xl border bg-surface transition-all duration
 			ghost: "border-transparent shadow-none bg-transparent",
 		},
 		interactive: {
-			true: "cursor-pointer hover:shadow-[var(--shadow-md)] hover:border-default/20 hover:-translate-y-0.5 active:translate-y-0",
+			true: "cursor-pointer hover:shadow-[var(--shadow-sm)] hover:border-default/20",
 			false: "",
 		},
 	},
@@ -40,7 +40,7 @@ export function PanelHeader({ className, children }: { className?: string; child
 	return (
 		<div
 			className={cn(
-				"flex items-start justify-between gap-3 border-b border-default/8 px-5 py-3.5",
+				"flex items-start justify-between gap-3 border-b border-default/8 px-4 py-3",
 				className,
 			)}
 		>
@@ -60,9 +60,9 @@ export function PanelDescription({
 	className?: string;
 	children: ReactNode;
 }) {
-	return <p className={cn("mt-1 text-xs text-muted", className)}>{children}</p>;
+	return <p className={cn("mt-0.5 text-xs text-muted", className)}>{children}</p>;
 }
 
 export function PanelContent({ className, children }: { className?: string; children: ReactNode }) {
-	return <div className={cn("p-5", className)}>{children}</div>;
+	return <div className={cn("p-4", className)}>{children}</div>;
 }

@@ -7,14 +7,10 @@ function clampPercent(value: number) {
 	return Math.max(0, Math.min(100, value));
 }
 
-function getToneClasses(percent: number) {
-	if (percent >= 90) {
-		return "bg-gradient-to-r from-rose-500 to-rose-400";
-	}
-	if (percent >= 75) {
-		return "bg-gradient-to-r from-amber-500 to-amber-400";
-	}
-	return "bg-gradient-to-r from-emerald-500 to-emerald-400";
+function getToneClass(percent: number) {
+	if (percent >= 90) return "bg-rose-500";
+	if (percent >= 75) return "bg-amber-500";
+	return "bg-emerald-500";
 }
 
 export function UtilizationBar({
@@ -31,15 +27,15 @@ export function UtilizationBar({
 	className?: string;
 }) {
 	const safePercent = clampPercent(percent);
-	const toneClass = getToneClasses(safePercent);
+	const toneClass = getToneClass(safePercent);
 
 	return (
-		<div className={cn("space-y-2", className)}>
+		<div className={cn("space-y-1.5", className)}>
 			<div className="flex items-center justify-between gap-3 text-xs">
 				<span className="font-medium text-foreground">{label}</span>
 				<span className="tabular-nums text-muted">{valueLabel}</span>
 			</div>
-			<div className="h-2 overflow-hidden rounded-full bg-foreground/[0.05]">
+			<div className="h-1.5 overflow-hidden rounded-full bg-foreground/[0.05]">
 				<div
 					className={cn("h-full rounded-full transition-[width] duration-500 ease-out", toneClass)}
 					style={{ width: `${safePercent}%` }}

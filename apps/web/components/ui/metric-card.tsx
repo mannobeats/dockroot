@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { Panel } from "@/components/ui/panel";
 import { cn } from "@/lib/cn";
 
 export function MetricCard({
@@ -16,13 +15,12 @@ export function MetricCard({
 	valueClassName?: string;
 }) {
 	return (
-		<Panel
-			padding="sm"
-			className={cn("transition-all duration-200 hover:shadow-[var(--shadow-sm)]", className)}
+		<div
+			className={cn("rounded-lg border border-default/10 bg-surface p-3 shadow-[var(--shadow-xs)]", className)}
 		>
-			<p className="text-xs font-medium tracking-wide uppercase text-muted">{label}</p>
-			<p className={cn("mt-1.5 text-2xl font-bold tracking-tight", valueClassName)}>{value}</p>
-			{description ? <p className="mt-1 text-xs text-muted">{description}</p> : null}
-		</Panel>
+			<p className="text-[11px] font-medium uppercase tracking-wide text-muted">{label}</p>
+			<p className={cn("mt-1 text-xl font-bold tracking-tight", valueClassName)}>{value}</p>
+			{description ? <p className="mt-0.5 text-[11px] text-muted">{description}</p> : null}
+		</div>
 	);
 }

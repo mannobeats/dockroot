@@ -12,25 +12,25 @@ export function MonitoringHealthGrid({
 	}>;
 }) {
 	return (
-		<Panel padding="lg">
+		<Panel padding="md">
 			<div className="flex items-center justify-between">
-				<h3 className="text-sm font-semibold tracking-tight">Scrape targets</h3>
-				<p className="text-xs text-muted">{targets.length} targets</p>
+				<h3 className="text-sm font-semibold">Scrape targets</h3>
+				<span className="text-xs text-muted">{targets.length} targets</span>
 			</div>
-			<div className="mt-5 grid gap-3 md:grid-cols-2">
+			<div className="mt-3 grid gap-2 md:grid-cols-2">
 				{targets.map((target) => (
 					<div
 						key={target.scrapeUrl}
-						className="rounded-xl border border-default/8 bg-foreground/[0.015] p-4 transition-all duration-200 hover:border-default/20 hover:shadow-[var(--shadow-sm)]"
+						className="flex items-center justify-between rounded-lg border border-default/8 px-3 py-2"
 					>
-						<div className="flex items-center justify-between gap-3">
+						<div className="min-w-0">
 							<p className="text-sm font-medium">{target.job}</p>
-							<StatusBadge status={target.health === "up" ? "healthy" : target.health} />
+							<p className="truncate text-xs text-muted">{target.scrapeUrl}</p>
+							{target.lastError ? (
+								<p className="mt-0.5 text-xs text-danger">{target.lastError}</p>
+							) : null}
 						</div>
-						<p className="mt-2 break-all text-xs text-muted">{target.scrapeUrl}</p>
-						{target.lastError ? (
-							<p className="mt-1 text-xs text-danger">{target.lastError}</p>
-						) : null}
+						<StatusBadge status={target.health === "up" ? "healthy" : target.health} />
 					</div>
 				))}
 			</div>

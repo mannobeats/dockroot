@@ -37,25 +37,21 @@ export default async function NetworkDetailPage({
 	);
 
 	return (
-		<div className="animate-in space-y-6">
-			{/* Header */}
-			<div className="flex items-center gap-3">
+		<div className="animate-in space-y-5">
+			<div className="flex items-center gap-2.5">
 				<LinkButton
 					href={`/dashboard/networks?environment=${environment.id}`}
-					variant="outline"
-					size="icon"
+					variant="ghost"
+					size="icon-sm"
 				>
 					<ArrowLeft className="h-4 w-4" />
 				</LinkButton>
 				<div>
-					<p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted">
-						Network
-					</p>
 					<h1 className="text-lg font-semibold">{decodedName}</h1>
+					<p className="text-xs text-muted">{environment.name}</p>
 				</div>
 			</div>
 
-			{/* Info */}
 			<div className="grid gap-3 sm:grid-cols-3">
 				<MetricCard
 					label="Driver"
@@ -70,7 +66,6 @@ export default async function NetworkDetailPage({
 				<MetricCard label="Containers" value={containers.length} valueClassName="text-sm" />
 			</div>
 
-			{/* Attached containers */}
 			{containers.length ? (
 				<Panel>
 					<PanelHeader>
@@ -81,11 +76,11 @@ export default async function NetworkDetailPage({
 							<Link
 								key={containerId}
 								href={`/dashboard/containers/${containerId}?environment=${environment.id}`}
-								className="flex items-center justify-between px-4 py-3 transition-colors hover:bg-foreground/[0.02]"
+								className="flex items-center justify-between px-3 py-2.5 transition-colors hover:bg-foreground/[0.02]"
 							>
 								<div>
 									<p className="text-sm font-medium">{container.Name || containerId}</p>
-									<p className="mt-0.5 font-mono text-xs text-muted">{containerId.slice(0, 12)}</p>
+									<p className="font-mono text-[11px] text-muted">{containerId.slice(0, 12)}</p>
 								</div>
 							</Link>
 						))}
@@ -93,12 +88,11 @@ export default async function NetworkDetailPage({
 				</Panel>
 			) : null}
 
-			{/* Inspect payload */}
 			<Panel>
 				<PanelHeader>
 					<PanelTitle>Inspect payload</PanelTitle>
 				</PanelHeader>
-				<LogBlock className="max-h-[600px] rounded-none border-0 p-4 text-muted">
+				<LogBlock className="max-h-[600px] rounded-none border-0 p-3 text-muted">
 					{JSON.stringify(network, null, 2)}
 				</LogBlock>
 			</Panel>

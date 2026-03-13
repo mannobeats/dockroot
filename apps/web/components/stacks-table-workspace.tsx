@@ -1,12 +1,23 @@
 "use client";
 
-import { ChevronDown, ChevronRight, ExternalLink, Lock, Package } from "lucide-react";
+import {
+	ChevronDown,
+	ChevronRight,
+	ExternalLink,
+	Lock,
+	Package,
+	Play,
+	RefreshCw,
+	RotateCcw,
+	Square,
+	Trash2,
+	Upload,
+} from "lucide-react";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { DestructiveActionModal } from "@/components/destructive-action-modal";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
 	DataTable,
 	DataTableBody,
@@ -144,340 +155,332 @@ export function StacksTableWorkspace({
 	}, [search, stacks]);
 
 	return (
-		<div className="space-y-5">
-			<Panel padding="md">
-				<div className="flex flex-col gap-3 sm:flex-row">
-					<Input
-						id="stack-list-search"
-						type="search"
-						placeholder="Search stacks and environments..."
-						value={search}
-						onChange={(event) => setSearch(event.target.value)}
-						className="flex-1"
-					/>
-					<Button variant="outline" size="sm" onClick={() => setSearch("")}>
-						Clear
-					</Button>
-				</div>
-			</Panel>
+		<Panel>
+			{/* Inline search */}
+			<div className="border-b border-default/8 px-3 py-2">
+				<Input
+					id="stack-list-search"
+					type="search"
+					placeholder="Search stacks... (press /)"
+					value={search}
+					onChange={(event) => setSearch(event.target.value)}
+					className="border-0 bg-transparent shadow-none focus:ring-0"
+				/>
+			</div>
 
-			<Panel>
-				<DataTable>
-					<DataTableHeader>
-						<tr>
-							<DataTableHead className="w-10" />
-							<DataTableHead>Name</DataTableHead>
-							<DataTableHead>Status</DataTableHead>
-							<DataTableHead>Source</DataTableHead>
-							<DataTableHead>Environment</DataTableHead>
-							<DataTableHead>Containers</DataTableHead>
-							<DataTableHead>Actions</DataTableHead>
-						</tr>
-					</DataTableHeader>
-					<DataTableBody>
-						{filteredStacks.length ? (
-							filteredStacks.map((stack) => {
-								const rowKey = `${stack.type}-${stack.slug}`;
-								const expanded = Boolean(expandedRows[rowKey]);
-								const detailEnvironmentSuffix = environmentId
-									? `?environment=${environmentId}`
-									: "";
-								const protectedLabel = getProtectedStackLabel(stack.slug);
+			<DataTable>
+				<DataTableHeader>
+					<tr>
+						<DataTableHead className="w-8" />
+						<DataTableHead>Name</DataTableHead>
+						<DataTableHead>Status</DataTableHead>
+						<DataTableHead>Source</DataTableHead>
+						<DataTableHead>Environment</DataTableHead>
+						<DataTableHead>Containers</DataTableHead>
+						<DataTableHead className="w-28 text-right">Actions</DataTableHead>
+					</tr>
+				</DataTableHeader>
+				<DataTableBody>
+					{filteredStacks.length ? (
+						filteredStacks.map((stack) => {
+							const rowKey = `${stack.type}-${stack.slug}`;
+							const expanded = Boolean(expandedRows[rowKey]);
+							const detailEnvironmentSuffix = environmentId
+								? `?environment=${environmentId}`
+								: "";
+							const protectedLabel = getProtectedStackLabel(stack.slug);
 
-								return (
-									<Fragment key={rowKey}>
-										<DataTableRow className="align-top">
-											<DataTableCell>
-												<button
-													type="button"
-													onClick={() =>
-														setExpandedRows((current) => ({
-															...current,
-															[rowKey]: !current[rowKey],
-														}))
-													}
-													className="inline-flex h-7 w-7 items-center justify-center rounded-xl text-muted transition-all duration-200 hover:bg-foreground/[0.05] hover:text-foreground"
-													aria-label={
-														expanded ? "Collapse stack services" : "Expand stack services"
-													}
-												>
-													{expanded ? (
-														<ChevronDown className="h-3.5 w-3.5" />
-													) : (
-														<ChevronRight className="h-3.5 w-3.5" />
-													)}
-												</button>
-											</DataTableCell>
-											<DataTableCell>
-												<div className="space-y-0.5">
-													<div className="flex items-center gap-2">
-														<p className="font-medium">{stack.name}</p>
-														{stack.isProtected ? (
-															<Badge title={protectedLabel || undefined} variant="warning">
-																<Lock className="h-2.5 w-2.5" />
-																Locked
-															</Badge>
-														) : null}
-													</div>
-													<p className="text-xs text-muted">{stack.slug}</p>
-												</div>
-											</DataTableCell>
-											<DataTableCell>
-												<StatusBadge
-													status={
-														stack.type === "tracked" ? stack.status : normalizeStatus(stack.status)
-													}
-												/>
-											</DataTableCell>
-											<DataTableCell className="text-xs text-muted">
-												{stack.type === "tracked" ? "Internal" : "Untracked"}
-											</DataTableCell>
-											<DataTableCell className="text-xs text-muted">
-												{stack.environmentName || "—"}
-											</DataTableCell>
-											<DataTableCell>
-												<div className="space-y-0.5">
-													<p className="text-sm font-medium">
-														{stack.runningCount}/{stack.containerCount}
-													</p>
-													<p className="text-xs text-muted">
-														{stack.lastDeployment?.status || stack.status}
-													</p>
-												</div>
-											</DataTableCell>
-											<DataTableCell>
-												<div className="flex flex-wrap gap-1.5">
-													{stack.type === "tracked" ? (
-														<>
-															<form action={deployStackAction}>
-																<input type="hidden" name="stackId" value={stack.stackId || ""} />
-																<FormSubmitButton
-																	label={
-																		isRunningStack(stack.status, stack.runningCount)
-																			? "Redeploy"
-																			: "Deploy"
-																	}
-																	pendingLabel={
-																		isRunningStack(stack.status, stack.runningCount)
-																			? "Redeploying..."
-																			: "Deploying..."
-																	}
-																	size="xs"
-																	disabled={stack.isProtected}
-																	title={protectedLabel || undefined}
-																/>
-															</form>
-															<DestructiveActionModal
-																action={destroyStackAction}
-																title={`Destroy stack ${stack.name}`}
-																description="This will stop and remove the stack resources."
-																triggerLabel="Destroy"
-																confirmLabel="Destroy"
-																pendingLabel="Destroying..."
-																triggerVariant="danger"
-																triggerSize="xs"
-																disabled={stack.isProtected}
-																hiddenFields={{ stackId: stack.stackId || "" }}
-															/>
-															<LinkButton
-																href={`/dashboard/stacks/${stack.stackId}${detailEnvironmentSuffix}`}
-																variant="outline"
+							return (
+								<Fragment key={rowKey}>
+									<DataTableRow className="align-top">
+										<DataTableCell>
+											<button
+												type="button"
+												onClick={() =>
+													setExpandedRows((current) => ({
+														...current,
+														[rowKey]: !current[rowKey],
+													}))
+												}
+												className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-foreground/[0.05] hover:text-foreground"
+												aria-label={
+													expanded ? "Collapse stack services" : "Expand stack services"
+												}
+											>
+												{expanded ? (
+													<ChevronDown className="h-3.5 w-3.5" />
+												) : (
+													<ChevronRight className="h-3.5 w-3.5" />
+												)}
+											</button>
+										</DataTableCell>
+										<DataTableCell>
+											<div className="flex items-center gap-1.5">
+												<span className="font-medium">{stack.name}</span>
+												{stack.isProtected ? (
+													<Badge title={protectedLabel || undefined} variant="warning">
+														<Lock className="h-2.5 w-2.5" />
+													</Badge>
+												) : null}
+											</div>
+											<p className="text-[11px] text-muted">{stack.slug}</p>
+										</DataTableCell>
+										<DataTableCell>
+											<StatusBadge
+												status={
+													stack.type === "tracked" ? stack.status : normalizeStatus(stack.status)
+												}
+											/>
+										</DataTableCell>
+										<DataTableCell className="text-xs text-muted">
+											{stack.type === "tracked" ? "Internal" : "Untracked"}
+										</DataTableCell>
+										<DataTableCell className="text-xs text-muted">
+											{stack.environmentName || "—"}
+										</DataTableCell>
+										<DataTableCell>
+											<span className="text-sm font-medium tabular-nums">
+												{stack.runningCount}/{stack.containerCount}
+											</span>
+										</DataTableCell>
+										<DataTableCell>
+											<div className="flex items-center justify-end gap-1">
+												{stack.type === "tracked" ? (
+													<>
+														<form action={deployStackAction}>
+															<input type="hidden" name="stackId" value={stack.stackId || ""} />
+															<FormSubmitButton
+																label=""
+																pendingLabel=""
 																size="xs"
+																variant="ghost"
+																disabled={stack.isProtected}
+																title={isRunningStack(stack.status, stack.runningCount) ? "Redeploy" : "Deploy"}
+																className="h-7 w-7 p-0"
 															>
-																Open
-															</LinkButton>
-														</>
-													) : includeUntracked ? (
-														<>
-															{isRunningStack(stack.status, stack.runningCount) ? (
-																<>
-																	<form action={controlComposeProjectAction}>
-																		<input type="hidden" name="projectName" value={stack.slug} />
-																		<input type="hidden" name="action" value="stop" />
-																		{stack.configFiles.map((configFile) => (
-																			<input
-																				key={`stop-${configFile}`}
-																				type="hidden"
-																				name="configFiles"
-																				value={configFile}
-																			/>
-																		))}
-																		<FormSubmitButton
-																			label="Stop"
-																			pendingLabel="Stopping..."
-																			variant="outline"
-																			size="xs"
-																			disabled={stack.isProtected}
-																			title={protectedLabel || undefined}
-																		/>
-																	</form>
-																	<form action={controlComposeProjectAction}>
-																		<input type="hidden" name="projectName" value={stack.slug} />
-																		<input type="hidden" name="action" value="restart" />
-																		{stack.configFiles.map((configFile) => (
-																			<input
-																				key={`restart-${configFile}`}
-																				type="hidden"
-																				name="configFiles"
-																				value={configFile}
-																			/>
-																		))}
-																		<FormSubmitButton
-																			label="Restart"
-																			pendingLabel="Restarting..."
-																			variant="outline"
-																			size="xs"
-																			disabled={stack.isProtected}
-																			title={protectedLabel || undefined}
-																		/>
-																	</form>
-																</>
-															) : (
+																{isRunningStack(stack.status, stack.runningCount) ? (
+																	<RotateCcw className="h-3.5 w-3.5" />
+																) : (
+																	<Play className="h-3.5 w-3.5" />
+																)}
+															</FormSubmitButton>
+														</form>
+														<DestructiveActionModal
+															action={destroyStackAction}
+															title={`Destroy stack ${stack.name}`}
+															description="This will stop and remove the stack resources."
+															triggerLabel=""
+															confirmLabel="Destroy"
+															pendingLabel="Destroying..."
+															triggerVariant="ghost"
+															triggerSize="xs"
+															disabled={stack.isProtected}
+															hiddenFields={{ stackId: stack.stackId || "" }}
+															triggerClassName="h-7 w-7 p-0 text-muted hover:text-danger"
+															triggerIcon={<Trash2 className="h-3.5 w-3.5" />}
+														/>
+														<LinkButton
+															href={`/dashboard/stacks/${stack.stackId}${detailEnvironmentSuffix}`}
+															variant="ghost"
+															size="icon-xs"
+															title="Open"
+														>
+															<ExternalLink className="h-3.5 w-3.5" />
+														</LinkButton>
+													</>
+												) : includeUntracked ? (
+													<>
+														{isRunningStack(stack.status, stack.runningCount) ? (
+															<>
 																<form action={controlComposeProjectAction}>
 																	<input type="hidden" name="projectName" value={stack.slug} />
-																	<input type="hidden" name="action" value="start" />
+																	<input type="hidden" name="action" value="stop" />
 																	{stack.configFiles.map((configFile) => (
 																		<input
-																			key={`start-${configFile}`}
+																			key={`stop-${configFile}`}
 																			type="hidden"
 																			name="configFiles"
 																			value={configFile}
 																		/>
 																	))}
 																	<FormSubmitButton
-																		label="Start"
-																		pendingLabel="Starting..."
-																		variant="outline"
+																		label=""
+																		pendingLabel=""
+																		variant="ghost"
 																		size="xs"
 																		disabled={stack.isProtected}
-																		title={protectedLabel || undefined}
-																	/>
+																		title="Stop"
+																		className="h-7 w-7 p-0"
+																	>
+																		<Square className="h-3.5 w-3.5" />
+																	</FormSubmitButton>
 																</form>
-															)}
-															<DestructiveActionModal
-																action={controlComposeProjectAction}
-																title={`Destroy compose stack ${stack.slug}`}
-																description="This will run docker compose down for the selected stack."
-																triggerLabel="Destroy"
-																confirmLabel="Destroy"
-																pendingLabel="Destroying..."
-																triggerVariant="danger"
-																triggerSize="xs"
-																disabled={stack.isProtected}
-																hiddenFields={{
-																	projectName: stack.slug,
-																	action: "destroy",
-																	configFiles: stack.configFiles,
-																}}
-																options={[
-																	{
-																		name: "removeVolumes",
-																		label: "Remove attached volumes",
-																		description: "Persistent data may be lost.",
-																	},
-																	{
-																		name: "removeImages",
-																		label: "Remove local compose images",
-																		description: "Images will be pulled again on next start.",
-																	},
-																]}
+																<form action={controlComposeProjectAction}>
+																	<input type="hidden" name="projectName" value={stack.slug} />
+																	<input type="hidden" name="action" value="restart" />
+																	{stack.configFiles.map((configFile) => (
+																		<input
+																			key={`restart-${configFile}`}
+																			type="hidden"
+																			name="configFiles"
+																			value={configFile}
+																		/>
+																	))}
+																	<FormSubmitButton
+																		label=""
+																		pendingLabel=""
+																		variant="ghost"
+																		size="xs"
+																		disabled={stack.isProtected}
+																		title="Restart"
+																		className="h-7 w-7 p-0"
+																	>
+																		<RefreshCw className="h-3.5 w-3.5" />
+																	</FormSubmitButton>
+																</form>
+															</>
+														) : (
+															<form action={controlComposeProjectAction}>
+																<input type="hidden" name="projectName" value={stack.slug} />
+																<input type="hidden" name="action" value="start" />
+																{stack.configFiles.map((configFile) => (
+																	<input
+																		key={`start-${configFile}`}
+																		type="hidden"
+																		name="configFiles"
+																		value={configFile}
+																	/>
+																))}
+																<FormSubmitButton
+																	label=""
+																	pendingLabel=""
+																	variant="ghost"
+																	size="xs"
+																	disabled={stack.isProtected}
+																	title="Start"
+																	className="h-7 w-7 p-0"
+																>
+																	<Play className="h-3.5 w-3.5" />
+																</FormSubmitButton>
+															</form>
+														)}
+														<DestructiveActionModal
+															action={controlComposeProjectAction}
+															title={`Destroy compose stack ${stack.slug}`}
+															description="This will run docker compose down for the selected stack."
+															triggerLabel=""
+															confirmLabel="Destroy"
+															pendingLabel="Destroying..."
+															triggerVariant="ghost"
+															triggerSize="xs"
+															disabled={stack.isProtected}
+															hiddenFields={{
+																projectName: stack.slug,
+																action: "destroy",
+																configFiles: stack.configFiles,
+															}}
+															triggerClassName="h-7 w-7 p-0 text-muted hover:text-danger"
+															triggerIcon={<Trash2 className="h-3.5 w-3.5" />}
+															options={[
+																{
+																	name: "removeVolumes",
+																	label: "Remove attached volumes",
+																	description: "Persistent data may be lost.",
+																},
+																{
+																	name: "removeImages",
+																	label: "Remove local compose images",
+																	description: "Images will be pulled again on next start.",
+																},
+															]}
+														/>
+													</>
+												) : null}
+												{stack.type === "untracked" && includeUntracked ? (
+													<form action={adoptComposeProjectAction}>
+														<input type="hidden" name="projectName" value={stack.slug} />
+														{stack.configFiles.map((configFile) => (
+															<input
+																key={`adopt-${configFile}`}
+																type="hidden"
+																name="configFiles"
+																value={configFile}
 															/>
-														</>
-													) : null}
-													{stack.type === "untracked" && includeUntracked ? (
-														<form action={adoptComposeProjectAction}>
-															<input type="hidden" name="projectName" value={stack.slug} />
-															{stack.configFiles.map((configFile) => (
-																<input
-																	key={`adopt-${configFile}`}
-																	type="hidden"
-																	name="configFiles"
-																	value={configFile}
-																/>
+														))}
+														<FormSubmitButton
+															label=""
+															pendingLabel=""
+															size="xs"
+															variant="ghost"
+															disabled={stack.isProtected}
+															title="Adopt"
+															className="h-7 w-7 p-0"
+														>
+															<Upload className="h-3.5 w-3.5" />
+														</FormSubmitButton>
+													</form>
+												) : null}
+											</div>
+										</DataTableCell>
+									</DataTableRow>
+									{expanded ? (
+										<DataTableRow>
+											<DataTableCell colSpan={7}>
+												<div className="rounded-lg border border-default/8 bg-background/60 p-3">
+													<div className="mb-2 flex items-center justify-between">
+														<p className="text-[10px] font-semibold uppercase tracking-wider text-muted/60">
+															Services
+														</p>
+														<p className="text-xs text-muted">
+															{stack.containers.length} container(s)
+														</p>
+													</div>
+													{stack.containers.length ? (
+														<div className="grid gap-1.5 lg:grid-cols-2 2xl:grid-cols-3">
+															{stack.containers.map((container) => (
+																<div
+																	key={`${rowKey}-${container.ID}`}
+																	className="flex items-center justify-between rounded-md border border-default/8 bg-surface px-3 py-2"
+																>
+																	<div className="min-w-0 flex-1">
+																		<div className="flex items-center gap-2">
+																			<p className="truncate text-sm font-medium">
+																				{getContainerName(container)}
+																			</p>
+																			<StatusBadge status={getContainerState(container)} />
+																		</div>
+																		<p className="truncate text-[11px] text-muted">
+																			{getContainerImage(container)}
+																		</p>
+																	</div>
+																	<LinkButton
+																		href={`/dashboard/containers/${container.ID}`}
+																		variant="ghost"
+																		size="icon-xs"
+																		title="Open container"
+																	>
+																		<ExternalLink className="h-3 w-3" />
+																	</LinkButton>
+																</div>
 															))}
-															<FormSubmitButton
-																label="Adopt"
-																pendingLabel="Adopting..."
-																size="xs"
-																disabled={stack.isProtected}
-																title={protectedLabel || undefined}
-															/>
-														</form>
-													) : null}
+														</div>
+													) : (
+														<p className="text-xs text-muted">
+															No container services discovered for this stack.
+														</p>
+													)}
 												</div>
 											</DataTableCell>
 										</DataTableRow>
-										{expanded ? (
-											<DataTableRow>
-												<DataTableCell colSpan={7}>
-													<div className="rounded-2xl border border-default/8 bg-background/60 p-4">
-														<div className="mb-2 flex items-center justify-between">
-															<p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted/60">
-																Services
-															</p>
-															<p className="text-xs text-muted">
-																{stack.containers.length} container(s)
-															</p>
-														</div>
-														{stack.containers.length ? (
-															<div className="grid gap-2 lg:grid-cols-2 2xl:grid-cols-3">
-																{stack.containers.map((container) => (
-																	<div
-																		key={`${rowKey}-${container.ID}`}
-																		className="rounded-xl border border-default/8 bg-surface p-3.5 transition-all duration-200 hover:shadow-[var(--shadow-xs)]"
-																	>
-																		<div className="flex items-start justify-between gap-2">
-																			<div className="min-w-0">
-																				<p className="truncate text-sm font-medium">
-																					{getContainerName(container)}
-																				</p>
-																				<p className="truncate text-xs text-muted">
-																					{getContainerImage(container)}
-																				</p>
-																			</div>
-																			<StatusBadge status={getContainerState(container)} />
-																		</div>
-																		<div className="mt-2 flex items-center justify-between gap-2 text-xs text-muted">
-																			<div className="inline-flex min-w-0 flex-1 items-start gap-1">
-																				<Package className="h-3.5 w-3.5" />
-																				<span
-																					className="line-clamp-2 break-all leading-relaxed"
-																					title={getPorts(container)}
-																				>
-																					{getPorts(container)}
-																				</span>
-																			</div>
-																			<LinkButton
-																				href={`/dashboard/containers/${container.ID}`}
-																				variant="ghost"
-																				size="xs"
-																				className="shrink-0"
-																			>
-																				Open
-																				<ExternalLink className="h-3 w-3" />
-																			</LinkButton>
-																		</div>
-																	</div>
-																))}
-															</div>
-														) : (
-															<p className="text-xs text-muted">
-																No container services discovered for this stack.
-															</p>
-														)}
-													</div>
-												</DataTableCell>
-											</DataTableRow>
-										) : null}
-									</Fragment>
-								);
-							})
-						) : (
-							<DataTableEmpty colSpan={7}>No stacks found.</DataTableEmpty>
-						)}
-					</DataTableBody>
-				</DataTable>
-			</Panel>
-		</div>
+									) : null}
+								</Fragment>
+							);
+						})
+					) : (
+						<DataTableEmpty colSpan={7}>No stacks found.</DataTableEmpty>
+					)}
+				</DataTableBody>
+			</DataTable>
+		</Panel>
 	);
 }

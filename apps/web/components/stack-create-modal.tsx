@@ -118,7 +118,7 @@ export function StackCreateModal({
 						role="dialog"
 						aria-modal="true"
 						aria-label={title}
-						className="relative z-10 flex h-full max-h-[92vh] w-full max-w-[1320px] flex-col overflow-hidden rounded-2xl border border-default/15 bg-surface shadow-2xl"
+						className="relative z-10 flex h-full max-h-[92vh] w-full max-w-[1320px] flex-col overflow-hidden rounded-xl border border-default/15 bg-surface shadow-2xl"
 					>
 						<div className="flex items-center justify-between border-b border-default/10 px-5 py-4">
 							<div className="flex items-center gap-3">

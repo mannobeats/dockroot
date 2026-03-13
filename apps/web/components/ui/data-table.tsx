@@ -23,7 +23,7 @@ export function DataTableHead({ className, ...props }: ThHTMLAttributes<HTMLTabl
 	return (
 		<th
 			className={cn(
-				"border-b border-default/8 px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted",
+				"border-b border-default/8 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted",
 				className,
 			)}
 			{...props}
@@ -38,20 +38,20 @@ export function DataTableBody({ className, ...props }: HTMLAttributes<HTMLTableS
 export function DataTableRow({ className, ...props }: HTMLAttributes<HTMLTableRowElement>) {
 	return (
 		<tr
-			className={cn("transition-colors duration-150 hover:bg-foreground/[0.02]", className)}
+			className={cn("transition-colors duration-100 hover:bg-foreground/[0.02]", className)}
 			{...props}
 		/>
 	);
 }
 
 export function DataTableCell({ className, ...props }: TdHTMLAttributes<HTMLTableCellElement>) {
-	return <td className={cn("px-4 py-3.5", className)} {...props} />;
+	return <td className={cn("px-3 py-2.5", className)} {...props} />;
 }
 
 export function DataTableEmpty({ colSpan, children }: { colSpan: number; children: ReactNode }) {
 	return (
 		<tr>
-			<td colSpan={colSpan} className="px-4 py-16 text-center text-sm text-muted">
+			<td colSpan={colSpan} className="px-3 py-12 text-center text-sm text-muted">
 				{children}
 			</td>
 		</tr>

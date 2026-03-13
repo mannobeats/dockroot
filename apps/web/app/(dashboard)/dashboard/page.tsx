@@ -2,7 +2,6 @@ import { Boxes, Layers3, PlayCircle, Server } from "lucide-react";
 import Link from "next/link";
 import { LiveRuntimePanel } from "@/components/live-runtime-panel";
 import { MonitoringHealthGrid } from "@/components/monitoring-health-grid";
-import { PageHeader } from "@/components/page-header";
 import { PrometheusOverview } from "@/components/prometheus-overview";
 import { StatCard } from "@/components/stat-card";
 import { StatusBadge } from "@/components/status-badge";
@@ -72,43 +71,38 @@ export default async function DashboardPage({
 	})();
 
 	return (
-		<div className="animate-in space-y-8">
-			<PageHeader
-				title={`${greeting}, ${session.user.name}`}
-				description={`${environment.name} environment`}
-				actions={
-					<>
-						<LinkButton
-							href={`/dashboard/stacks?environment=${environment.id}`}
-							variant="secondary"
-						>
-							Stacks
-						</LinkButton>
-						<LinkButton href={`/dashboard/stacks?environment=${environment.id}`}>
-							Deploy Stack
-						</LinkButton>
-					</>
-				}
-			/>
+		<div className="animate-in space-y-6">
+			{/* Greeting + quick action */}
+			<div className="flex items-center justify-between">
+				<div>
+					<h1 className="text-lg font-bold tracking-tight">
+						{greeting}, {session.user.name}
+					</h1>
+					<p className="text-sm text-muted">{environment.name}</p>
+				</div>
+				<LinkButton href={`/dashboard/stacks?environment=${environment.id}`} size="sm">
+					Deploy Stack
+				</LinkButton>
+			</div>
 
-			{/* Stats Grid */}
-			<div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+			{/* Compact stats row */}
+			<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
 				<StatCard
 					label="Stacks"
 					value={String(data.stackCount)}
-					detail="Tracked workspaces"
+					detail="tracked"
 					icon={Layers3}
 				/>
 				<StatCard
 					label="Environments"
 					value={String(data.environmentCount)}
-					detail="Local & remote"
+					detail="local & remote"
 					icon={Server}
 				/>
 				<StatCard
 					label="Deployments"
 					value={String(data.deploymentCount)}
-					detail="Total operations"
+					detail="total"
 					icon={PlayCircle}
 				/>
 				<StatCard
@@ -117,98 +111,75 @@ export default async function DashboardPage({
 					detail={
 						includeRuntime && runtime
 							? `${runtime.snapshot.counts.images} images`
-							: "Scoped to workspace"
+							: "scoped to workspace"
 					}
 					icon={Boxes}
 				/>
 			</div>
 
-			{/* Host Overview + Recent stacks */}
-			<div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
+			{/* Host + Recent stacks side by side */}
+			<div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
 				{includeRuntime && runtime ? (
-					<Panel padding="lg">
+					<Panel padding="md">
 						<div className="flex items-center justify-between">
 							<div>
-								<h2 className="text-sm font-semibold tracking-tight">
-									{runtime.snapshot.host.hostname}
-								</h2>
-								<p className="mt-0.5 text-xs text-muted">{environment.name}</p>
+								<h2 className="text-sm font-semibold">{runtime.snapshot.host.hostname}</h2>
+								<p className="text-xs text-muted">
+									{runtime.snapshot.host.platform} · {runtime.snapshot.host.architecture} · {runtime.snapshot.host.cpus} CPU
+								</p>
 							</div>
 							<StatusBadge status="healthy" />
 						</div>
-						<div className="mt-5 grid gap-3 sm:grid-cols-3">
-							<div className="rounded-xl bg-foreground/[0.02] p-4">
-								<p className="text-[10px] font-semibold uppercase tracking-wider text-muted/60">
-									Platform
-								</p>
-								<p className="mt-2 text-sm font-semibold">{runtime.snapshot.host.platform}</p>
-								<p className="text-xs text-muted">{runtime.snapshot.host.architecture}</p>
-							</div>
-							<div className="rounded-xl bg-foreground/[0.02] p-4">
-								<p className="text-[10px] font-semibold uppercase tracking-wider text-muted/60">
-									Resources
-								</p>
-								<p className="mt-2 text-sm font-semibold">{runtime.snapshot.host.cpus} CPU</p>
-								<p className="text-xs text-muted">
-									{memoryUsed ?? "—"} / {runtime.snapshot.host.totalMemoryGb} GB
-								</p>
-								<div className="mt-3">
-									<UtilizationBar
-										label="Memory usage"
-										percent={memoryUsedPercent ?? 0}
-										valueLabel={`${memoryUsedPercent ?? 0}%`}
-									/>
-								</div>
-							</div>
-							<div className="rounded-xl bg-foreground/[0.02] p-4">
-								<p className="text-[10px] font-semibold uppercase tracking-wider text-muted/60">
-									Data directory
-								</p>
-								<p className="mt-2 break-all text-xs font-medium">{data.dataDir}</p>
+						<div className="mt-3 grid gap-3 sm:grid-cols-2">
+							<UtilizationBar
+								label="Memory"
+								percent={memoryUsedPercent ?? 0}
+								valueLabel={`${memoryUsed ?? "—"} / ${runtime.snapshot.host.totalMemoryGb} GB`}
+							/>
+							<div className="text-xs text-muted">
+								<p className="font-medium text-foreground">Data</p>
+								<p className="mt-1 break-all">{data.dataDir}</p>
 							</div>
 						</div>
 					</Panel>
 				) : (
-					<Panel padding="lg">
-						<h2 className="text-sm font-semibold tracking-tight">Workspace overview</h2>
-						<p className="mt-2 max-w-lg text-sm text-muted">
-							Scoped to owned environments, stacks, and containers. Host telemetry restricted to
-							privileged operators.
+					<Panel padding="md">
+						<h2 className="text-sm font-semibold">Workspace overview</h2>
+						<p className="mt-1 text-sm text-muted">
+							Scoped to owned environments and stacks. Host telemetry restricted to operators.
 						</p>
 					</Panel>
 				)}
 
-				<Panel padding="lg">
+				<Panel padding="md">
 					<div className="flex items-center justify-between">
-						<h2 className="text-sm font-semibold tracking-tight">Recent stacks</h2>
+						<h2 className="text-sm font-semibold">Recent stacks</h2>
 						<Link
 							href={`/dashboard/stacks?environment=${environment.id}`}
-							className="text-xs font-medium text-accent transition-colors hover:text-accent/80"
+							className="text-xs font-medium text-accent hover:text-accent/80"
 						>
 							View all
 						</Link>
 					</div>
-					<div className="mt-4 space-y-2">
+					<div className="mt-3 space-y-1">
 						{data.recentStacks.length ? (
 							data.recentStacks.map((stack) => (
 								<Link
 									key={stack.id}
 									href={`/dashboard/stacks/${stack.id}`}
-									className="block rounded-xl border border-default/8 p-3.5 transition-all duration-200 hover:border-default/20 hover:shadow-[var(--shadow-sm)] hover:-translate-y-px"
+									className="flex items-center justify-between rounded-lg px-2.5 py-2 transition-colors hover:bg-foreground/[0.03]"
 								>
-									<div className="flex items-start justify-between gap-3">
-										<div className="min-w-0">
-											<p className="text-sm font-medium">{stack.name}</p>
-											<p className="mt-0.5 truncate text-xs text-muted">
-												{stack.description || stack.environment.name}
-											</p>
-										</div>
-										<Badge className="shrink-0">{stack.environment.name}</Badge>
+									<div className="min-w-0">
+										<p className="text-sm font-medium">{stack.name}</p>
+										<p className="truncate text-xs text-muted">
+											{stack.description || stack.environment.name}
+										</p>
 									</div>
+									<Badge className="shrink-0 ml-2">{stack.environment.name}</Badge>
 								</Link>
 							))
 						) : (
-							<EmptyState title="No stacks yet" className="p-6" />
+							<EmptyState title="No stacks yet" className="p-4" />
 						)}
 					</div>
 				</Panel>
@@ -221,16 +192,14 @@ export default async function DashboardPage({
 
 			{/* Latest Activity */}
 			<Panel>
-				<div className="px-5 py-4">
-					<div className="flex items-center justify-between">
-						<h2 className="text-sm font-semibold tracking-tight">Latest deployments</h2>
-						<Link
-							href={`/dashboard/activity?environment=${environment.id}`}
-							className="text-xs font-medium text-accent transition-colors hover:text-accent/80"
-						>
-							View all
-						</Link>
-					</div>
+				<div className="flex items-center justify-between px-3 py-2.5">
+					<h2 className="text-sm font-semibold">Latest deployments</h2>
+					<Link
+						href={`/dashboard/activity?environment=${environment.id}`}
+						className="text-xs font-medium text-accent hover:text-accent/80"
+					>
+						View all
+					</Link>
 				</div>
 				<DataTable>
 					<DataTableHeader>
@@ -244,7 +213,7 @@ export default async function DashboardPage({
 					<DataTableBody>
 						{data.recentDeployments.length ? (
 							data.recentDeployments.map((deployment) => (
-								<DataTableRow key={deployment.id} className="group">
+								<DataTableRow key={deployment.id}>
 									<DataTableCell className="font-medium">{deployment.stack.name}</DataTableCell>
 									<DataTableCell className="text-muted">
 										{deployment.environment.name}

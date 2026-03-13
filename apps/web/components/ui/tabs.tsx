@@ -20,7 +20,7 @@ export function TabsTrigger({
 			type="button"
 			data-active={active}
 			className={cn(
-				"relative border-b-2 border-transparent px-4 py-2.5 text-[13px] font-medium text-muted transition-all duration-200 hover:text-foreground data-[active=true]:text-foreground data-[active=true]:border-accent",
+				"relative border-b-2 border-transparent px-3 py-2 text-[13px] font-medium text-muted transition-all duration-150 hover:text-foreground data-[active=true]:text-foreground data-[active=true]:border-accent",
 				className,
 			)}
 			{...props}
@@ -29,5 +29,5 @@ export function TabsTrigger({
 }
 
 export function TabsPanel({ className, children }: { className?: string; children: ReactNode }) {
-	return <div className={cn("mt-6 animate-in", className)}>{children}</div>;
+	return <div className={cn("mt-4 animate-in", className)}>{children}</div>;
 }

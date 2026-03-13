@@ -1,4 +1,4 @@
-import { Lock } from "lucide-react";
+import { ExternalLink, Lock, Play, RefreshCw, Square, SquareTerminal, Logs as LogsIcon, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { controlContainerAction } from "@/app/(dashboard)/actions";
 import { DestructiveActionModal } from "@/components/destructive-action-modal";
@@ -8,7 +8,6 @@ import { PageHeader } from "@/components/page-header";
 import { RuntimePortLinks } from "@/components/runtime-port-links";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
 	DataTable,
 	DataTableBody,
@@ -20,10 +19,8 @@ import {
 } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
 import { LinkButton } from "@/components/ui/link-button";
-import { MetricCard } from "@/components/ui/metric-card";
 import { Panel } from "@/components/ui/panel";
 import { Select } from "@/components/ui/select";
-import { UtilizationBar } from "@/components/ui/utilization-bar";
 import { isPrivilegedRole, requireUserSession } from "@/lib/authorization";
 import { resolveRuntimeEnvironment } from "@/lib/environment-runtime";
 import { getGlobalSettings } from "@/lib/platform";
@@ -68,77 +65,38 @@ export default async function ContainersPage({
 	const runningCount = filtered.filter(
 		(container: Record<string, string>) => container.State === "running",
 	).length;
-	const publishedCount = filtered.filter((container: Record<string, string>) =>
-		container.Ports?.includes("->"),
-	).length;
-	const stoppedCount = Math.max(filtered.length - runningCount, 0);
 
 	return (
-		<div className="animate-in space-y-6">
+		<div className="animate-in space-y-5">
 			<PageHeader
-				kicker="Runtime"
 				title="Containers"
-				description={`${environment.name} — ${filtered.length} containers, ${runningCount} running`}
-				actions={
-					<>
-						<LinkButton href={`/dashboard/logs?environment=${environment.id}`} variant="secondary">
-							Logs workspace
-						</LinkButton>
-						<LinkButton href={`/dashboard/shell?environment=${environment.id}`}>
-							Shell workspace
-						</LinkButton>
-					</>
-				}
+				description={`${environment.name} · ${filtered.length} containers · ${runningCount} running`}
 			/>
 
 			{includeRuntime ? <LiveRuntimePanel /> : null}
 
-			<div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-				<div className="grid gap-4 sm:grid-cols-3">
-					<MetricCard label="Total" value={filtered.length} />
-					<MetricCard label="Running" value={runningCount} />
-					<MetricCard label="Published ports" value={publishedCount} />
-				</div>
-				<Panel padding="md" className="space-y-3">
-					<p className="text-sm font-semibold">Runtime distribution</p>
-					<UtilizationBar
-						label="Running"
-						valueLabel={`${runningCount}/${filtered.length || 0}`}
-						percent={filtered.length ? (runningCount / filtered.length) * 100 : 0}
-						helper="Containers currently available to serve traffic"
-					/>
-					<UtilizationBar
-						label="Stopped / idle"
-						valueLabel={`${stoppedCount}/${filtered.length || 0}`}
-						percent={filtered.length ? (stoppedCount / filtered.length) * 100 : 0}
-						helper="Containers requiring start/recovery actions"
-					/>
-				</Panel>
-			</div>
-
-			<Panel padding="sm">
-				<form className="flex flex-col gap-3 sm:flex-row">
+			{/* Inline search + filter */}
+			<Panel>
+				<form className="flex items-center gap-2 border-b border-default/8 px-3 py-2">
 					<Input
 						type="search"
 						name="q"
 						defaultValue={params.q || ""}
-						placeholder="Search by container name or image"
-						className="flex-1"
+						placeholder="Search by name or image..."
+						className="flex-1 border-0 bg-transparent shadow-none focus:ring-0"
 					/>
-					<Select name="status" defaultValue={status}>
-						<option value="all">All statuses</option>
+					<Select name="status" defaultValue={status} className="w-32 h-7 text-xs">
+						<option value="all">All</option>
 						<option value="running">Running</option>
 						<option value="exited">Exited</option>
 						<option value="created">Created</option>
 						<option value="paused">Paused</option>
 					</Select>
-					<Button type="submit" variant="secondary">
-						Apply filters
-					</Button>
+					<button type="submit" className="text-xs font-medium text-accent hover:text-accent/80">
+						Filter
+					</button>
 				</form>
-			</Panel>
 
-			<Panel>
 				<DataTable>
 					<DataTableHeader>
 						<tr>
@@ -147,8 +105,7 @@ export default async function ContainersPage({
 							<DataTableHead>State</DataTableHead>
 							<DataTableHead>Status</DataTableHead>
 							<DataTableHead>Ports</DataTableHead>
-							<DataTableHead>Size</DataTableHead>
-							<DataTableHead>Quick actions</DataTableHead>
+							<DataTableHead className="w-24 text-right">Actions</DataTableHead>
 						</tr>
 					</DataTableHeader>
 					<DataTableBody>
@@ -163,29 +120,26 @@ export default async function ContainersPage({
 								const composeProject = summarizeComposeProject(container.Labels);
 
 								return (
-									<DataTableRow key={`${container.ID}-${container.Names}`} className="group">
+									<DataTableRow key={`${container.ID}-${container.Names}`}>
 										<DataTableCell>
-											<div className="space-y-0.5">
-												<div className="flex items-center gap-2">
-													<Link
-														href={`/dashboard/containers/${container.ID}?environment=${environment.id}`}
-														className="font-medium transition-colors hover:text-foreground/80"
-													>
-														{container.Names}
-													</Link>
-													{isProtected ? (
-														<Badge title={protectedLabel || undefined} variant="warning">
-															<Lock className="h-2.5 w-2.5" />
-															Locked
-														</Badge>
-													) : null}
-												</div>
-												{composeProject ? (
-													<p className="text-xs text-muted">{composeProject}</p>
+											<div className="flex items-center gap-1.5">
+												<Link
+													href={`/dashboard/containers/${container.ID}?environment=${environment.id}`}
+													className="font-medium transition-colors hover:text-accent"
+												>
+													{container.Names}
+												</Link>
+												{isProtected ? (
+													<Badge title={protectedLabel || undefined} variant="warning">
+														<Lock className="h-2.5 w-2.5" />
+													</Badge>
 												) : null}
 											</div>
+											{composeProject ? (
+												<p className="text-[11px] text-muted">{composeProject}</p>
+											) : null}
 										</DataTableCell>
-										<DataTableCell className="text-xs text-muted">{container.Image}</DataTableCell>
+										<DataTableCell className="text-xs text-muted max-w-[180px] truncate">{container.Image}</DataTableCell>
 										<DataTableCell>
 											<StatusBadge status={state || "offline"} />
 										</DataTableCell>
@@ -199,17 +153,8 @@ export default async function ContainersPage({
 												managerUrl={settings.managerUrl}
 											/>
 										</DataTableCell>
-										<DataTableCell className="text-xs text-muted">
-											{container.Size || "—"}
-										</DataTableCell>
 										<DataTableCell>
-											<div className="flex flex-wrap gap-1.5">
-												<LinkButton
-													href={`/dashboard/containers/${container.ID}?environment=${environment.id}`}
-													size="xs"
-												>
-													Open
-												</LinkButton>
+											<div className="flex items-center justify-end gap-0.5">
 												{isRunning ? (
 													<>
 														<form action={controlContainerAction}>
@@ -217,24 +162,32 @@ export default async function ContainersPage({
 															<input type="hidden" name="action" value="stop" />
 															<input type="hidden" name="environmentId" value={environment.id} />
 															<FormSubmitButton
-																label="Stop"
-																pendingLabel="Stopping..."
+																label=""
+																pendingLabel=""
 																disabled={isProtected}
-																variant="outline"
+																variant="ghost"
 																size="xs"
-															/>
+																title="Stop"
+																className="h-7 w-7 p-0"
+															>
+																<Square className="h-3.5 w-3.5" />
+															</FormSubmitButton>
 														</form>
 														<form action={controlContainerAction}>
 															<input type="hidden" name="containerId" value={container.ID} />
 															<input type="hidden" name="action" value="restart" />
 															<input type="hidden" name="environmentId" value={environment.id} />
 															<FormSubmitButton
-																label="Restart"
-																pendingLabel="Restarting..."
+																label=""
+																pendingLabel=""
 																disabled={isProtected}
-																variant="outline"
+																variant="ghost"
 																size="xs"
-															/>
+																title="Restart"
+																className="h-7 w-7 p-0"
+															>
+																<RefreshCw className="h-3.5 w-3.5" />
+															</FormSubmitButton>
 														</form>
 													</>
 												) : (
@@ -244,21 +197,25 @@ export default async function ContainersPage({
 															<input type="hidden" name="action" value="start" />
 															<input type="hidden" name="environmentId" value={environment.id} />
 															<FormSubmitButton
-																label="Start"
-																pendingLabel="Starting..."
+																label=""
+																pendingLabel=""
 																disabled={isProtected}
-																variant="outline"
+																variant="ghost"
 																size="xs"
-															/>
+																title="Start"
+																className="h-7 w-7 p-0"
+															>
+																<Play className="h-3.5 w-3.5" />
+															</FormSubmitButton>
 														</form>
 														<DestructiveActionModal
 															action={controlContainerAction}
 															title={`Remove container ${container.Names}`}
 															description="This permanently removes the container."
-															triggerLabel="Remove"
+															triggerLabel=""
 															confirmLabel="Remove"
 															pendingLabel="Removing..."
-															triggerVariant="danger"
+															triggerVariant="ghost"
 															triggerSize="xs"
 															disabled={isProtected}
 															hiddenFields={{
@@ -266,6 +223,8 @@ export default async function ContainersPage({
 																action: "remove",
 																environmentId: environment.id,
 															}}
+															triggerClassName="h-7 w-7 p-0 text-muted hover:text-danger"
+															triggerIcon={<Trash2 className="h-3.5 w-3.5" />}
 															options={[
 																{
 																	name: "removeVolumes",
@@ -278,17 +237,27 @@ export default async function ContainersPage({
 												)}
 												<LinkButton
 													href={`/dashboard/shell?target=container&containerId=${container.ID}&environment=${environment.id}`}
-													variant="outline"
-													size="xs"
+													variant="ghost"
+													size="icon-xs"
+													title="Shell"
 												>
-													Shell
+													<SquareTerminal className="h-3.5 w-3.5" />
 												</LinkButton>
 												<LinkButton
 													href={`/dashboard/logs?mode=single&container=${container.ID}&environment=${environment.id}`}
-													variant="outline"
-													size="xs"
+													variant="ghost"
+													size="icon-xs"
+													title="Logs"
 												>
-													Logs
+													<LogsIcon className="h-3.5 w-3.5" />
+												</LinkButton>
+												<LinkButton
+													href={`/dashboard/containers/${container.ID}?environment=${environment.id}`}
+													variant="ghost"
+													size="icon-xs"
+													title="Details"
+												>
+													<ExternalLink className="h-3.5 w-3.5" />
 												</LinkButton>
 											</div>
 										</DataTableCell>
@@ -296,7 +265,7 @@ export default async function ContainersPage({
 								);
 							})
 						) : (
-							<DataTableEmpty colSpan={7}>
+							<DataTableEmpty colSpan={6}>
 								No containers matched the current filters.
 							</DataTableEmpty>
 						)}

@@ -3,14 +3,14 @@ import { type ButtonHTMLAttributes, forwardRef } from "react";
 import { cn } from "@/lib/cn";
 
 export const buttonVariants = cva(
-	"inline-flex items-center justify-center gap-1.5 rounded-xl font-medium transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-40 active:scale-[0.97]",
+	"inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-40 active:scale-[0.97]",
 	{
 		variants: {
 			variant: {
 				primary:
-					"bg-accent text-accent-foreground shadow-[var(--shadow-sm)] hover:opacity-90 hover:shadow-[var(--shadow-md)]",
+					"bg-accent text-accent-foreground shadow-[var(--shadow-sm)] hover:opacity-90",
 				secondary:
-					"border border-default/12 bg-surface text-foreground shadow-[var(--shadow-xs)] hover:border-default/25 hover:shadow-[var(--shadow-sm)]",
+					"border border-default/12 bg-surface text-foreground shadow-[var(--shadow-xs)] hover:border-default/25",
 				outline:
 					"border border-default/12 bg-transparent text-muted hover:border-default/25 hover:text-foreground hover:bg-foreground/[0.03]",
 				ghost: "text-muted hover:bg-foreground/[0.05] hover:text-foreground",
@@ -23,10 +23,12 @@ export const buttonVariants = cva(
 			},
 			size: {
 				xs: "h-7 px-2.5 text-xs",
-				sm: "h-8 px-3.5 text-xs",
+				sm: "h-8 px-3 text-xs",
 				md: "h-9 px-4 text-sm",
 				lg: "h-10 px-5 text-sm",
 				icon: "h-8 w-8",
+				"icon-sm": "h-7 w-7",
+				"icon-xs": "h-6 w-6",
 			},
 			fullWidth: {
 				true: "w-full",
