@@ -63,6 +63,9 @@ export function ImagesTableWorkspace({
 				</p>
 				<DestructiveActionModal
 					action={bulkRemoveImagesAction}
+					onConfirm={() => {
+						setSelectedRefs({});
+					}}
 					title={`Delete ${selected.length} image(s)`}
 					description="This permanently removes all selected images from local cache."
 					triggerLabel={`Delete${selected.length ? ` (${selected.length})` : ""}`}

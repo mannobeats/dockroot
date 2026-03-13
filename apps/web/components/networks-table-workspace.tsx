@@ -46,6 +46,9 @@ export function NetworksTableWorkspace({
 				</p>
 				<DestructiveActionModal
 					action={bulkRemoveNetworksAction}
+					onConfirm={() => {
+						setSelectedNames({});
+					}}
 					title={`Delete ${selected.length} network(s)`}
 					description="This permanently removes all selected Docker networks."
 					triggerLabel={`Delete${selected.length ? ` (${selected.length})` : ""}`}

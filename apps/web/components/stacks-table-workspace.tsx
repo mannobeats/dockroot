@@ -242,6 +242,7 @@ export function StacksTableWorkspace({
 				<form
 					action={bulkRestartStacksAction}
 					onSubmit={() => {
+						setSelectedRowKeys({});
 						if (selectedTracked[0]?.stackId) {
 							setWatchedStackId(selectedTracked[0].stackId);
 							setLogDockOpen(true);
@@ -263,6 +264,7 @@ export function StacksTableWorkspace({
 				<form
 					action={bulkStopStacksAction}
 					onSubmit={() => {
+						setSelectedRowKeys({});
 						if (selectedTracked[0]?.stackId) {
 							setWatchedStackId(selectedTracked[0].stackId);
 							setLogDockOpen(true);
@@ -284,6 +286,7 @@ export function StacksTableWorkspace({
 				<DestructiveActionModal
 					action={bulkDestroyStacksAction}
 					onConfirm={() => {
+						setSelectedRowKeys({});
 						if (selectedTracked[0]?.stackId) {
 							setWatchedStackId(selectedTracked[0].stackId);
 							setLogDockOpen(true);
@@ -304,6 +307,9 @@ export function StacksTableWorkspace({
 				/>
 				<DestructiveActionModal
 					action={bulkRemoveStacksAction}
+					onConfirm={() => {
+						setSelectedRowKeys({});
+					}}
 					title={`Remove ${selectedCount} stack(s)`}
 					description="Tracked stacks are removed from Dockroot. Compose stacks are fully removed with containers, volumes, and local images."
 					triggerLabel={`Remove${selectedCount ? ` (${selectedCount})` : ""}`}

@@ -82,7 +82,12 @@ export function ContainersTableWorkspace({
 						? `${selectedContainers.length} selected`
 						: "Select one or more containers"}
 				</p>
-				<form action={bulkControlContainerAction}>
+				<form
+					action={bulkControlContainerAction}
+					onSubmit={() => {
+						setSelectedIds({});
+					}}
+				>
 					{selectedStopped.map((container) => (
 						<input key={`start-${container.ID}`} type="hidden" name="containerIds" value={container.ID} />
 					))}
@@ -96,7 +101,12 @@ export function ContainersTableWorkspace({
 						disabled={!selectedStopped.length}
 					/>
 				</form>
-				<form action={bulkControlContainerAction}>
+				<form
+					action={bulkControlContainerAction}
+					onSubmit={() => {
+						setSelectedIds({});
+					}}
+				>
 					{selectedRunning.map((container) => (
 						<input key={`stop-${container.ID}`} type="hidden" name="containerIds" value={container.ID} />
 					))}
@@ -110,7 +120,12 @@ export function ContainersTableWorkspace({
 						disabled={!selectedRunning.length}
 					/>
 				</form>
-				<form action={bulkControlContainerAction}>
+				<form
+					action={bulkControlContainerAction}
+					onSubmit={() => {
+						setSelectedIds({});
+					}}
+				>
 					{selectedRunning.map((container) => (
 						<input key={`restart-${container.ID}`} type="hidden" name="containerIds" value={container.ID} />
 					))}
@@ -126,6 +141,9 @@ export function ContainersTableWorkspace({
 				</form>
 				<DestructiveActionModal
 					action={bulkControlContainerAction}
+					onConfirm={() => {
+						setSelectedIds({});
+					}}
 					title={`Remove ${selectedContainers.length} container(s)`}
 					description="This permanently removes all selected containers."
 					triggerLabel={`Remove${selectedContainers.length ? ` (${selectedContainers.length})` : ""}`}

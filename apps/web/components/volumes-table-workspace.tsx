@@ -46,6 +46,9 @@ export function VolumesTableWorkspace({
 				</p>
 				<DestructiveActionModal
 					action={bulkRemoveVolumesAction}
+					onConfirm={() => {
+						setSelectedNames({});
+					}}
 					title={`Delete ${selected.length} volume(s)`}
 					description="This permanently removes all selected volumes and their data."
 					triggerLabel={`Delete${selected.length ? ` (${selected.length})` : ""}`}
