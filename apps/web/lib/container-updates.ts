@@ -85,6 +85,68 @@ function imageIdOf(image: unknown) {
 	return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function normalizeDigest(value: string) {
+	const raw = value.trim();
+	if (!raw) {
+		return null;
+	}
+	const at = raw.lastIndexOf("@");
+	const digest = at >= 0 ? raw.slice(at + 1) : raw;
+	return digest.startsWith("sha256:") ? digest : null;
+}
+
+function digestSetFromImageInspect(image: unknown) {
+	const set = new Set<string>();
+	if (!image || typeof image !== "object") {
+		return set;
+	}
+	const record = image as Record<string, unknown>;
+	const repoDigests = Array.isArray(record.RepoDigests) ? record.RepoDigests : [];
+	for (const value of repoDigests) {
+		if (typeof value !== "string") {
+			continue;
+		}
+		const digest = normalizeDigest(value);
+		if (digest) {
+			set.add(digest);
+		}
+	}
+	const imageId = normalizeDigest(String(record.Id || record.ID || ""));
+	if (imageId) {
+		set.add(imageId);
+	}
+	return set;
+}
+
+function hasSharedDigest(a: Set<string>, b: Set<string>) {
+	for (const digest of a) {
+		if (b.has(digest)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+function hasContainerImageUpdate(input: {
+	runningImageId: string | null;
+	latestImageId: string | null;
+	runningImageInspect: unknown;
+	latestImageInspect: unknown;
+}) {
+	const runningDigests = digestSetFromImageInspect(input.runningImageInspect);
+	const latestDigests = digestSetFromImageInspect(input.latestImageInspect);
+	if (runningDigests.size > 0 && latestDigests.size > 0) {
+		return !hasSharedDigest(runningDigests, latestDigests);
+	}
+	return Boolean(
+		input.runningImageId &&
+			input.latestImageId &&
+			input.runningImageId.trim() &&
+			input.latestImageId.trim() &&
+			input.runningImageId !== input.latestImageId,
+	);
+}
+
 type ContainerUpdateCheckSummary = {
 	totalContainers: number;
 	checkedContainers: number;
@@ -115,12 +177,199 @@ type ContainerUpdateStateMap = Map<
 	{
 		id: string;
 		updateAvailable: boolean;
+		majorUpdateAvailable: boolean;
+		majorTargetImageRef: string | null;
+		majorTargetTag: string | null;
 		lastResult: string | null;
 		lastError: string | null;
 		checkedAt: Date | null;
 		updatedAt: Date | null;
 	}
 >;
+
+type ContainerUpdateCheckMode = (typeof containerUpdateSchedules.$inferInsert)["checkMode"];
+
+function parseImageReference(imageRef: string) {
+	const value = imageRef.trim();
+	if (!value || value.includes("@")) {
+		return null;
+	}
+	const lastSlash = value.lastIndexOf("/");
+	const lastColon = value.lastIndexOf(":");
+	if (lastColon > lastSlash) {
+		return {
+			repository: value.slice(0, lastColon),
+			tag: value.slice(lastColon + 1),
+		};
+	}
+	return null;
+}
+
+function latestImageReferenceForMajorCheck(imageRef: string) {
+	const parsed = parseImageReference(imageRef);
+	if (!parsed || !parsed.repository || !parsed.tag || parsed.tag === "latest") {
+		return null;
+	}
+	return `${parsed.repository}:latest`;
+}
+
+function parseRegistryImageReference(imageRef: string) {
+	const parsed = parseImageReference(imageRef);
+	if (!parsed) {
+		return null;
+	}
+	const name = parsed.repository;
+	const segments = name.split("/");
+	const first = segments[0] || "";
+	const hasRegistry = first.includes(".") || first.includes(":") || first === "localhost";
+	const registryHost = hasRegistry ? first : "docker.io";
+	let repository = hasRegistry ? segments.slice(1).join("/") : name;
+	if (!repository) {
+		return null;
+	}
+	if (registryHost === "docker.io" && !repository.includes("/")) {
+		repository = `library/${repository}`;
+	}
+	return {
+		registryHost,
+		registryApiHost: registryHost === "docker.io" ? "registry-1.docker.io" : registryHost,
+		repository,
+		tag: parsed.tag,
+	};
+}
+
+function parseBearerChallenge(challenge: string) {
+	const [scheme, rest] = challenge.split(/\s+/, 2);
+	if (!scheme || scheme.toLowerCase() !== "bearer" || !rest) {
+		return null;
+	}
+	const params: Record<string, string> = {};
+	for (const match of rest.matchAll(/([a-zA-Z]+)="([^"]*)"/g)) {
+		params[match[1].toLowerCase()] = match[2];
+	}
+	if (!params.realm) {
+		return null;
+	}
+	return params;
+}
+
+function parseLeadingMajor(tag: string) {
+	const match = tag.trim().match(/^v?(\d+)/i);
+	if (!match) {
+		return null;
+	}
+	return Number(match[1]);
+}
+
+async function fetchRegistryManifestDigest(imageRef: string) {
+	const parsed = parseRegistryImageReference(imageRef);
+	if (!parsed) {
+		return null;
+	}
+	const url = `https://${parsed.registryApiHost}/v2/${parsed.repository}/manifests/${encodeURIComponent(parsed.tag)}`;
+	const accept =
+		"application/vnd.docker.distribution.manifest.v2+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.oci.image.index.v1+json";
+
+	const runRequest = async (token?: string) =>
+		fetch(url, {
+			method: "GET",
+			headers: {
+				accept,
+				...(token ? { authorization: `Bearer ${token}` } : {}),
+			},
+			signal: AbortSignal.timeout(8000),
+			cache: "no-store",
+		});
+
+	let response = await runRequest();
+	if (response.status === 401) {
+		const challenge = response.headers.get("www-authenticate") || "";
+		const bearer = parseBearerChallenge(challenge);
+		if (!bearer) {
+			return null;
+		}
+		const scope = bearer.scope || `repository:${parsed.repository}:pull`;
+		const tokenUrl = new URL(bearer.realm);
+		if (bearer.service) {
+			tokenUrl.searchParams.set("service", bearer.service);
+		}
+		tokenUrl.searchParams.set("scope", scope);
+		const tokenResponse = await fetch(tokenUrl.toString(), {
+			method: "GET",
+			signal: AbortSignal.timeout(8000),
+			cache: "no-store",
+		});
+		if (!tokenResponse.ok) {
+			return null;
+		}
+		const tokenBody = (await tokenResponse.json().catch(() => null)) as {
+			token?: string;
+			access_token?: string;
+		} | null;
+		const token = tokenBody?.token || tokenBody?.access_token || "";
+		if (!token) {
+			return null;
+		}
+		response = await runRequest(token);
+	}
+	if (!response.ok) {
+		return null;
+	}
+	return normalizeDigest(response.headers.get("docker-content-digest") || "");
+}
+
+async function findDockerHubMajorTargetTag(imageRef: string) {
+	const parsed = parseRegistryImageReference(imageRef);
+	if (!parsed || parsed.registryHost !== "docker.io") {
+		return null;
+	}
+	const currentMajor = parseLeadingMajor(parsed.tag);
+	if (currentMajor === null) {
+		return null;
+	}
+	type Candidate = { tag: string; major: number };
+	let bestExactMajor: Candidate | null = null;
+	let bestFallback: Candidate | null = null;
+	let nextUrl = `https://hub.docker.com/v2/repositories/${parsed.repository}/tags?page_size=100`;
+
+	for (let page = 0; page < 3 && nextUrl; page += 1) {
+		const response = await fetch(nextUrl, {
+			method: "GET",
+			signal: AbortSignal.timeout(8000),
+			cache: "no-store",
+		});
+		if (!response.ok) {
+			break;
+		}
+		const body = (await response.json().catch(() => null)) as {
+			results?: Array<{ name?: string }>;
+			next?: string | null;
+		} | null;
+		const tags = Array.isArray(body?.results) ? body.results : [];
+		for (const entry of tags) {
+			const tag = String(entry?.name || "").trim();
+			if (!tag) {
+				continue;
+			}
+			const major = parseLeadingMajor(tag);
+			if (major === null || major <= currentMajor) {
+				continue;
+			}
+			if (/^v?\d+$/i.test(tag)) {
+				if (!bestExactMajor || major > bestExactMajor.major) {
+					bestExactMajor = { tag, major };
+				}
+				continue;
+			}
+			if (!bestFallback || major > bestFallback.major) {
+				bestFallback = { tag, major };
+			}
+		}
+		nextUrl = body?.next || "";
+	}
+
+	return bestExactMajor?.tag || bestFallback?.tag || null;
+}
 
 export async function getOrCreateContainerUpdateSchedule(userId: string, environmentId?: string) {
 	const environment = await resolveRuntimeEnvironment(userId, environmentId);
@@ -142,6 +391,7 @@ export async function getOrCreateContainerUpdateSchedule(userId: string, environ
 		environmentId: environment.id,
 		autoCheckEnabled: false,
 		autoUpdateEnabled: false,
+		checkMode: "same_tag" as const,
 		checkIntervalMinutes: 60,
 		updateIntervalMinutes: 240,
 		pullBeforeCheck: true,
@@ -181,6 +431,7 @@ export async function getOrCreateContainerUpdateSchedule(userId: string, environ
 export async function updateContainerUpdateSchedule(input: {
 	userId: string;
 	environmentId: string;
+	checkMode: ContainerUpdateCheckMode;
 	autoCheckEnabled: boolean;
 	autoUpdateEnabled: boolean;
 	checkIntervalMinutes: number;
@@ -209,6 +460,7 @@ export async function updateContainerUpdateSchedule(input: {
 		.set({
 			autoCheckEnabled: input.autoCheckEnabled,
 			autoUpdateEnabled: input.autoUpdateEnabled,
+			checkMode: input.checkMode,
 			checkIntervalMinutes,
 			updateIntervalMinutes,
 			pullBeforeCheck: input.pullBeforeCheck,
@@ -277,6 +529,9 @@ export async function getContainerUpdateStateMap(userId: string, environmentId?:
 		map.set(row.containerName, {
 			id: row.id,
 			updateAvailable: row.updateAvailable,
+			majorUpdateAvailable: row.majorUpdateAvailable,
+			majorTargetImageRef: row.majorTargetImageRef || null,
+			majorTargetTag: row.majorTargetTag || null,
 			lastResult: row.lastResult || null,
 			lastError: row.lastError || null,
 			checkedAt: row.checkedAt || null,
@@ -345,7 +600,10 @@ async function upsertContainerUpdateState(input: {
 	imageRef?: string | null;
 	runningImageId?: string | null;
 	latestImageId?: string | null;
+	majorTargetImageRef?: string | null;
+	majorTargetTag?: string | null;
 	updateAvailable: boolean;
+	majorUpdateAvailable?: boolean;
 	lastResult: (typeof containerUpdateStates.$inferInsert)["lastResult"];
 	lastError?: string | null;
 	checkedAt?: Date | null;
@@ -368,7 +626,16 @@ async function upsertContainerUpdateState(input: {
 				imageRef: input.imageRef || null,
 				runningImageId: input.runningImageId || null,
 				latestImageId: input.latestImageId || null,
+				majorTargetImageRef:
+					input.majorTargetImageRef === undefined
+						? existing.majorTargetImageRef
+						: input.majorTargetImageRef || null,
+				majorTargetTag:
+					input.majorTargetTag === undefined
+						? existing.majorTargetTag
+						: input.majorTargetTag || null,
 				updateAvailable: input.updateAvailable,
+				majorUpdateAvailable: input.majorUpdateAvailable ?? existing.majorUpdateAvailable,
 				lastResult: input.lastResult,
 				lastError: input.lastError || null,
 				checkedAt: input.checkedAt || existing.checkedAt,
@@ -387,7 +654,10 @@ async function upsertContainerUpdateState(input: {
 		imageRef: input.imageRef || null,
 		runningImageId: input.runningImageId || null,
 		latestImageId: input.latestImageId || null,
+		majorTargetImageRef: input.majorTargetImageRef || null,
+		majorTargetTag: input.majorTargetTag || null,
 		updateAvailable: input.updateAvailable,
+		majorUpdateAvailable: input.majorUpdateAvailable ?? false,
 		lastResult: input.lastResult,
 		lastError: input.lastError || null,
 		checkedAt: input.checkedAt || null,
@@ -506,6 +776,7 @@ export async function runContainerUpdateCheck(input: {
 	containerNames?: string[];
 	respectPolicies?: boolean;
 	pullBeforeCheck?: boolean;
+	includeMajorVersions?: boolean;
 	scheduleId?: string | null;
 }) {
 	const environment = await resolveRuntimeEnvironment(input.userId, input.environmentId);
@@ -517,6 +788,7 @@ export async function runContainerUpdateCheck(input: {
 	});
 	const pullBeforeCheck = input.pullBeforeCheck ?? true;
 	const respectPolicies = input.respectPolicies ?? false;
+	const includeMajorVersions = input.includeMajorVersions ?? false;
 
 	try {
 		const { containers } = await listContainersForEnvironment(input.userId, environment.id);
@@ -581,9 +853,12 @@ export async function runContainerUpdateCheck(input: {
 					imageRef: container.Image || null,
 					runningImageId: null,
 					latestImageId: null,
+					majorTargetImageRef: null,
+					majorTargetTag: null,
 					updateAvailable: false,
+					majorUpdateAvailable: false,
 					lastResult: "skipped",
-					lastError: "Protected runtime container",
+					lastError: null,
 					checkedAt: now(),
 				});
 				summary.skippedContainers += 1;
@@ -608,7 +883,10 @@ export async function runContainerUpdateCheck(input: {
 						imageRef: null,
 						runningImageId,
 						latestImageId: null,
+						majorTargetImageRef: null,
+						majorTargetTag: null,
 						updateAvailable: false,
+						majorUpdateAvailable: false,
 						lastResult: "skipped",
 						lastError: "Container has no image reference.",
 						checkedAt: now(),
@@ -620,16 +898,108 @@ export async function runContainerUpdateCheck(input: {
 				if (pullBeforeCheck) {
 					await pullImageForEnvironment(input.userId, imageRef, environment.id);
 				}
-				const latestImage = await getImageDetailsForEnvironment(
-					input.userId,
-					imageRef,
-					environment.id,
-				);
-				const latestImageId = imageIdOf(latestImage.image);
-				const updateAvailable = Boolean(
-					runningImageId && latestImageId && runningImageId !== latestImageId,
-				);
-				const lastResult = updateAvailable ? "available" : "not_available";
+				let runningImageInspect: Record<string, unknown> | null = null;
+				if (runningImageId) {
+					try {
+						const runningImage = await getImageDetailsForEnvironment(
+							input.userId,
+							runningImageId,
+							environment.id,
+						);
+						runningImageInspect = (runningImage.image || null) as Record<string, unknown> | null;
+					} catch {
+						runningImageInspect = null;
+					}
+				}
+				let latestImageId: string | null = null;
+				let latestImageInspect: Record<string, unknown> | null = null;
+				let updateAvailable = false;
+				if (!pullBeforeCheck) {
+					const remoteDigest = await fetchRegistryManifestDigest(imageRef);
+					if (remoteDigest) {
+						latestImageId = remoteDigest;
+						const runningDigests = digestSetFromImageInspect(runningImageInspect);
+						const normalizedRunningImageId = normalizeDigest(runningImageId || "");
+						if (normalizedRunningImageId) {
+							runningDigests.add(normalizedRunningImageId);
+						}
+						updateAvailable = !runningDigests.has(remoteDigest);
+					}
+				}
+				if (!latestImageId) {
+					const latestImage = await getImageDetailsForEnvironment(
+						input.userId,
+						imageRef,
+						environment.id,
+					);
+					latestImageId = imageIdOf(latestImage.image);
+					latestImageInspect = (latestImage.image || null) as Record<string, unknown> | null;
+					updateAvailable = hasContainerImageUpdate({
+						runningImageId,
+						latestImageId,
+						runningImageInspect,
+						latestImageInspect,
+					});
+				}
+				let majorUpdateAvailable = false;
+				let majorTargetImageRef: string | null = null;
+				let majorTargetTag: string | null = null;
+				if (!updateAvailable && includeMajorVersions && runningImageId) {
+					const latestRef = latestImageReferenceForMajorCheck(imageRef);
+					if (latestRef) {
+						try {
+							majorTargetImageRef = latestRef;
+							if (pullBeforeCheck) {
+								await pullImageForEnvironment(input.userId, latestRef, environment.id);
+								const majorCandidate = await getImageDetailsForEnvironment(
+									input.userId,
+									latestRef,
+									environment.id,
+								);
+								const majorCandidateId = imageIdOf(majorCandidate.image);
+								const majorCandidateInspect = (majorCandidate.image || null) as Record<
+									string,
+									unknown
+								> | null;
+								majorUpdateAvailable = hasContainerImageUpdate({
+									runningImageId,
+									latestImageId: majorCandidateId,
+									runningImageInspect,
+									latestImageInspect: majorCandidateInspect,
+								});
+							} else {
+								const remoteDigest = await fetchRegistryManifestDigest(latestRef);
+								if (remoteDigest) {
+									const runningDigests = digestSetFromImageInspect(runningImageInspect);
+									const normalizedRunningImageId = normalizeDigest(runningImageId || "");
+									if (normalizedRunningImageId) {
+										runningDigests.add(normalizedRunningImageId);
+									}
+									majorUpdateAvailable = !runningDigests.has(remoteDigest);
+								}
+							}
+							if (majorUpdateAvailable) {
+								const candidateTag = await findDockerHubMajorTargetTag(imageRef);
+								if (candidateTag) {
+									const parsedTarget = parseImageReference(imageRef);
+									if (parsedTarget) {
+										majorTargetTag = candidateTag;
+										majorTargetImageRef = `${parsedTarget.repository}:${candidateTag}`;
+									}
+								}
+							}
+						} catch {
+							majorUpdateAvailable = false;
+							majorTargetImageRef = null;
+							majorTargetTag = null;
+						}
+					}
+				}
+				const lastResult = updateAvailable
+					? "available"
+					: majorUpdateAvailable
+						? "major_available"
+						: "not_available";
 
 				await upsertContainerUpdateState({
 					userId: input.userId,
@@ -639,7 +1009,10 @@ export async function runContainerUpdateCheck(input: {
 					imageRef,
 					runningImageId,
 					latestImageId,
+					majorTargetImageRef,
+					majorTargetTag,
 					updateAvailable,
+					majorUpdateAvailable,
 					lastResult,
 					lastError: null,
 					checkedAt: now(),
@@ -658,7 +1031,10 @@ export async function runContainerUpdateCheck(input: {
 					imageRef: container.Image || null,
 					runningImageId: null,
 					latestImageId: null,
+					majorTargetImageRef: null,
+					majorTargetTag: null,
 					updateAvailable: false,
+					majorUpdateAvailable: false,
 					lastResult: "check_failed",
 					lastError: error instanceof Error ? error.message : "Check failed.",
 					checkedAt: now(),
@@ -782,6 +1158,7 @@ export async function runContainerUpdateApply(input: {
 			skippedContainers: 0,
 			failedContainers: 0,
 		};
+		const queuedStackIds: string[] = [];
 
 		const stackContainers = new Map<string, Set<string>>();
 
@@ -837,6 +1214,7 @@ export async function runContainerUpdateApply(input: {
 					operation: "deploy",
 				});
 				summary.queuedStacks += 1;
+				queuedStackIds.push(stackId);
 				for (const containerName of containerNames) {
 					successfullyQueuedContainerNames.add(containerName);
 				}
@@ -873,7 +1251,7 @@ export async function runContainerUpdateApply(input: {
 			},
 		});
 
-		return { environment, runId, ...summary };
+		return { environment, runId, queuedStackIds, ...summary };
 	} catch (error) {
 		const message = error instanceof Error ? error.message : "Container update apply failed.";
 		await completeUpdateRun({
@@ -999,6 +1377,7 @@ export async function processDueContainerUpdateSchedules(input?: {
 					environmentId: schedule.environmentId,
 					respectPolicies: true,
 					pullBeforeCheck: schedule.pullBeforeCheck,
+					includeMajorVersions: schedule.checkMode === "include_major",
 					scheduleId: schedule.id,
 				});
 			}
@@ -1011,6 +1390,7 @@ export async function processDueContainerUpdateSchedules(input?: {
 						environmentId: schedule.environmentId,
 						respectPolicies: true,
 						pullBeforeCheck: schedule.pullBeforeCheck,
+						includeMajorVersions: schedule.checkMode === "include_major",
 						scheduleId: schedule.id,
 					});
 				}

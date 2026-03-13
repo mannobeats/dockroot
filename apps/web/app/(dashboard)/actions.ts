@@ -8,6 +8,7 @@ import {
 	requireUserSession,
 } from "@/lib/authorization";
 import {
+	getOrCreateContainerUpdateSchedule,
 	runContainerUpdateApply,
 	runContainerUpdateCheck,
 	setContainerUpdatePolicy,
@@ -56,7 +57,18 @@ function getValue(formData: FormData, key: string) {
 }
 
 function getBoolValue(formData: FormData, key: string) {
-	return getValue(formData, key) === "true";
+	const value = getValue(formData, key).trim().toLowerCase();
+	if (!value) {
+		return false;
+	}
+	if (["true", "1", "yes", "on", "enabled"].includes(value)) {
+		return true;
+	}
+	if (["false", "0", "no", "off", "disabled"].includes(value)) {
+		return false;
+	}
+	// Fallback for plain checkbox semantics where key is present without explicit "false".
+	return true;
 }
 
 function getValues(formData: FormData, key: string) {
@@ -1003,12 +1015,15 @@ export async function checkContainerUpdatesAction(formData: FormData) {
 	if (!container) {
 		throw new Error("Container not found.");
 	}
+	const schedule = await getOrCreateContainerUpdateSchedule(auth.userId, environment.id);
 
 	await runContainerUpdateCheck({
 		userId: auth.userId,
 		environmentId: environment.id,
 		containerNames: [container.Names || container.Name || ""],
 		respectPolicies: false,
+		pullBeforeCheck: schedule.pullBeforeCheck,
+		includeMajorVersions: schedule.checkMode === "include_major",
 	});
 
 	revalidatePath("/dashboard/containers");
@@ -1043,12 +1058,15 @@ export async function bulkCheckContainerUpdatesAction(formData: FormData) {
 	if (!containerNames.length) {
 		throw new Error("No accessible containers selected.");
 	}
+	const schedule = await getOrCreateContainerUpdateSchedule(auth.userId, environment.id);
 
 	await runContainerUpdateCheck({
 		userId: auth.userId,
 		environmentId: environment.id,
 		containerNames,
 		respectPolicies: false,
+		pullBeforeCheck: schedule.pullBeforeCheck,
+		includeMajorVersions: schedule.checkMode === "include_major",
 	});
 
 	revalidatePath("/dashboard/containers");
@@ -1082,13 +1100,18 @@ export async function applyContainerUpdatesAction(formData: FormData) {
 		throw new Error("Container not found.");
 	}
 
-	await runContainerUpdateApply({
+	const result = await runContainerUpdateApply({
 		userId: auth.userId,
 		environmentId: environment.id,
 		containerNames: [container.Names || container.Name || ""],
 		respectPolicies: false,
 		updateOnlyRunning: getBoolValue(formData, "updateOnlyRunning"),
 	});
+	if (result.queuedStackIds.length) {
+		redirect(
+			`/dashboard/containers?environment=${encodeURIComponent(environment.id)}&watchStackId=${encodeURIComponent(result.queuedStackIds[0])}`,
+		);
+	}
 
 	revalidatePath("/dashboard/containers");
 	revalidatePath("/dashboard/stacks");
@@ -1124,13 +1147,18 @@ export async function bulkApplyContainerUpdatesAction(formData: FormData) {
 		throw new Error("No accessible containers selected.");
 	}
 
-	await runContainerUpdateApply({
+	const result = await runContainerUpdateApply({
 		userId: auth.userId,
 		environmentId: environment.id,
 		containerNames,
 		respectPolicies: false,
 		updateOnlyRunning: getBoolValue(formData, "updateOnlyRunning"),
 	});
+	if (result.queuedStackIds.length) {
+		redirect(
+			`/dashboard/containers?environment=${encodeURIComponent(environment.id)}&watchStackId=${encodeURIComponent(result.queuedStackIds[0])}`,
+		);
+	}
 
 	revalidatePath("/dashboard/containers");
 	revalidatePath("/dashboard/stacks");
@@ -1140,10 +1168,13 @@ export async function bulkApplyContainerUpdatesAction(formData: FormData) {
 export async function runContainerUpdateCheckNowAction(formData: FormData) {
 	const { userId } = await requirePrivilegedSession();
 	const environmentId = getValue(formData, "environmentId") || undefined;
+	const schedule = await getOrCreateContainerUpdateSchedule(userId, environmentId);
 	await runContainerUpdateCheck({
 		userId,
 		environmentId,
 		respectPolicies: true,
+		pullBeforeCheck: schedule.pullBeforeCheck,
+		includeMajorVersions: schedule.checkMode === "include_major",
 	});
 	revalidatePath("/dashboard/containers");
 	revalidatePath("/dashboard/schedules");
@@ -1152,12 +1183,17 @@ export async function runContainerUpdateCheckNowAction(formData: FormData) {
 export async function runContainerUpdateApplyNowAction(formData: FormData) {
 	const { userId } = await requirePrivilegedSession();
 	const environmentId = getValue(formData, "environmentId") || undefined;
-	await runContainerUpdateApply({
+	const result = await runContainerUpdateApply({
 		userId,
 		environmentId,
 		respectPolicies: true,
 		updateOnlyRunning: true,
 	});
+	if (result.queuedStackIds.length) {
+		redirect(
+			`/dashboard/stacks?environment=${encodeURIComponent(result.environment.id)}&watchStackId=${encodeURIComponent(result.queuedStackIds[0])}`,
+		);
+	}
 	revalidatePath("/dashboard/containers");
 	revalidatePath("/dashboard/stacks");
 	revalidatePath("/dashboard/schedules");
@@ -1173,6 +1209,7 @@ export async function updateContainerUpdateScheduleAction(formData: FormData) {
 	await updateContainerUpdateSchedule({
 		userId,
 		environmentId,
+		checkMode: getValue(formData, "checkMode") === "include_major" ? "include_major" : "same_tag",
 		autoCheckEnabled: getBoolValue(formData, "autoCheckEnabled"),
 		autoUpdateEnabled: getBoolValue(formData, "autoUpdateEnabled"),
 		checkIntervalMinutes: Number(getValue(formData, "checkIntervalMinutes") || "60"),
@@ -1182,4 +1219,5 @@ export async function updateContainerUpdateScheduleAction(formData: FormData) {
 	});
 
 	revalidatePath("/dashboard/schedules");
+	redirect(`/dashboard/schedules?environment=${encodeURIComponent(environmentId)}`);
 }

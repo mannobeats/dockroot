@@ -15,15 +15,24 @@ import { StackCreateModal } from "@/components/stack-create-modal";
 import { StacksTableWorkspace } from "@/components/stacks-table-workspace";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Panel } from "@/components/ui/panel";
 import { isPrivilegedRole, requireUserSession } from "@/lib/authorization";
 import { isGitHubAppConfigured } from "@/lib/github-app";
-import { listEnvironments, listGitHubInstallations, listGitHubProviders, listStacks } from "@/lib/platform";
+import {
+	listEnvironments,
+	listGitHubInstallations,
+	listGitHubProviders,
+	listStacks,
+} from "@/lib/platform";
 
 export default async function StacksPage({
 	searchParams,
 }: {
-	searchParams: Promise<{ environment?: string; github?: string; githubError?: string }>;
+	searchParams: Promise<{
+		environment?: string;
+		github?: string;
+		githubError?: string;
+		watchStackId?: string;
+	}>;
 }) {
 	const { userId, role } = await requireUserSession();
 	const includeUntracked = isPrivilegedRole(role);
@@ -98,6 +107,7 @@ export default async function StacksPage({
 				stacks={stacks}
 				includeUntracked={includeUntracked}
 				environmentId={params.environment}
+				initialWatchStackId={params.watchStackId}
 				deployStackAction={deployStackAction}
 				destroyStackAction={destroyStackAction}
 				adoptComposeProjectAction={adoptComposeProjectAction}

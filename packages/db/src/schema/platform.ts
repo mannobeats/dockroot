@@ -37,6 +37,7 @@ export const deploymentOperationEnum = pgEnum("deployment_operation", ["deploy",
 export const containerUpdateResultEnum = pgEnum("container_update_result", [
 	"not_available",
 	"available",
+	"major_available",
 	"check_failed",
 	"update_queued",
 	"update_succeeded",
@@ -48,6 +49,10 @@ export const containerUpdateRunStatusEnum = pgEnum("container_update_run_status"
 	"running",
 	"succeeded",
 	"failed",
+]);
+export const containerUpdateCheckModeEnum = pgEnum("container_update_check_mode", [
+	"same_tag",
+	"include_major",
 ]);
 
 export const githubProviders = pgTable(
@@ -284,7 +289,10 @@ export const containerUpdateStates = pgTable(
 		imageRef: text("image_ref"),
 		runningImageId: text("running_image_id"),
 		latestImageId: text("latest_image_id"),
+		majorTargetImageRef: text("major_target_image_ref"),
+		majorTargetTag: text("major_target_tag"),
 		updateAvailable: boolean("update_available").notNull().default(false),
+		majorUpdateAvailable: boolean("major_update_available").notNull().default(false),
 		lastResult: containerUpdateResultEnum("last_result"),
 		lastError: text("last_error"),
 		checkedAt: timestamp("checked_at"),
@@ -316,6 +324,7 @@ export const containerUpdateSchedules = pgTable(
 			.references(() => environments.id, { onDelete: "cascade" }),
 		autoCheckEnabled: boolean("auto_check_enabled").notNull().default(false),
 		autoUpdateEnabled: boolean("auto_update_enabled").notNull().default(false),
+		checkMode: containerUpdateCheckModeEnum("check_mode").notNull().default("same_tag"),
 		checkIntervalMinutes: integer("check_interval_minutes").notNull().default(60),
 		updateIntervalMinutes: integer("update_interval_minutes").notNull().default(240),
 		pullBeforeCheck: boolean("pull_before_check").notNull().default(true),

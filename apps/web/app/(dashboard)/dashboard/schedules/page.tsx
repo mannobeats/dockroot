@@ -107,6 +107,17 @@ export default async function SchedulesPage({
 
 					<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
 						<Field>
+							<FieldLabel htmlFor="checkMode">Check mode</FieldLabel>
+							<Select id="checkMode" name="checkMode" defaultValue={schedule.checkMode}>
+								<option value="same_tag">Same tag only</option>
+								<option value="include_major">Include newer major</option>
+							</Select>
+							<FieldHint>
+								Major checks surface recommendations, but auto-update still only applies same-tag
+								updates.
+							</FieldHint>
+						</Field>
+						<Field>
 							<FieldLabel htmlFor="autoCheckEnabled">Auto check</FieldLabel>
 							<Select
 								id="autoCheckEnabled"

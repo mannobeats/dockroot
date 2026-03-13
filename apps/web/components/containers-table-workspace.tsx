@@ -5,16 +5,21 @@ import {
 	ExternalLink,
 	Lock,
 	Logs as LogsIcon,
+	PanelRightClose,
+	PanelRightOpen,
 	Play,
 	RefreshCw,
 	Square,
 	SquareTerminal,
+	TerminalSquare,
 	Trash2,
+	X,
 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DestructiveActionModal } from "@/components/destructive-action-modal";
 import { FormSubmitButton } from "@/components/form-submit-button";
+import { LiveStackFeed } from "@/components/live-stack-feed";
 import { RuntimePortLinks } from "@/components/runtime-port-links";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +33,8 @@ import {
 	DataTableRow,
 } from "@/components/ui/data-table";
 import { LinkButton } from "@/components/ui/link-button";
+import { PopoverCard } from "@/components/ui/popover-card";
+import { getSocket } from "@/lib/socket-client";
 
 type FormAction = (formData: FormData) => void | Promise<void>;
 
@@ -47,6 +54,37 @@ function summarizeComposeProject(labels: string | undefined) {
 	);
 }
 
+function latestRefForMajorUpgrade(imageRef: string) {
+	const value = (imageRef || "").trim();
+	if (!value || value.includes("@")) {
+		return null;
+	}
+	const lastSlash = value.lastIndexOf("/");
+	const lastColon = value.lastIndexOf(":");
+	if (lastColon <= lastSlash) {
+		return null;
+	}
+	const repository = value.slice(0, lastColon);
+	const tag = value.slice(lastColon + 1);
+	if (!repository || !tag || tag === "latest") {
+		return null;
+	}
+	return `${repository}:latest`;
+}
+
+function tagFromImageRef(imageRef: string) {
+	const value = (imageRef || "").trim();
+	if (!value || value.includes("@")) {
+		return null;
+	}
+	const lastSlash = value.lastIndexOf("/");
+	const lastColon = value.lastIndexOf(":");
+	if (lastColon <= lastSlash) {
+		return null;
+	}
+	return value.slice(lastColon + 1);
+}
+
 export function ContainersTableWorkspace({
 	containers,
 	environmentId,
@@ -60,6 +98,7 @@ export function ContainersTableWorkspace({
 	setContainerUpdatePolicyAction,
 	protectedContainerIds,
 	protectedContainerLabels,
+	initialWatchStackId,
 	updatePolicyMap,
 	updateStateMap,
 }: {
@@ -75,6 +114,7 @@ export function ContainersTableWorkspace({
 	setContainerUpdatePolicyAction: FormAction;
 	protectedContainerIds: string[];
 	protectedContainerLabels: Record<string, string>;
+	initialWatchStackId?: string;
 	updatePolicyMap: Record<
 		string,
 		{
@@ -86,6 +126,9 @@ export function ContainersTableWorkspace({
 		string,
 		{
 			updateAvailable: boolean;
+			majorUpdateAvailable: boolean;
+			majorTargetImageRef?: string | null;
+			majorTargetTag?: string | null;
 			lastResult: string | null;
 			lastError?: string | null;
 			checkedAt: string | Date | null;
@@ -94,6 +137,8 @@ export function ContainersTableWorkspace({
 	>;
 }) {
 	const [selectedIds, setSelectedIds] = useState<Record<string, boolean>>({});
+	const [watchStackId, setWatchStackId] = useState(initialWatchStackId || "");
+	const [logDockOpen, setLogDockOpen] = useState(Boolean(initialWatchStackId));
 	const protectedSet = useMemo(() => new Set(protectedContainerIds), [protectedContainerIds]);
 	const selectableIds = useMemo(
 		() => containers.map((container) => container.ID).filter((id) => !protectedSet.has(id)),
@@ -112,6 +157,24 @@ export function ContainersTableWorkspace({
 	);
 	const allSelectableSelected =
 		selectableIds.length > 0 && selectableIds.every((containerId) => selectedIds[containerId]);
+
+	useEffect(() => {
+		const client = getSocket();
+		const onDeploymentUpdate = (event: { stackId?: string; status?: string }) => {
+			if (!event?.stackId) {
+				return;
+			}
+			if (event.status === "running" || event.status === "queued") {
+				setWatchStackId(event.stackId);
+				setLogDockOpen(true);
+			}
+		};
+
+		client.on("deployment:update", onDeploymentUpdate);
+		return () => {
+			client.off("deployment:update", onDeploymentUpdate);
+		};
+	}, []);
 
 	return (
 		<>
@@ -274,6 +337,20 @@ export function ContainersTableWorkspace({
 				>
 					Clear
 				</button>
+				<button
+					type="button"
+					onClick={() => setLogDockOpen((open) => !open)}
+					disabled={!watchStackId}
+					className="inline-flex h-7 items-center gap-1.5 rounded-md border border-default/15 px-2.5 text-xs text-muted transition-colors hover:border-default/25 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+					title="Toggle live deploy console"
+				>
+					{logDockOpen ? (
+						<PanelRightClose className="h-3.5 w-3.5" />
+					) : (
+						<PanelRightOpen className="h-3.5 w-3.5" />
+					)}
+					Console
+				</button>
 			</div>
 
 			<DataTable>
@@ -320,6 +397,15 @@ export function ContainersTableWorkspace({
 							const checkEnabled = updatePolicy?.checkEnabled ?? true;
 							const updateEnabled = updatePolicy?.updateEnabled ?? false;
 							const updateAvailable = Boolean(updateState?.updateAvailable);
+							const majorUpdateAvailable = Boolean(updateState?.majorUpdateAvailable);
+							const checkFailed = !isProtected && updateState?.lastResult === "check_failed";
+							const majorTargetImageRef =
+								(updateState?.majorTargetImageRef || "").trim() ||
+								latestRefForMajorUpgrade(container.Image || "");
+							const majorTargetTag =
+								(updateState?.majorTargetTag || "").trim() ||
+								tagFromImageRef(majorTargetImageRef || "") ||
+								"latest";
 
 							return (
 								<DataTableRow key={`${container.ID}-${container.Names}`}>
@@ -406,10 +492,63 @@ export function ContainersTableWorkspace({
 												</form>
 											</div>
 											<div className="flex items-center gap-1">
-												{updateAvailable ? (
+												{checkFailed ? (
+													<PopoverCard
+														trigger={
+															<Badge variant="danger" className="text-[10px]">
+																Check failed
+															</Badge>
+														}
+													>
+														<div className="space-y-2 text-[11px]">
+															<p className="font-medium text-danger">Update check failed</p>
+															<p className="text-muted">
+																{updateState?.lastError || "Unable to inspect latest image state."}
+															</p>
+															<p className="text-muted">
+																Re-run check, or enable pull-before-check to refresh registry data.
+															</p>
+														</div>
+													</PopoverCard>
+												) : updateAvailable ? (
 													<Badge variant="warning" className="text-[10px]">
-														Update available
+														Patch/minor available
 													</Badge>
+												) : majorUpdateAvailable ? (
+													<PopoverCard
+														trigger={
+															<Badge variant="warning" className="text-[10px]">
+																Major available
+															</Badge>
+														}
+													>
+														<div className="space-y-2 text-[11px]">
+															<p className="font-medium text-warning">Major upgrade available</p>
+															<p className="text-muted">
+																Current:{" "}
+																<span className="font-mono text-foreground">
+																	{container.Image || "unknown"}
+																</span>
+															</p>
+															<p className="text-muted">
+																Recommended:{" "}
+																<span className="font-mono text-foreground">
+																	{majorTargetImageRef || "latest tag"}
+																</span>
+															</p>
+															<p className="text-muted">
+																Available version:{" "}
+																<span className="font-mono text-foreground">{majorTargetTag}</span>
+															</p>
+															<p className="text-muted">
+																Major upgrades can require manual migration steps. Review the stack
+																config before applying.
+															</p>
+															<p className="text-muted">
+																Use stack editor/deploy flow for major version changes.
+															</p>
+														</div>
+													</PopoverCard>
 												) : (
 													<Badge variant="default" className="text-[10px]">
 														Up to date
@@ -568,6 +707,43 @@ export function ContainersTableWorkspace({
 					)}
 				</DataTableBody>
 			</DataTable>
+
+			{logDockOpen && watchStackId ? (
+				<div className="fixed inset-y-4 right-4 z-40 w-[min(44rem,92vw)] max-w-xl rounded-xl border border-default/12 bg-surface/95 shadow-[var(--shadow-lg)] backdrop-blur-sm">
+					<div className="flex items-center justify-between border-b border-default/10 px-4 py-3">
+						<div className="min-w-0">
+							<p className="text-xs font-semibold uppercase tracking-wide text-muted/75">
+								Live Deploy Console
+							</p>
+							<p className="truncate text-sm font-medium">Queued stack: {watchStackId}</p>
+						</div>
+						<div className="flex items-center gap-1.5">
+							<LinkButton
+								href={`/dashboard/stacks?environment=${environmentId}&watchStackId=${watchStackId}`}
+								variant="ghost"
+								size="icon-xs"
+								title="Open stacks workspace"
+							>
+								<TerminalSquare className="h-3.5 w-3.5" />
+							</LinkButton>
+							<button
+								type="button"
+								onClick={() => {
+									setLogDockOpen(false);
+									setWatchStackId("");
+								}}
+								className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-foreground/[0.05] hover:text-foreground"
+								aria-label="Close deploy console"
+							>
+								<X className="h-3.5 w-3.5" />
+							</button>
+						</div>
+					</div>
+					<div className="p-3">
+						<LiveStackFeed stackId={watchStackId} height="min(72vh, 760px)" />
+					</div>
+				</div>
+			) : null}
 		</>
 	);
 }

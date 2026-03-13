@@ -23,7 +23,12 @@ import { getProtectedContainerLabel, isProtectedManagerContainer } from "@/lib/r
 export default async function ContainersPage({
 	searchParams,
 }: {
-	searchParams: Promise<{ q?: string; status?: string; environment?: string }>;
+	searchParams: Promise<{
+		q?: string;
+		status?: string;
+		environment?: string;
+		watchStackId?: string;
+	}>;
 }) {
 	const { userId, role } = await requireUserSession();
 	const params = await searchParams;
@@ -31,6 +36,7 @@ export default async function ContainersPage({
 	const settings = await getGlobalSettings(userId);
 	const query = (params.q || "").toLowerCase();
 	const status = (params.status || "all").toLowerCase();
+	const watchStackId = (params.watchStackId || "").trim();
 	const containers = await listAccessibleContainersForUser(userId, role, environment.id);
 	const includeRuntime = isPrivilegedRole(role) && environment.kind === "local";
 	const filtered = containers.filter((container: Record<string, string>) => {
@@ -63,7 +69,11 @@ export default async function ContainersPage({
 		string,
 		{
 			updateAvailable: boolean;
+			majorUpdateAvailable: boolean;
+			majorTargetImageRef?: string | null;
+			majorTargetTag?: string | null;
 			lastResult: string | null;
+			lastError?: string | null;
 			checkedAt: Date | null;
 			updatedAt: Date | null;
 		}
@@ -71,7 +81,11 @@ export default async function ContainersPage({
 	for (const [name, value] of stateMap) {
 		updateStateMap[name] = {
 			updateAvailable: value.updateAvailable,
+			majorUpdateAvailable: value.majorUpdateAvailable,
+			majorTargetImageRef: value.majorTargetImageRef,
+			majorTargetTag: value.majorTargetTag,
 			lastResult: value.lastResult,
+			lastError: value.lastError,
 			checkedAt: value.checkedAt,
 			updatedAt: value.updatedAt,
 		};
@@ -135,6 +149,7 @@ export default async function ContainersPage({
 					setContainerUpdatePolicyAction={setContainerUpdatePolicyAction}
 					protectedContainerIds={protectedContainerIds}
 					protectedContainerLabels={protectedContainerLabels}
+					initialWatchStackId={watchStackId}
 					updatePolicyMap={updatePolicyMap}
 					updateStateMap={updateStateMap}
 				/>

@@ -34,8 +34,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { LinkButton } from "@/components/ui/link-button";
 import { Panel } from "@/components/ui/panel";
-import { getSocket } from "@/lib/socket-client";
 import { getProtectedStackLabel } from "@/lib/runtime-protection";
+import { getSocket } from "@/lib/socket-client";
 
 type FormAction = (formData: FormData) => void | Promise<void>;
 
@@ -98,6 +98,7 @@ export function StacksTableWorkspace({
 	stacks,
 	includeUntracked,
 	environmentId,
+	initialWatchStackId,
 	deployStackAction,
 	destroyStackAction,
 	adoptComposeProjectAction,
@@ -110,6 +111,7 @@ export function StacksTableWorkspace({
 	stacks: StackRow[];
 	includeUntracked: boolean;
 	environmentId?: string;
+	initialWatchStackId?: string;
 	deployStackAction: FormAction;
 	destroyStackAction: FormAction;
 	adoptComposeProjectAction: FormAction;
@@ -122,8 +124,8 @@ export function StacksTableWorkspace({
 	const [search, setSearch] = useState("");
 	const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
 	const [selectedRowKeys, setSelectedRowKeys] = useState<Record<string, boolean>>({});
-	const [watchedStackId, setWatchedStackId] = useState("");
-	const [logDockOpen, setLogDockOpen] = useState(false);
+	const [watchedStackId, setWatchedStackId] = useState(initialWatchStackId || "");
+	const [logDockOpen, setLogDockOpen] = useState(Boolean(initialWatchStackId));
 
 	useEffect(() => {
 		function isTypingTarget(target: EventTarget | null) {
@@ -214,10 +216,13 @@ export function StacksTableWorkspace({
 	const selectedTrackedIds = selectedTracked.map((stack) => stack.stackId);
 	const selectedCount = selectedStacks.length;
 	const watchedStack = stacks.find(
-		(stack): stack is TrackedStackRow => stack.type === "tracked" && stack.stackId === watchedStackId,
+		(stack): stack is TrackedStackRow =>
+			stack.type === "tracked" && stack.stackId === watchedStackId,
 	);
 	const fallbackWatchedStack =
-		watchedStack || stacks.find((stack): stack is TrackedStackRow => stack.type === "tracked") || null;
+		watchedStack ||
+		stacks.find((stack): stack is TrackedStackRow => stack.type === "tracked") ||
+		null;
 	const liveTargetStack = watchedStack || fallbackWatchedStack;
 	const allSelectableSelected =
 		selectableRowKeys.length > 0 && selectableRowKeys.every((rowKey) => selectedRowKeys[rowKey]);
@@ -250,7 +255,12 @@ export function StacksTableWorkspace({
 					}}
 				>
 					{selectedTrackedIds.map((stackId) => (
-						<input key={`restart-tracked-${stackId}`} type="hidden" name="stackIds" value={stackId} />
+						<input
+							key={`restart-tracked-${stackId}`}
+							type="hidden"
+							name="stackIds"
+							value={stackId}
+						/>
 					))}
 					<input type="hidden" name="projects" value={selectedUntrackedPayload} />
 					<FormSubmitButton
@@ -338,7 +348,11 @@ export function StacksTableWorkspace({
 					className="inline-flex h-7 items-center gap-1.5 rounded-md border border-default/15 px-2.5 text-xs text-muted transition-colors hover:border-default/25 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
 					title="Toggle live deploy console"
 				>
-					{logDockOpen ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
+					{logDockOpen ? (
+						<PanelRightClose className="h-3.5 w-3.5" />
+					) : (
+						<PanelRightOpen className="h-3.5 w-3.5" />
+					)}
 					Console
 				</button>
 			</div>
@@ -378,9 +392,7 @@ export function StacksTableWorkspace({
 						filteredStacks.map((stack) => {
 							const rowKey = `${stack.type}-${stack.slug}`;
 							const expanded = Boolean(expandedRows[rowKey]);
-							const detailEnvironmentSuffix = environmentId
-								? `?environment=${environmentId}`
-								: "";
+							const detailEnvironmentSuffix = environmentId ? `?environment=${environmentId}` : "";
 							const protectedLabel = getProtectedStackLabel(stack.slug);
 
 							return (
@@ -411,9 +423,7 @@ export function StacksTableWorkspace({
 													}))
 												}
 												className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-foreground/[0.05] hover:text-foreground"
-												aria-label={
-													expanded ? "Collapse stack services" : "Expand stack services"
-												}
+												aria-label={expanded ? "Collapse stack services" : "Expand stack services"}
 											>
 												{expanded ? (
 													<ChevronDown className="h-3.5 w-3.5" />
@@ -469,7 +479,11 @@ export function StacksTableWorkspace({
 																size="xs"
 																variant="ghost"
 																disabled={stack.isProtected}
-																title={isRunningStack(stack.status, stack.runningCount) ? "Redeploy" : "Deploy"}
+																title={
+																	isRunningStack(stack.status, stack.runningCount)
+																		? "Redeploy"
+																		: "Deploy"
+																}
 																className="h-7 w-7 p-0"
 															>
 																{isRunningStack(stack.status, stack.runningCount) ? (
