@@ -4,6 +4,7 @@ import { ExternalLink, Lock, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { DestructiveActionModal } from "@/components/destructive-action-modal";
+import { Badge } from "@/components/ui/badge";
 import {
 	DataTable,
 	DataTableBody,
@@ -14,7 +15,6 @@ import {
 	DataTableRow,
 } from "@/components/ui/data-table";
 import { LinkButton } from "@/components/ui/link-button";
-import { Badge } from "@/components/ui/badge";
 
 type FormAction = (formData: FormData) => void | Promise<void>;
 
@@ -131,7 +131,10 @@ export function ImagesTableWorkspace({
 											disabled={deleteBlocked}
 											checked={Boolean(selectedRefs[imageRef])}
 											onChange={(event) =>
-												setSelectedRefs((current) => ({ ...current, [imageRef]: event.target.checked }))
+												setSelectedRefs((current) => ({
+													...current,
+													[imageRef]: event.target.checked,
+												}))
 											}
 											title={
 												isProtected

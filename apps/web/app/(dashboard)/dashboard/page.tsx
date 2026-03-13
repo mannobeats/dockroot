@@ -87,12 +87,7 @@ export default async function DashboardPage({
 
 			{/* Compact stats row */}
 			<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-				<StatCard
-					label="Stacks"
-					value={String(data.stackCount)}
-					detail="tracked"
-					icon={Layers3}
-				/>
+				<StatCard label="Stacks" value={String(data.stackCount)} detail="tracked" icon={Layers3} />
 				<StatCard
 					label="Environments"
 					value={String(data.environmentCount)}
@@ -125,7 +120,8 @@ export default async function DashboardPage({
 							<div>
 								<h2 className="text-sm font-semibold">{runtime.snapshot.host.hostname}</h2>
 								<p className="text-xs text-muted">
-									{runtime.snapshot.host.platform} · {runtime.snapshot.host.architecture} · {runtime.snapshot.host.cpus} CPU
+									{runtime.snapshot.host.platform} · {runtime.snapshot.host.architecture} ·{" "}
+									{runtime.snapshot.host.cpus} CPU
 								</p>
 							</div>
 							<StatusBadge status="healthy" />

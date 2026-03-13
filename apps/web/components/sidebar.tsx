@@ -64,18 +64,12 @@ const groupLabels: Record<string, string> = {
 };
 
 interface SidebarProps {
-	environments: Array<{ id: string; name: string; kind: string }>;
 	defaultEnvironmentId?: string;
 	mobileOpen?: boolean;
 	onMobileClose?: () => void;
 }
 
-export function Sidebar({
-	environments,
-	defaultEnvironmentId,
-	mobileOpen = false,
-	onMobileClose,
-}: SidebarProps) {
+export function Sidebar({ defaultEnvironmentId, mobileOpen = false, onMobileClose }: SidebarProps) {
 	const pathname = usePathname();
 	const router = useRouter();
 	const searchParams = useSearchParams();
@@ -128,9 +122,7 @@ export function Sidebar({
 	}, [visibleItems]);
 
 	if (!mounted) {
-		return (
-			<div className="hidden h-screen w-[220px] shrink-0 border-r border-default/8 md:block" />
-		);
+		return <div className="hidden h-full w-[220px] shrink-0 border-r border-default/8 md:block" />;
 	}
 
 	const sidebarWidth = collapsed ? "w-[52px]" : "w-[220px]";
@@ -147,7 +139,7 @@ export function Sidebar({
 			) : null}
 
 			<aside
-				className={`fixed inset-y-0 left-0 z-50 flex h-screen flex-col border-r border-default/8 bg-surface transition-all duration-200 ease-out md:sticky md:translate-x-0 ${sidebarWidth} ${
+				className={`fixed inset-y-0 left-0 z-50 flex h-full flex-col border-r border-default/8 bg-surface transition-all duration-200 ease-out md:sticky md:top-0 md:translate-x-0 ${sidebarWidth} ${
 					mobileOpen ? "translate-x-0" : "-translate-x-full"
 				}`}
 			>
@@ -210,12 +202,12 @@ export function Sidebar({
 												collapsed ? "justify-center" : ""
 											} ${
 												isActive
-													? "bg-accent/8 text-accent"
+													? "bg-foreground/[0.06] text-foreground"
 													: "text-muted hover:bg-foreground/[0.04] hover:text-foreground"
 											}`}
 										>
 											<item.icon
-												className={`h-4 w-4 shrink-0 ${isActive ? "text-accent" : "text-muted/70 group-hover:text-foreground"}`}
+												className={`h-4 w-4 shrink-0 ${isActive ? "text-foreground" : "text-muted/70 group-hover:text-foreground"}`}
 											/>
 											{!collapsed ? <span>{item.label}</span> : null}
 										</Link>

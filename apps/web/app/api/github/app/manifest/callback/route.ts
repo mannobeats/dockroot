@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
-import { NextResponse } from "next/server";
 import { db, user } from "@dockroot/db";
 import { eq } from "drizzle-orm";
+import { NextResponse } from "next/server";
 import { sanitizeInternalRedirectPath } from "@/lib/authorization";
 import {
 	exchangeGitHubManifestCode,

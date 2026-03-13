@@ -1,4 +1,9 @@
-import { bulkRemoveImagesAction, pruneImagesAction, pullImageAction, removeImageAction } from "@/app/(dashboard)/actions";
+import {
+	bulkRemoveImagesAction,
+	pruneImagesAction,
+	pullImageAction,
+	removeImageAction,
+} from "@/app/(dashboard)/actions";
 import { DestructiveActionModal } from "@/components/destructive-action-modal";
 import { ImagesTableWorkspace } from "@/components/images-table-workspace";
 import { PageHeader } from "@/components/page-header";

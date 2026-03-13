@@ -17,10 +17,7 @@ export default async function ActivityPage() {
 
 	return (
 		<div className="animate-in space-y-5">
-			<PageHeader
-				title="Activity"
-				description={`${deployments.length} deployments`}
-			/>
+			<PageHeader title="Activity" description={`${deployments.length} deployments`} />
 
 			<div className="space-y-2">
 				{deployments.length ? (
@@ -37,7 +34,8 @@ export default async function ActivityPage() {
 										<StatusBadge status={deployment.status} />
 									</div>
 									<p className="mt-0.5 text-xs text-muted">
-										{deployment.environment.name} · {deployment.operation} · <span className="font-mono">{deployment.version}</span>
+										{deployment.environment.name} · {deployment.operation} ·{" "}
+										<span className="font-mono">{deployment.version}</span>
 									</p>
 								</div>
 								<p className="shrink-0 text-[11px] text-muted">

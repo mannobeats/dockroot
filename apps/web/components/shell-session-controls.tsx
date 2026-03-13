@@ -5,9 +5,9 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useDeferredValue, useMemo, useState, useTransition } from "react";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
+import { Dropdown, DropdownItem, DropdownMenu, DropdownTrigger } from "@/components/ui/dropdown";
 import { Input } from "@/components/ui/input";
 import { Panel } from "@/components/ui/panel";
-import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/cn";
 
 type ContainerOption = {
@@ -204,17 +204,21 @@ export function ShellSessionControls({
 							<label htmlFor="shell-kind" className="block text-xs font-medium text-muted">
 								Shell type
 							</label>
-							<Select
-								id="shell-kind"
-								value={shell}
-								onChange={(event) => setShell(event.target.value as ShellOption)}
-							>
-								{shellOptions.map((option) => (
-									<option key={option.value} value={option.value}>
-										{option.label}
-									</option>
-								))}
-							</Select>
+							<Dropdown>
+								<DropdownTrigger size="sm">{shell === "custom" ? "Custom" : shell}</DropdownTrigger>
+								<DropdownMenu>
+									{shellOptions.map((option) => (
+										<DropdownItem
+											key={option.value}
+											value={option.value}
+											selected={shell === option.value}
+											onSelect={(v) => setShell(v as ShellOption)}
+										>
+											{option.label}
+										</DropdownItem>
+									))}
+								</DropdownMenu>
+							</Dropdown>
 						</div>
 						{shell === "custom" ? (
 							<div className="space-y-1.5">

@@ -151,9 +151,7 @@ export default async function EnvironmentDetailPage({
 							))}
 						</div>
 					) : (
-						<div className="p-6 text-center text-sm text-muted">
-							No stacks assigned yet.
-						</div>
+						<div className="p-6 text-center text-sm text-muted">No stacks assigned yet.</div>
 					)}
 				</Panel>
 
@@ -174,9 +172,7 @@ export default async function EnvironmentDetailPage({
 							))}
 						</div>
 					) : (
-						<div className="p-6 text-center text-sm text-muted">
-							No deployments yet.
-						</div>
+						<div className="p-6 text-center text-sm text-muted">No deployments yet.</div>
 					)}
 				</Panel>
 			</div>

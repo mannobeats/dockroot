@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { sanitizeInternalRedirectPath } from "@/lib/authorization";
 import {
-	getGitHubProviderConfigById,
 	getGitHubAppInstallUrl,
+	getGitHubProviderConfigById,
 	isGitHubAppConfigured,
 	signGitHubAppState,
 } from "@/lib/github-app";

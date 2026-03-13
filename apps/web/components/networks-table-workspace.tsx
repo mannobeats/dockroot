@@ -106,7 +106,10 @@ export function NetworksTableWorkspace({
 										aria-label={`Select ${network.Name}`}
 										checked={Boolean(selectedNames[network.Name])}
 										onChange={(event) =>
-											setSelectedNames((current) => ({ ...current, [network.Name]: event.target.checked }))
+											setSelectedNames((current) => ({
+												...current,
+												[network.Name]: event.target.checked,
+											}))
 										}
 										className="h-3.5 w-3.5 rounded border-default/30 bg-background"
 									/>
@@ -120,7 +123,9 @@ export function NetworksTableWorkspace({
 									</Link>
 								</DataTableCell>
 								<DataTableCell className="text-xs text-muted">{network.Driver}</DataTableCell>
-								<DataTableCell className="text-xs text-muted">{network.Scope || "local"}</DataTableCell>
+								<DataTableCell className="text-xs text-muted">
+									{network.Scope || "local"}
+								</DataTableCell>
 								<DataTableCell>
 									<div className="flex items-center justify-end gap-0.5">
 										<LinkButton

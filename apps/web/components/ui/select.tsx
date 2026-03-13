@@ -3,7 +3,7 @@ import type { SelectHTMLAttributes } from "react";
 import { cn } from "@/lib/cn";
 
 const selectVariants = cva(
-	"w-full rounded-lg border border-default/12 bg-surface text-sm outline-none transition-all duration-150 focus:border-accent/50 focus:ring-2 focus:ring-accent/10",
+	"w-full rounded-lg border border-default/20 bg-surface text-sm outline-none transition-all duration-150 hover:border-default/30 focus:border-accent/40 focus:ring-2 focus:ring-accent/10",
 	{
 		variants: {
 			size: {

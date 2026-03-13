@@ -8,10 +8,10 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dropdown, DropdownItem, DropdownMenu, DropdownTrigger } from "@/components/ui/dropdown";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Panel } from "@/components/ui/panel";
-import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/cn";
 import { getSocket } from "@/lib/socket-client";
 
@@ -278,7 +278,11 @@ export function ShellWorkspace({
 					const activeSessionId = sessionIdRef.current;
 					writeQueue = writeQueue
 						.then(async () => {
-							if (writeQueueClosed || abortController.signal.aborted || sessionIdRef.current !== activeSessionId) {
+							if (
+								writeQueueClosed ||
+								abortController.signal.aborted ||
+								sessionIdRef.current !== activeSessionId
+							) {
 								return;
 							}
 							await fetch(
@@ -566,19 +570,21 @@ export function ShellWorkspace({
 						</p>
 					</div>
 					<div className="flex flex-wrap items-center gap-2 self-start">
-						<Select
-							id="shell-kind"
-							value={shell}
-							onChange={(event) => setShell(event.target.value as ShellOption)}
-							className="h-7 w-[90px] text-xs"
-							aria-label="Shell type"
-						>
-							{shellOptions.map((option) => (
-								<option key={option.value} value={option.value}>
-									{option.label}
-								</option>
-							))}
-						</Select>
+						<Dropdown className="w-[90px]">
+							<DropdownTrigger size="sm">{shell === "custom" ? "Custom" : shell}</DropdownTrigger>
+							<DropdownMenu>
+								{shellOptions.map((option) => (
+									<DropdownItem
+										key={option.value}
+										value={option.value}
+										selected={shell === option.value}
+										onSelect={(v) => setShell(v as ShellOption)}
+									>
+										{option.label}
+									</DropdownItem>
+								))}
+							</DropdownMenu>
+						</Dropdown>
 						{shell === "custom" ? (
 							<Input
 								value={customShell}

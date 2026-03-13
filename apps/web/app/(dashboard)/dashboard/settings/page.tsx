@@ -20,9 +20,7 @@ export default async function SettingsPage() {
 			<Panel padding="md">
 				<form action={updateGlobalSettingsAction} className="space-y-3">
 					<p className="text-sm font-semibold">Manager URL</p>
-					<p className="text-xs text-muted">
-						Used for runtime links and remote agent callbacks.
-					</p>
+					<p className="text-xs text-muted">Used for runtime links and remote agent callbacks.</p>
 					<Field>
 						<FieldLabel htmlFor="managerUrl">Public manager URL</FieldLabel>
 						<Input
@@ -33,9 +31,7 @@ export default async function SettingsPage() {
 							placeholder="https://your-domain.com"
 							required
 						/>
-						<FieldHint>
-							Use an IP or URL reachable by your browser and agents.
-						</FieldHint>
+						<FieldHint>Use an IP or URL reachable by your browser and agents.</FieldHint>
 					</Field>
 					<FormSubmitButton label="Save" pendingLabel="Saving..." size="sm" />
 				</form>

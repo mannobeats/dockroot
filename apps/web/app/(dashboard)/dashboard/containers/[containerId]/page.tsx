@@ -1,4 +1,13 @@
-import { ArrowLeft, Lock, Logs as LogsIcon, Play, RefreshCw, Square, SquareTerminal, Trash2 } from "lucide-react";
+import {
+	ArrowLeft,
+	Lock,
+	Logs as LogsIcon,
+	Play,
+	RefreshCw,
+	Square,
+	SquareTerminal,
+	Trash2,
+} from "lucide-react";
 import { controlContainerAction } from "@/app/(dashboard)/actions";
 import { ContainerDetailTabs } from "@/components/container-detail-tabs";
 import { DestructiveActionModal } from "@/components/destructive-action-modal";

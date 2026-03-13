@@ -16,7 +16,10 @@ export function MetricCard({
 }) {
 	return (
 		<div
-			className={cn("rounded-lg border border-default/10 bg-surface p-3 shadow-[var(--shadow-xs)]", className)}
+			className={cn(
+				"rounded-lg border border-default/10 bg-surface p-3 shadow-[var(--shadow-xs)]",
+				className,
+			)}
 		>
 			<p className="text-[11px] font-medium uppercase tracking-wide text-muted">{label}</p>
 			<p className={cn("mt-1 text-xl font-bold tracking-tight", valueClassName)}>{value}</p>

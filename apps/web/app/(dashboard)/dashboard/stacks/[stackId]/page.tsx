@@ -90,7 +90,9 @@ export default async function StackWorkspacePage({
 						<div className="mt-0.5 flex flex-wrap items-center gap-1.5">
 							<Badge>{stack.sourceType === "github" ? "GitHub" : "Manual"}</Badge>
 							{stack.sourceType === "github" && stack.githubOwner && stack.githubRepository ? (
-								<Badge>{stack.githubOwner}/{stack.githubRepository}</Badge>
+								<Badge>
+									{stack.githubOwner}/{stack.githubRepository}
+								</Badge>
 							) : null}
 							{stack.sourceType === "github" && stack.githubBranch ? (
 								<Badge>{stack.githubBranch}</Badge>
@@ -112,11 +114,7 @@ export default async function StackWorkspacePage({
 							title={shouldRedeploy ? "Redeploy" : "Deploy"}
 							className="h-8 w-8"
 						>
-							{shouldRedeploy ? (
-								<RotateCcw className="h-4 w-4" />
-							) : (
-								<Play className="h-4 w-4" />
-							)}
+							{shouldRedeploy ? <RotateCcw className="h-4 w-4" /> : <Play className="h-4 w-4" />}
 						</FormSubmitButton>
 					</form>
 					<DestructiveActionModal

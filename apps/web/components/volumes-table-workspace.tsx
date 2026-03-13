@@ -106,7 +106,10 @@ export function VolumesTableWorkspace({
 										aria-label={`Select ${volume.Name}`}
 										checked={Boolean(selectedNames[volume.Name])}
 										onChange={(event) =>
-											setSelectedNames((current) => ({ ...current, [volume.Name]: event.target.checked }))
+											setSelectedNames((current) => ({
+												...current,
+												[volume.Name]: event.target.checked,
+											}))
 										}
 										className="h-3.5 w-3.5 rounded border-default/30 bg-background"
 									/>

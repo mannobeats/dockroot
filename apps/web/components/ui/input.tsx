@@ -3,7 +3,7 @@ import type { InputHTMLAttributes } from "react";
 import { cn } from "@/lib/cn";
 
 const inputVariants = cva(
-	"w-full rounded-lg border bg-surface text-sm outline-none transition-all duration-150 placeholder:text-muted/50 focus:border-accent/50 focus:ring-2 focus:ring-accent/10",
+	"w-full rounded-lg border border-default/20 bg-surface text-sm outline-none transition-all duration-150 placeholder:text-muted/40 hover:border-default/30 focus:border-accent/40 focus:ring-2 focus:ring-accent/10",
 	{
 		variants: {
 			size: {
@@ -36,9 +36,6 @@ type InputProps = InputHTMLAttributes<HTMLInputElement> &
 
 export function Input({ className, inputSize, withIcon, ...props }: InputProps) {
 	return (
-		<input
-			className={cn("border-default/12", inputVariants({ size: inputSize, withIcon }), className)}
-			{...props}
-		/>
+		<input className={cn(inputVariants({ size: inputSize, withIcon }), className)} {...props} />
 	);
 }

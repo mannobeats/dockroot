@@ -15,6 +15,7 @@ import { FormSubmitButton } from "@/components/form-submit-button";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dropdown, DropdownItem, DropdownMenu, DropdownTrigger } from "@/components/ui/dropdown";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -564,50 +565,58 @@ export function StackGitHubForm({
 				<div className="flex items-center justify-between">
 					<p className="text-xs font-medium text-muted">Repository</p>
 					<div className="flex items-center gap-1.5">
-						<Select
-							value={selectedProviderId}
-							onChange={(event) => {
-								setSelectedProviderId(event.target.value);
-								setRepositoryQuery("");
-								setRepositoryId("");
-								setIsLoaded(false);
-								setComposePath("");
-								setComposeYaml("");
-								setEnvFileContent("");
-								setHeadSha("");
-								setLoadError("");
-							}}
-							selectSize="sm"
-							className="h-7 min-w-32 px-2 text-xs"
-						>
-							{providerOptions.map((provider) => (
-								<option key={provider.id} value={provider.id}>
-									{provider.name}
-								</option>
-							))}
-						</Select>
-						<Select
-							value={installationId}
-							onChange={(event) => {
-								setInstallationId(event.target.value);
-								setRepositoryQuery("");
-								setRepositoryId("");
-								setIsLoaded(false);
-								setComposePath("");
-								setComposeYaml("");
-								setEnvFileContent("");
-								setHeadSha("");
-								setLoadError("");
-							}}
-							selectSize="sm"
-							className="h-7 px-2 text-xs"
-						>
-							{visibleInstallations.map((installation) => (
-								<option key={installation.id} value={installation.id}>
-									{installation.accountLogin}
-								</option>
-							))}
-						</Select>
+						<Dropdown className="min-w-32">
+							<DropdownTrigger size="sm">{activeProvider?.name || "Provider"}</DropdownTrigger>
+							<DropdownMenu>
+								{providerOptions.map((provider) => (
+									<DropdownItem
+										key={provider.id}
+										value={provider.id}
+										selected={selectedProviderId === provider.id}
+										onSelect={(id) => {
+											setSelectedProviderId(id);
+											setRepositoryQuery("");
+											setRepositoryId("");
+											setIsLoaded(false);
+											setComposePath("");
+											setComposeYaml("");
+											setEnvFileContent("");
+											setHeadSha("");
+											setLoadError("");
+										}}
+									>
+										{provider.name}
+									</DropdownItem>
+								))}
+							</DropdownMenu>
+						</Dropdown>
+						<Dropdown>
+							<DropdownTrigger size="sm">
+								{activeInstallation?.accountLogin || "Account"}
+							</DropdownTrigger>
+							<DropdownMenu>
+								{visibleInstallations.map((installation) => (
+									<DropdownItem
+										key={installation.id}
+										value={installation.id}
+										selected={installationId === installation.id}
+										onSelect={(id) => {
+											setInstallationId(id);
+											setRepositoryQuery("");
+											setRepositoryId("");
+											setIsLoaded(false);
+											setComposePath("");
+											setComposeYaml("");
+											setEnvFileContent("");
+											setHeadSha("");
+											setLoadError("");
+										}}
+									>
+										{installation.accountLogin}
+									</DropdownItem>
+								))}
+							</DropdownMenu>
+						</Dropdown>
 						<button
 							type="button"
 							onClick={() => {

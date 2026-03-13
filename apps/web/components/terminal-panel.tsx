@@ -190,7 +190,11 @@ export function TerminalPanel({
 					const activeSessionId = sessionIdRef.current;
 					writeQueue = writeQueue
 						.then(async () => {
-							if (writeQueueClosed || abortController.signal.aborted || sessionIdRef.current !== activeSessionId) {
+							if (
+								writeQueueClosed ||
+								abortController.signal.aborted ||
+								sessionIdRef.current !== activeSessionId
+							) {
 								return;
 							}
 							await fetch(
