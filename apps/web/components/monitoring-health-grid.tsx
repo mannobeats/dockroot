@@ -14,20 +14,20 @@ export function MonitoringHealthGrid({
 	return (
 		<Panel padding="md">
 			<div className="flex items-center justify-between">
-				<h3 className="text-sm font-semibold">Scrape targets</h3>
-				<span className="text-xs text-muted">{targets.length} targets</span>
+				<p className="text-xs font-medium text-muted">Scrape targets</p>
+				<span className="text-xs tabular-nums text-muted">{targets.length}</span>
 			</div>
-			<div className="mt-3 grid gap-2 md:grid-cols-2">
+			<div className="mt-2 space-y-1">
 				{targets.map((target) => (
 					<div
 						key={target.scrapeUrl}
-						className="flex items-center justify-between rounded-lg border border-default/8 px-3 py-2"
+						className="flex items-center justify-between rounded-md px-2.5 py-2 transition-colors hover:bg-foreground/[0.02]"
 					>
 						<div className="min-w-0">
 							<p className="text-sm font-medium">{target.job}</p>
-							<p className="truncate text-xs text-muted">{target.scrapeUrl}</p>
+							<p className="truncate text-[11px] text-muted">{target.scrapeUrl}</p>
 							{target.lastError ? (
-								<p className="mt-0.5 text-xs text-danger">{target.lastError}</p>
+								<p className="text-[11px] text-danger">{target.lastError}</p>
 							) : null}
 						</div>
 						<StatusBadge status={target.health === "up" ? "healthy" : target.health} />

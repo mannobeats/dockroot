@@ -59,7 +59,7 @@ export function ActionModal({
 			</Button>
 
 			{isOpen ? (
-				<div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 px-4 py-6 backdrop-blur-sm">
+				<div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 px-4 py-6 backdrop-blur-sm">
 					<button
 						type="button"
 						aria-label="Close modal"
@@ -70,25 +70,21 @@ export function ActionModal({
 						role="dialog"
 						aria-modal="true"
 						aria-label={title}
-						className="relative z-10 w-full max-w-lg overflow-hidden rounded-xl border border-default/15 bg-surface shadow-[var(--shadow-lg)]"
+						className="relative z-10 w-full max-w-md rounded-xl border border-default/10 bg-surface shadow-[var(--shadow-lg)]"
 					>
 						{/* Header */}
-						<div className="flex items-center justify-between border-b border-default/8 px-5 py-4">
-							<div className="flex items-center gap-3">
-								{Icon ? (
-									<div className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent/8 text-accent">
-										<Icon className="h-4.5 w-4.5" />
-									</div>
-								) : null}
+						<div className="flex items-center justify-between border-b border-default/8 px-4 py-3">
+							<div className="flex items-center gap-2.5">
+								{Icon ? <Icon className="h-4 w-4 text-muted" /> : null}
 								<div>
 									<p className="text-sm font-semibold">{title}</p>
-									{description ? <p className="mt-0.5 text-xs text-muted">{description}</p> : null}
+									{description ? <p className="text-[11px] text-muted">{description}</p> : null}
 								</div>
 							</div>
 							<button
 								type="button"
 								onClick={() => setOpen(false)}
-								className="rounded-lg p-1.5 text-muted transition-colors hover:bg-foreground/[0.04] hover:text-foreground"
+								className="rounded-md p-1 text-muted transition-colors hover:text-foreground"
 								aria-label="Close modal"
 							>
 								<X className="h-4 w-4" />
@@ -96,7 +92,7 @@ export function ActionModal({
 						</div>
 
 						{/* Body */}
-						<div className="p-5">{children}</div>
+						<div className="p-4">{children}</div>
 					</div>
 				</div>
 			) : null}

@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CodeEditor } from "@/components/code-editor";
 import { Button } from "@/components/ui/button";
-import { Panel } from "@/components/ui/panel";
 
 export function StackConfigEditor({
 	stackId,
@@ -71,35 +70,28 @@ export function StackConfigEditor({
 	}, []);
 
 	return (
-		<form ref={formRef} action={action} className="space-y-3">
+		<form ref={formRef} action={action} className="space-y-0">
 			<input type="hidden" name="stackId" value={stackId} />
 			<input type="hidden" name="composeYaml" value={composeYaml} />
 			<input type="hidden" name="envFileContent" value={envFileContent} />
 
-			<div className="flex items-center justify-between rounded-lg border border-default/10 bg-surface px-3 py-2">
-				<div>
-					<p className="text-xs font-medium">Stack configuration</p>
-					<p className="text-xs text-muted">
-						Edit compose/env, then save or redeploy. Shortcuts: Cmd/Ctrl+S and Cmd/Ctrl+Shift+S.
-					</p>
-					{disabledReason ? <p className="mt-1 text-xs text-warning">{disabledReason}</p> : null}
-					<p
-						className={`mt-1 inline-flex items-center gap-1 text-[11px] font-medium ${
-							isDirty ? "text-warning" : "text-success"
-						}`}
-					>
-						<span className={`h-1.5 w-1.5 rounded-full ${isDirty ? "bg-warning" : "bg-success"}`} />
-						{isDirty ? "Unsaved changes" : "All changes saved"}
-					</p>
+			{/* Toolbar */}
+			<div className="flex items-center justify-between rounded-t-xl border border-b-0 border-default/10 bg-surface px-3 py-2">
+				<div className="flex items-center gap-2">
+					<span className={`h-1.5 w-1.5 rounded-full ${isDirty ? "bg-warning" : "bg-success"}`} />
+					<span className="text-[11px] text-muted">{isDirty ? "Unsaved" : "Saved"}</span>
+					{disabledReason ? (
+						<span className="text-[11px] text-warning">{disabledReason}</span>
+					) : null}
 				</div>
-				<div className="flex gap-2">
+				<div className="flex gap-1.5">
 					<Button
 						ref={saveButtonRef}
 						type="submit"
 						name="mode"
 						value="save"
-						variant="secondary"
-						size="sm"
+						variant="ghost"
+						size="xs"
 						title="Cmd/Ctrl+S"
 						disabled={disabled}
 					>
@@ -110,7 +102,7 @@ export function StackConfigEditor({
 						type="submit"
 						name="mode"
 						value="redeploy"
-						size="sm"
+						size="xs"
 						title="Cmd/Ctrl+Shift+S"
 						disabled={disabled}
 					>
@@ -119,10 +111,11 @@ export function StackConfigEditor({
 				</div>
 			</div>
 
-			<Panel className="grid gap-0 overflow-hidden xl:grid-cols-[1.4fr_0.6fr]">
-				<div className="min-h-0 border-b border-default/10 xl:border-b-0 xl:border-r">
-					<div className="border-b border-default/5 bg-surface px-4 py-2">
-						<p className="text-xs font-medium">{composeFileName}</p>
+			{/* Editor */}
+			<div className="grid gap-0 overflow-hidden rounded-b-xl border border-default/10 xl:grid-cols-[1.4fr_0.6fr]">
+				<div className="min-h-0 border-b border-default/8 xl:border-b-0 xl:border-r">
+					<div className="border-b border-default/5 bg-foreground/[0.02] px-3 py-1.5">
+						<p className="text-[11px] font-medium text-muted">{composeFileName}</p>
 					</div>
 					<CodeEditor
 						value={composeYaml}
@@ -134,8 +127,8 @@ export function StackConfigEditor({
 					/>
 				</div>
 				<div className="min-h-0">
-					<div className="border-b border-default/5 bg-surface px-4 py-2">
-						<p className="text-xs font-medium">{envFileName || ".env"}</p>
+					<div className="border-b border-default/5 bg-foreground/[0.02] px-3 py-1.5">
+						<p className="text-[11px] font-medium text-muted">{envFileName || ".env"}</p>
 					</div>
 					<CodeEditor
 						value={envFileContent}
@@ -147,7 +140,7 @@ export function StackConfigEditor({
 						placeholder="APP_ENV=production"
 					/>
 				</div>
-			</Panel>
+			</div>
 		</form>
 	);
 }

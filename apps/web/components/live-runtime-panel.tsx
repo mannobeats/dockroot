@@ -5,7 +5,6 @@ import { Area, AreaChart, CartesianGrid, Tooltip, XAxis, YAxis } from "recharts"
 import { io, type Socket } from "socket.io-client";
 import { ChartFrame } from "@/components/chart-frame";
 import { Panel } from "@/components/ui/panel";
-import { UtilizationBar } from "@/components/ui/utilization-bar";
 
 let socket: Socket | null = null;
 
@@ -116,107 +115,79 @@ export function LiveRuntimePanel() {
 
 	return (
 		<Panel padding="md">
-			<div className="flex items-center gap-2">
-				<h3 className="text-sm font-semibold">Live telemetry</h3>
-				<span className="relative flex h-1.5 w-1.5">
-					<span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-					<span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
-				</span>
-			</div>
-			<div className="mt-3 grid gap-3 xl:grid-cols-2">
-				<UtilizationBar
-					label="CPU"
-					valueLabel={`${latest?.cpu ?? 0}%`}
-					percent={latest?.cpu ?? 0}
-				/>
-				<UtilizationBar
-					label="Memory"
-					valueLabel={`${latest?.memory ?? 0}%`}
-					percent={latest?.memory ?? 0}
-				/>
-			</div>
-			<div className="mt-3 grid gap-4 xl:grid-cols-2">
-				<div>
-					<p className="text-xs font-medium text-muted">CPU trend</p>
-					<ChartFrame className="mt-1.5 h-36">
-						{mounted
-							? ({ width, height }) => (
-									<AreaChart width={width} height={height} data={history}>
-										<defs>
-											<linearGradient id="runtime-cpu-fill" x1="0" y1="0" x2="0" y2="1">
-												<stop offset="5%" stopColor="var(--accent)" stopOpacity={0.2} />
-												<stop offset="95%" stopColor="var(--accent)" stopOpacity={0.01} />
-											</linearGradient>
-										</defs>
-										<CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-										<XAxis
-											dataKey="time"
-											tick={{ fontSize: 10, fill: "var(--muted)" }}
-											axisLine={false}
-											tickLine={false}
-										/>
-										<YAxis
-											tick={{ fontSize: 10, fill: "var(--muted)" }}
-											axisLine={false}
-											tickLine={false}
-											domain={[0, "auto"]}
-											tickFormatter={(v) => `${v}%`}
-										/>
-										<Tooltip content={<CustomTooltip />} />
-										<Area
-											type="monotone"
-											dataKey="cpu"
-											name="CPU"
-											fill="url(#runtime-cpu-fill)"
-											stroke="var(--accent)"
-											strokeWidth={1.5}
-										/>
-									</AreaChart>
-								)
-							: () => null}
-					</ChartFrame>
+			<div className="flex items-center justify-between">
+				<div className="flex items-center gap-2">
+					<h3 className="text-xs font-medium text-muted">Live telemetry</h3>
+					<span className="relative flex h-1.5 w-1.5">
+						<span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+						<span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+					</span>
 				</div>
-				<div>
-					<p className="text-xs font-medium text-muted">Memory trend</p>
-					<ChartFrame className="mt-1.5 h-36">
-						{mounted
-							? ({ width, height }) => (
-									<AreaChart width={width} height={height} data={history}>
-										<defs>
-											<linearGradient id="runtime-memory-fill" x1="0" y1="0" x2="0" y2="1">
-												<stop offset="5%" stopColor="var(--success)" stopOpacity={0.2} />
-												<stop offset="95%" stopColor="var(--success)" stopOpacity={0.01} />
-											</linearGradient>
-										</defs>
-										<CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-										<XAxis
-											dataKey="time"
-											tick={{ fontSize: 10, fill: "var(--muted)" }}
-											axisLine={false}
-											tickLine={false}
-										/>
-										<YAxis
-											tick={{ fontSize: 10, fill: "var(--muted)" }}
-											axisLine={false}
-											tickLine={false}
-											domain={[0, "auto"]}
-											tickFormatter={(v) => `${v}%`}
-										/>
-										<Tooltip content={<CustomTooltip />} />
-										<Area
-											type="monotone"
-											dataKey="memory"
-											name="Memory"
-											fill="url(#runtime-memory-fill)"
-											stroke="var(--success)"
-											strokeWidth={1.5}
-										/>
-									</AreaChart>
-								)
-							: () => null}
-					</ChartFrame>
+				<div className="flex items-center gap-5">
+					<div className="flex items-center gap-1.5">
+						<span className="h-1.5 w-1.5 rounded-full bg-accent" />
+						<span className="text-xs text-muted">CPU</span>
+						<span className="font-mono text-xs font-medium tabular-nums">{latest?.cpu ?? 0}%</span>
+					</div>
+					<div className="flex items-center gap-1.5">
+						<span className="h-1.5 w-1.5 rounded-full bg-success" />
+						<span className="text-xs text-muted">Memory</span>
+						<span className="font-mono text-xs font-medium tabular-nums">
+							{latest?.memory ?? 0}%
+						</span>
+					</div>
 				</div>
 			</div>
+			<ChartFrame className="mt-3 h-40">
+				{mounted
+					? ({ width, height }) => (
+							<AreaChart width={width} height={height} data={history}>
+								<defs>
+									<linearGradient id="runtime-cpu-fill" x1="0" y1="0" x2="0" y2="1">
+										<stop offset="5%" stopColor="var(--accent)" stopOpacity={0.12} />
+										<stop offset="95%" stopColor="var(--accent)" stopOpacity={0} />
+									</linearGradient>
+									<linearGradient id="runtime-memory-fill" x1="0" y1="0" x2="0" y2="1">
+										<stop offset="5%" stopColor="var(--success)" stopOpacity={0.12} />
+										<stop offset="95%" stopColor="var(--success)" stopOpacity={0} />
+									</linearGradient>
+								</defs>
+								<CartesianGrid stroke="var(--border)" vertical={false} />
+								<XAxis
+									dataKey="time"
+									tick={{ fontSize: 10, fill: "var(--muted)" }}
+									axisLine={false}
+									tickLine={false}
+								/>
+								<YAxis
+									tick={{ fontSize: 10, fill: "var(--muted)" }}
+									axisLine={false}
+									tickLine={false}
+									domain={[0, "auto"]}
+									tickFormatter={(v) => `${v}%`}
+									width={36}
+								/>
+								<Tooltip content={<CustomTooltip />} />
+								<Area
+									type="monotone"
+									dataKey="cpu"
+									name="CPU"
+									fill="url(#runtime-cpu-fill)"
+									stroke="var(--accent)"
+									strokeWidth={1.5}
+								/>
+								<Area
+									type="monotone"
+									dataKey="memory"
+									name="Memory"
+									fill="url(#runtime-memory-fill)"
+									stroke="var(--success)"
+									strokeWidth={1.5}
+								/>
+							</AreaChart>
+						)
+					: () => null}
+			</ChartFrame>
 		</Panel>
 	);
 }

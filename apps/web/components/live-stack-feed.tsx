@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Badge } from "@/components/ui/badge";
 import { LogBlock } from "@/components/ui/log-block";
-import { Panel } from "@/components/ui/panel";
 import { getSocket } from "@/lib/socket-client";
 
 interface StackEvent {
@@ -64,21 +62,31 @@ export function LiveStackFeed({
 	}, [events, initialLog]);
 
 	return (
-		<Panel className="bg-console p-4">
-			<div className="flex items-center justify-between">
-				<div>
-					<p className="text-sm font-semibold text-console-foreground">Live logs</p>
-					<p className="text-xs text-console-foreground/50">Live deployment output</p>
+		<div className="rounded-xl border border-default/10 bg-console">
+			{/* Terminal header */}
+			<div className="flex items-center justify-between border-b border-default/5 px-3 py-2">
+				<div className="flex items-center gap-2">
+					<div className="flex items-center gap-1">
+						<span className="h-2 w-2 rounded-full bg-danger/60" />
+						<span className="h-2 w-2 rounded-full bg-warning/60" />
+						<span className="h-2 w-2 rounded-full bg-success/60" />
+					</div>
+					<span className="text-[11px] font-medium text-console-foreground/50">Deploy log</span>
 				</div>
-				<Badge variant="accent" className="rounded-full px-2.5 py-1 text-[11px]">
-					Live
-				</Badge>
+				<span className="relative flex items-center gap-1.5">
+					<span className="relative flex h-1.5 w-1.5">
+						<span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+						<span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+					</span>
+					<span className="text-[10px] text-console-foreground/40">Live</span>
+				</span>
 			</div>
-			<div className="mt-4 min-h-[320px]" style={{ height, maxHeight: height }}>
-				<LogBlock className="h-full border-0 bg-transparent p-0 text-console-foreground/90">
-					{feed || "No logs yet."}
+			{/* Terminal body */}
+			<div className="min-h-[320px]" style={{ height, maxHeight: height }}>
+				<LogBlock className="h-full border-0 bg-transparent p-3 text-[12px] text-console-foreground/85">
+					{feed || "Waiting for deployment output..."}
 				</LogBlock>
 			</div>
-		</Panel>
+		</div>
 	);
 }

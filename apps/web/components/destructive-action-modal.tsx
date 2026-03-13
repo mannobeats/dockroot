@@ -118,7 +118,7 @@ export function DestructiveActionModal({
 			</button>
 
 			{open ? (
-				<div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 px-4 backdrop-blur-sm">
+				<div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 px-4 backdrop-blur-sm">
 					<button
 						type="button"
 						aria-label="Close confirmation dialog"
@@ -130,18 +130,18 @@ export function DestructiveActionModal({
 						aria-modal="true"
 						aria-labelledby={titleId}
 						aria-describedby={descriptionId}
-						className="relative z-10 w-full max-w-lg rounded-xl border border-danger/20 bg-surface p-5 shadow-2xl"
+						className="relative z-10 w-full max-w-md rounded-xl border border-danger/15 bg-surface shadow-[var(--shadow-lg)]"
 					>
-						<div className="flex items-start justify-between gap-4">
-							<div className="flex items-start gap-3">
-								<div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-danger/10 text-danger">
-									<AlertTriangle className="h-3.5 w-3.5" />
+						<div className="flex items-start justify-between gap-3 border-b border-default/8 px-4 py-3">
+							<div className="flex items-start gap-2.5">
+								<div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-danger/10 text-danger">
+									<AlertTriangle className="h-3 w-3" />
 								</div>
 								<div>
-									<h2 id={titleId} className="text-base font-semibold">
+									<h2 id={titleId} className="text-sm font-semibold">
 										{title}
 									</h2>
-									<p id={descriptionId} className="mt-1 text-sm text-muted">
+									<p id={descriptionId} className="mt-0.5 text-xs text-muted">
 										{description}
 									</p>
 								</div>
@@ -149,14 +149,14 @@ export function DestructiveActionModal({
 							<button
 								type="button"
 								onClick={resetState}
-								className="rounded-md p-1 text-muted transition-colors hover:bg-foreground/[0.04] hover:text-foreground"
+								className="rounded-md p-1 text-muted transition-colors hover:text-foreground"
 								aria-label="Close"
 							>
 								<X className="h-4 w-4" />
 							</button>
 						</div>
 
-						<form action={action} className="mt-4 space-y-3">
+						<form action={action} className="p-4 space-y-3">
 							<input
 								type="hidden"
 								name="__confirmDestructive"
@@ -170,9 +170,9 @@ export function DestructiveActionModal({
 							})}
 
 							{options.length ? (
-								<div className="space-y-2.5 rounded-lg border border-default/10 p-3" id={optionsId}>
+								<div className="space-y-2 rounded-lg border border-default/8 p-3" id={optionsId}>
 									{options.map((option) => (
-										<label key={option.name} className="flex items-start gap-2.5">
+										<label key={option.name} className="flex items-start gap-2">
 											<input
 												type="checkbox"
 												name={option.name}
@@ -184,12 +184,12 @@ export function DestructiveActionModal({
 														[option.name]: event.target.checked,
 													}))
 												}
-												className="mt-0.5 h-4 w-4 rounded border-default/30 bg-background"
+												className="mt-0.5 h-3.5 w-3.5 rounded border-default/30 bg-background"
 											/>
 											<span>
-												<span className="block text-sm font-medium">{option.label}</span>
+												<span className="block text-xs font-medium">{option.label}</span>
 												{option.description ? (
-													<span className="block text-xs text-muted">{option.description}</span>
+													<span className="block text-[11px] text-muted">{option.description}</span>
 												) : null}
 											</span>
 										</label>
@@ -198,14 +198,14 @@ export function DestructiveActionModal({
 							) : null}
 
 							{requireAcknowledgement ? (
-								<label className="flex items-start gap-2.5 rounded-lg border border-default/10 p-3">
+								<label className="flex items-start gap-2 rounded-lg border border-default/8 p-3">
 									<input
 										type="checkbox"
 										checked={acknowledged}
 										onChange={(event) => setAcknowledged(event.target.checked)}
-										className="mt-0.5 h-4 w-4 rounded border-default/30 bg-background"
+										className="mt-0.5 h-3.5 w-3.5 rounded border-default/30 bg-background"
 									/>
-									<span className="text-sm">{acknowledgementLabel}</span>
+									<span className="text-xs">{acknowledgementLabel}</span>
 								</label>
 							) : null}
 

@@ -5,7 +5,6 @@ import { CodeEditor } from "@/components/code-editor";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Panel } from "@/components/ui/panel";
 import { Select } from "@/components/ui/select";
 
 export function StackComposeForm({
@@ -15,7 +14,7 @@ export function StackComposeForm({
 	environments: Array<{ id: string; name: string; kind: string }>;
 	action: (formData: FormData) => void | Promise<void>;
 }) {
-	const editorHeight = "min(60vh, 640px)";
+	const editorHeight = "min(55vh, 560px)";
 	const [stackName, setStackName] = useState("");
 	const [composeYaml, setComposeYaml] = useState(
 		`services:\n  app:\n    image: nginx:alpine\n    ports:\n      - "8080:80"\n    restart: unless-stopped\n`,
@@ -27,7 +26,7 @@ export function StackComposeForm({
 			<input type="hidden" name="composeYaml" value={composeYaml} />
 			<input type="hidden" name="envFileContent" value={envFileContent} />
 
-			<div className="grid gap-3 sm:grid-cols-2">
+			<div className="grid gap-3 sm:grid-cols-3">
 				<Field>
 					<FieldLabel htmlFor="stack-name">Stack name</FieldLabel>
 					<Input
@@ -40,7 +39,11 @@ export function StackComposeForm({
 					/>
 				</Field>
 				<Field>
-					<FieldLabel htmlFor="environmentId">Target environment</FieldLabel>
+					<FieldLabel htmlFor="stack-description">Description</FieldLabel>
+					<Input id="stack-description" name="description" placeholder="Frontend + API + worker" />
+				</Field>
+				<Field>
+					<FieldLabel htmlFor="environmentId">Environment</FieldLabel>
 					<Select id="environmentId" name="environmentId" required>
 						{environments.map((environment) => (
 							<option key={environment.id} value={environment.id}>
@@ -51,15 +54,10 @@ export function StackComposeForm({
 				</Field>
 			</div>
 
-			<Field>
-				<FieldLabel htmlFor="stack-description">Description</FieldLabel>
-				<Input id="stack-description" name="description" placeholder="Frontend + API + worker" />
-			</Field>
-
-			<Panel className="grid gap-0 overflow-hidden xl:grid-cols-[1.4fr_0.6fr]">
-				<div className="min-h-0 border-b border-default/10 xl:border-b-0 xl:border-r">
-					<div className="border-b border-default/5 bg-surface px-4 py-2">
-						<p className="text-xs font-medium">
+			<div className="grid gap-0 overflow-hidden rounded-lg border border-default/8 xl:grid-cols-[1.4fr_0.6fr]">
+				<div className="min-h-0 border-b border-default/8 xl:border-b-0 xl:border-r">
+					<div className="border-b border-default/5 bg-foreground/[0.02] px-3 py-1.5">
+						<p className="text-[11px] font-medium text-muted">
 							{stackName ? `${stackName}.compose.yaml` : "compose.yaml"}
 						</p>
 					</div>
@@ -67,27 +65,29 @@ export function StackComposeForm({
 						value={composeYaml}
 						onChange={setComposeYaml}
 						language="yaml"
-						minHeight="360px"
+						minHeight="320px"
 						maxHeight={editorHeight}
 						height={editorHeight}
 						placeholder="services:\n  app:\n    image: nginx:alpine"
 					/>
 				</div>
 				<div className="min-h-0">
-					<div className="border-b border-default/5 bg-surface px-4 py-2">
-						<p className="text-xs font-medium">{stackName ? `${stackName}.env` : ".env"}</p>
+					<div className="border-b border-default/5 bg-foreground/[0.02] px-3 py-1.5">
+						<p className="text-[11px] font-medium text-muted">
+							{stackName ? `${stackName}.env` : ".env"}
+						</p>
 					</div>
 					<CodeEditor
 						value={envFileContent}
 						onChange={setEnvFileContent}
 						language="env"
-						minHeight="360px"
+						minHeight="320px"
 						maxHeight={editorHeight}
 						height={editorHeight}
 						placeholder={"APP_ENV=production\nAPP_PORT=8080"}
 					/>
 				</div>
-			</Panel>
+			</div>
 
 			<div className="flex justify-end">
 				<FormSubmitButton label="Create stack" pendingLabel="Creating..." size="sm" />

@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, ExternalLink, Play, RotateCcw, Square } from "lucide-react";
 import { useState } from "react";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { RuntimePortLinks } from "@/components/runtime-port-links";
@@ -17,6 +17,12 @@ interface ContainerDetails {
 }
 
 type FormAction = (formData: FormData) => void | Promise<void>;
+
+const ACTION_ICONS = {
+	start: Play,
+	stop: Square,
+	restart: RotateCcw,
+} as const;
 
 export function StackServicesAccordion({
 	containers,
@@ -48,17 +54,17 @@ export function StackServicesAccordion({
 	if (!containers.length) {
 		return (
 			<EmptyState
-				title="No runtime containers found"
+				title="No runtime containers"
 				description="Deploy to see services here."
-				className="p-8"
+				className="p-6"
 			/>
 		);
 	}
 
 	return (
-		<div className="space-y-2">
+		<div className="space-y-1.5">
 			<div className="flex items-center justify-between">
-				<h2 className="text-sm font-semibold">Services ({containers.length})</h2>
+				<p className="text-xs font-medium text-muted">Services ({containers.length})</p>
 				<button
 					type="button"
 					onClick={() => {
@@ -68,9 +74,9 @@ export function StackServicesAccordion({
 							setOpenIds(new Set(containers.map((c) => c.ID)));
 						}
 					}}
-					className="text-xs text-muted transition-colors hover:text-foreground"
+					className="text-[11px] text-muted transition-colors hover:text-foreground"
 				>
-					{openIds.size === containers.length ? "Collapse all" : "Expand all"}
+					{openIds.size === containers.length ? "Collapse" : "Expand all"}
 				</button>
 			</div>
 			{containers.map((container) => {
@@ -78,67 +84,66 @@ export function StackServicesAccordion({
 				const details = containerDetailsMap[container.ID];
 
 				return (
-					<div key={container.ID} className="rounded-xl border border-default/10 bg-surface">
-						{/* Accordion header */}
+					<div key={container.ID} className="rounded-lg border border-default/10 bg-surface">
 						<button
 							type="button"
 							onClick={() => toggle(container.ID)}
-							className="flex w-full items-center justify-between px-4 py-3 text-left"
+							className="flex w-full items-center justify-between px-3 py-2.5 text-left"
 						>
 							<div className="flex items-center gap-2">
 								{isOpen ? (
-									<ChevronDown className="h-3.5 w-3.5 text-muted" />
+									<ChevronDown className="h-3 w-3 text-muted" />
 								) : (
-									<ChevronRight className="h-3.5 w-3.5 text-muted" />
+									<ChevronRight className="h-3 w-3 text-muted" />
 								)}
-								<p className="text-sm font-medium">{container.Names}</p>
+								<span className="text-sm font-medium">{container.Names}</span>
 								<StatusBadge status={(container.State || "offline").toLowerCase()} />
 							</div>
-							<div className="flex items-center gap-3">
-								{container.Ports ? (
-									<RuntimePortLinks ports={container.Ports} compact managerUrl={managerUrl} />
-								) : null}
-							</div>
+							{container.Ports ? (
+								<RuntimePortLinks ports={container.Ports} compact managerUrl={managerUrl} />
+							) : null}
 						</button>
 
-						{/* Accordion body */}
 						{isOpen ? (
-							<div className="border-t border-default/5 px-4 py-3 space-y-3">
-								{/* Image + Status row */}
-								<div className="flex flex-wrap gap-3 text-xs text-muted">
-									<span>{container.Image}</span>
-									{container.Status ? <span>· {container.Status}</span> : null}
-								</div>
+							<div className="border-t border-default/5 px-3 py-2.5 space-y-2.5">
+								<p className="text-xs text-muted">
+									{container.Image}
+									{container.Status ? ` · ${container.Status}` : ""}
+								</p>
 
-								{/* Actions */}
-								<div className="flex flex-wrap gap-1.5">
-									{(["start", "stop", "restart"] as const).map((action) => (
-										<form key={action} action={controlContainerAction}>
-											<input type="hidden" name="containerId" value={container.ID} />
-											<input type="hidden" name="action" value={action} />
-											<FormSubmitButton
-												label={action}
-												pendingLabel="..."
-												variant="outline"
-												size="xs"
-												className="capitalize"
-											/>
-										</form>
-									))}
+								<div className="flex flex-wrap items-center gap-1">
+									{(["start", "stop", "restart"] as const).map((action) => {
+										const Icon = ACTION_ICONS[action];
+										return (
+											<form key={action} action={controlContainerAction}>
+												<input type="hidden" name="containerId" value={container.ID} />
+												<input type="hidden" name="action" value={action} />
+												<FormSubmitButton
+													label=""
+													pendingLabel=""
+													variant="ghost"
+													size="icon-xs"
+													title={action}
+												>
+													<Icon className="h-3.5 w-3.5" />
+												</FormSubmitButton>
+											</form>
+										);
+									})}
 									<LinkButton
 										href={`/dashboard/containers/${container.ID}${environmentId ? `?environment=${environmentId}` : ""}`}
-										variant="outline"
-										size="xs"
+										variant="ghost"
+										size="icon-xs"
+										title="Open container"
 									>
-										Open container
+										<ExternalLink className="h-3.5 w-3.5" />
 									</LinkButton>
 								</div>
 
-								{/* Container logs preview */}
 								{details?.logs ? (
-									<LogBlock className="max-h-[200px] p-3">{details.logs}</LogBlock>
+									<LogBlock className="max-h-[180px] p-2.5 text-[11px]">{details.logs}</LogBlock>
 								) : (
-									<p className="text-xs text-muted">No logs yet.</p>
+									<p className="text-[11px] text-muted">No logs yet.</p>
 								)}
 							</div>
 						) : null}

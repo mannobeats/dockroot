@@ -54,7 +54,7 @@ export default function Home() {
 				{/* Hero */}
 				<section className="relative overflow-hidden pb-24 pt-28 sm:pb-32 sm:pt-36">
 					<div className="absolute inset-0 -z-10 overflow-hidden">
-						<div className="absolute left-1/2 top-0 h-[600px] w-[900px] -translate-x-1/2 -translate-y-1/3 rounded-full bg-accent/6 blur-3xl" />
+						<div className="absolute left-1/2 top-0 h-[600px] w-[900px] -translate-x-1/2 -translate-y-1/3 rounded-full bg-accent/4 blur-3xl" />
 					</div>
 					<div className="mx-auto max-w-7xl px-4 sm:px-6">
 						<div className="mx-auto max-w-2xl text-center">
