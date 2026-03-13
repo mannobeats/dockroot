@@ -1,24 +1,14 @@
-import { ExternalLink, Trash2 } from "lucide-react";
-import Link from "next/link";
 import {
+	bulkRemoveNetworksAction,
 	createNetworkAction,
 	pruneNetworksAction,
 	removeNetworkAction,
 } from "@/app/(dashboard)/actions";
 import { CreateNetworkModal } from "@/components/create-network-modal";
 import { DestructiveActionModal } from "@/components/destructive-action-modal";
+import { NetworksTableWorkspace } from "@/components/networks-table-workspace";
 import { PageHeader } from "@/components/page-header";
-import {
-	DataTable,
-	DataTableBody,
-	DataTableCell,
-	DataTableEmpty,
-	DataTableHead,
-	DataTableHeader,
-	DataTableRow,
-} from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
-import { LinkButton } from "@/components/ui/link-button";
 import { Panel } from "@/components/ui/panel";
 import { requirePrivilegedPageSession } from "@/lib/authorization";
 import { listNetworksForEnvironment, resolveRuntimeEnvironment } from "@/lib/environment-runtime";
@@ -73,63 +63,12 @@ export default async function NetworksPage({
 					/>
 				</form>
 
-				<DataTable>
-					<DataTableHeader>
-						<tr>
-							<DataTableHead>Name</DataTableHead>
-							<DataTableHead>Driver</DataTableHead>
-							<DataTableHead>Scope</DataTableHead>
-							<DataTableHead className="w-16 text-right">Actions</DataTableHead>
-						</tr>
-					</DataTableHeader>
-					<DataTableBody>
-						{filtered.length ? (
-							filtered.map((network: Record<string, string>) => (
-								<DataTableRow key={`${network.ID}-${network.Name}`}>
-									<DataTableCell>
-										<Link
-											href={`/dashboard/networks/${encodeURIComponent(network.Name)}?environment=${environment.id}`}
-											className="font-medium transition-colors hover:text-accent"
-										>
-											{network.Name}
-										</Link>
-									</DataTableCell>
-									<DataTableCell className="text-xs text-muted">{network.Driver}</DataTableCell>
-									<DataTableCell className="text-xs text-muted">
-										{network.Scope || "local"}
-									</DataTableCell>
-									<DataTableCell>
-										<div className="flex items-center justify-end gap-0.5">
-											<LinkButton
-												href={`/dashboard/networks/${encodeURIComponent(network.Name)}?environment=${environment.id}`}
-												variant="ghost"
-												size="icon-xs"
-												title="Details"
-											>
-												<ExternalLink className="h-3.5 w-3.5" />
-											</LinkButton>
-											<DestructiveActionModal
-												action={removeNetworkAction}
-												title={`Delete network ${network.Name}`}
-												description="This permanently removes the Docker network."
-												triggerLabel=""
-												confirmLabel="Delete"
-												pendingLabel="Deleting..."
-												triggerVariant="ghost"
-												triggerSize="xs"
-												hiddenFields={{ name: network.Name, environmentId: environment.id }}
-												triggerClassName="h-6 w-6 p-0 text-muted hover:text-danger"
-												triggerIcon={<Trash2 className="h-3.5 w-3.5" />}
-											/>
-										</div>
-									</DataTableCell>
-								</DataTableRow>
-							))
-						) : (
-							<DataTableEmpty colSpan={4}>No networks found.</DataTableEmpty>
-						)}
-					</DataTableBody>
-				</DataTable>
+				<NetworksTableWorkspace
+					networks={filtered as Array<Record<string, string>>}
+					environmentId={environment.id}
+					removeNetworkAction={removeNetworkAction}
+					bulkRemoveNetworksAction={bulkRemoveNetworksAction}
+				/>
 			</Panel>
 		</div>
 	);

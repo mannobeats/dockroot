@@ -1,21 +1,9 @@
-import { ExternalLink, Lock, Trash2 } from "lucide-react";
-import Link from "next/link";
-import { pruneImagesAction, pullImageAction, removeImageAction } from "@/app/(dashboard)/actions";
+import { bulkRemoveImagesAction, pruneImagesAction, pullImageAction, removeImageAction } from "@/app/(dashboard)/actions";
 import { DestructiveActionModal } from "@/components/destructive-action-modal";
+import { ImagesTableWorkspace } from "@/components/images-table-workspace";
 import { PageHeader } from "@/components/page-header";
 import { PullImageModal } from "@/components/pull-image-modal";
-import { Badge } from "@/components/ui/badge";
-import {
-	DataTable,
-	DataTableBody,
-	DataTableCell,
-	DataTableEmpty,
-	DataTableHead,
-	DataTableHeader,
-	DataTableRow,
-} from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
-import { LinkButton } from "@/components/ui/link-button";
 import { Panel } from "@/components/ui/panel";
 import { requirePrivilegedPageSession } from "@/lib/authorization";
 import {
@@ -44,8 +32,10 @@ export default async function ImagesPage({
 	const { containers } = await listContainersForEnvironment(session.userId, environment.id);
 	const protectedImageRefs =
 		environment.kind === "local" ? getProtectedImageRefs(containers) : new Set<string>();
-	const containerImageRefs = new Set(
-		containers.map((container: Record<string, string>) => container.Image).filter(Boolean),
+	const containerImageRefs = new Set<string>(
+		containers
+			.map((container: Record<string, string>) => container.Image)
+			.filter((imageRef: string): imageRef is string => Boolean(imageRef)),
 	);
 	const inUseCount = filtered.filter((image: Record<string, string>) =>
 		containerImageRefs.has(`${image.Repository}:${image.Tag}`),
@@ -98,82 +88,20 @@ export default async function ImagesPage({
 						className="border-0 bg-transparent shadow-none focus:ring-0"
 					/>
 				</form>
+				{inUseCount ? (
+					<p className="border-b border-default/8 px-3 py-2 text-xs text-muted">
+						{inUseCount} image(s) are currently in use by containers and cannot be deleted.
+					</p>
+				) : null}
 
-				<DataTable>
-					<DataTableHeader>
-						<tr>
-							<DataTableHead>Image</DataTableHead>
-							<DataTableHead>Tag</DataTableHead>
-							<DataTableHead>Size</DataTableHead>
-							<DataTableHead>Updated</DataTableHead>
-							<DataTableHead className="w-16 text-right">Actions</DataTableHead>
-						</tr>
-					</DataTableHeader>
-					<DataTableBody>
-						{filtered.length ? (
-							filtered.map((image: Record<string, string>) => {
-								const imageRef = `${image.Repository}:${image.Tag}`;
-								const isProtected = protectedImageRefs.has(imageRef);
-								const isInUse = containerImageRefs.has(imageRef);
-								const isDangling = image.Repository === "<none>" || image.Tag === "<none>";
-								return (
-									<DataTableRow key={`${image.ID}-${imageRef}`}>
-										<DataTableCell>
-											<div className="flex items-center gap-1.5">
-												<Link
-													href={`/dashboard/images/${encodeURIComponent(imageRef)}?environment=${environment.id}`}
-													className="font-medium transition-colors hover:text-accent"
-												>
-													{image.Repository}
-												</Link>
-												{isProtected ? (
-													<Badge variant="warning"><Lock className="h-2.5 w-2.5" /></Badge>
-												) : null}
-												<Badge variant={isInUse ? "success" : "default"}>
-													{isInUse ? "In use" : "Unused"}
-												</Badge>
-												{isDangling ? <Badge variant="warning">Dangling</Badge> : null}
-											</div>
-										</DataTableCell>
-										<DataTableCell className="text-xs text-muted">{image.Tag}</DataTableCell>
-										<DataTableCell className="text-xs text-muted">{image.Size}</DataTableCell>
-										<DataTableCell className="text-xs text-muted">
-											{image.CreatedSince}
-										</DataTableCell>
-										<DataTableCell>
-											<div className="flex items-center justify-end gap-0.5">
-												<LinkButton
-													href={`/dashboard/images/${encodeURIComponent(imageRef)}?environment=${environment.id}`}
-													variant="ghost"
-													size="icon-xs"
-													title="Details"
-												>
-													<ExternalLink className="h-3.5 w-3.5" />
-												</LinkButton>
-												<DestructiveActionModal
-													action={removeImageAction}
-													title={`Delete image ${imageRef}`}
-													description="This permanently removes the image from local cache."
-													triggerLabel=""
-													confirmLabel="Delete"
-													pendingLabel="Deleting..."
-													triggerVariant="ghost"
-													triggerSize="xs"
-													disabled={isProtected}
-													hiddenFields={{ imageRef, environmentId: environment.id }}
-													triggerClassName="h-6 w-6 p-0 text-muted hover:text-danger"
-													triggerIcon={<Trash2 className="h-3.5 w-3.5" />}
-												/>
-											</div>
-										</DataTableCell>
-									</DataTableRow>
-								);
-							})
-						) : (
-							<DataTableEmpty colSpan={5}>No images found.</DataTableEmpty>
-						)}
-					</DataTableBody>
-				</DataTable>
+				<ImagesTableWorkspace
+					images={filtered as Array<Record<string, string>>}
+					environmentId={environment.id}
+					removeImageAction={removeImageAction}
+					bulkRemoveImagesAction={bulkRemoveImagesAction}
+					protectedImageRefs={Array.from(protectedImageRefs)}
+					inUseImageRefs={Array.from(containerImageRefs)}
+				/>
 			</Panel>
 		</div>
 	);

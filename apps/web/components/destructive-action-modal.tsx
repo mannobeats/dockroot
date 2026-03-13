@@ -100,6 +100,12 @@ export function DestructiveActionModal({
 		return () => window.removeEventListener("keydown", onKeyDown);
 	}, [open, resetState]);
 
+	useEffect(() => {
+		if (disabled && open) {
+			resetState();
+		}
+	}, [disabled, open, resetState]);
+
 	return (
 		<>
 			<button
@@ -156,7 +162,13 @@ export function DestructiveActionModal({
 							</button>
 						</div>
 
-						<form action={action} className="p-4 space-y-3">
+						<form
+							action={action}
+							className="p-4 space-y-3"
+							onSubmit={() => {
+								setOpen(false);
+							}}
+						>
 							<input
 								type="hidden"
 								name="__confirmDestructive"

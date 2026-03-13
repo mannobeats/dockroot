@@ -103,6 +103,10 @@ export function StacksTableWorkspace({
 	destroyStackAction,
 	adoptComposeProjectAction,
 	controlComposeProjectAction,
+	bulkRestartStacksAction,
+	bulkStopStacksAction,
+	bulkDestroyStacksAction,
+	bulkRemoveStacksAction,
 }: {
 	stacks: StackRow[];
 	includeUntracked: boolean;
@@ -111,9 +115,14 @@ export function StacksTableWorkspace({
 	destroyStackAction: FormAction;
 	adoptComposeProjectAction: FormAction;
 	controlComposeProjectAction: FormAction;
+	bulkRestartStacksAction: FormAction;
+	bulkStopStacksAction: FormAction;
+	bulkDestroyStacksAction: FormAction;
+	bulkRemoveStacksAction: FormAction;
 }) {
 	const [search, setSearch] = useState("");
 	const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
+	const [selectedRowKeys, setSelectedRowKeys] = useState<Record<string, boolean>>({});
 
 	useEffect(() => {
 		function isTypingTarget(target: EventTarget | null) {
@@ -154,6 +163,40 @@ export function StacksTableWorkspace({
 		);
 	}, [search, stacks]);
 
+	const selectableRowKeys = useMemo(
+		() =>
+			filteredStacks
+				.filter((stack) => !stack.isProtected)
+				.map((stack) => `${stack.type}-${stack.slug}`),
+		[filteredStacks],
+	);
+
+	const selectedStacks = useMemo(
+		() =>
+			filteredStacks.filter((stack) => {
+				const rowKey = `${stack.type}-${stack.slug}`;
+				return Boolean(selectedRowKeys[rowKey]);
+			}),
+		[filteredStacks, selectedRowKeys],
+	);
+
+	const selectedTracked = selectedStacks.filter(
+		(stack): stack is TrackedStackRow => stack.type === "tracked" && Boolean(stack.stackId),
+	);
+	const selectedUntracked = selectedStacks.filter(
+		(stack): stack is UntrackedStackRow => stack.type === "untracked",
+	);
+	const selectedUntrackedPayload = JSON.stringify(
+		selectedUntracked.map((stack) => ({
+			projectName: stack.slug,
+			configFiles: stack.configFiles,
+		})),
+	);
+	const selectedTrackedIds = selectedTracked.map((stack) => stack.stackId);
+	const selectedCount = selectedStacks.length;
+	const allSelectableSelected =
+		selectableRowKeys.length > 0 && selectableRowKeys.every((rowKey) => selectedRowKeys[rowKey]);
+
 	return (
 		<Panel>
 			{/* Inline search */}
@@ -167,10 +210,97 @@ export function StacksTableWorkspace({
 					className="border-0 bg-transparent shadow-none focus:ring-0"
 				/>
 			</div>
+			<div className="flex min-h-12 flex-wrap items-center gap-1.5 border-b border-default/8 px-3 py-2">
+				<p className="mr-2 text-xs text-muted">
+					{selectedCount ? `${selectedCount} selected` : "Select one or more stacks"}
+				</p>
+				<form action={bulkRestartStacksAction}>
+					{selectedTrackedIds.map((stackId) => (
+						<input key={`restart-tracked-${stackId}`} type="hidden" name="stackIds" value={stackId} />
+					))}
+					<input type="hidden" name="projects" value={selectedUntrackedPayload} />
+					<FormSubmitButton
+						label={`Restart${selectedCount ? ` (${selectedCount})` : ""}`}
+						pendingLabel="Restarting..."
+						size="xs"
+						variant="outline"
+						disabled={!selectedCount}
+					/>
+				</form>
+				<form action={bulkStopStacksAction}>
+					{selectedTrackedIds.map((stackId) => (
+						<input key={`stop-tracked-${stackId}`} type="hidden" name="stackIds" value={stackId} />
+					))}
+					<input type="hidden" name="projects" value={selectedUntrackedPayload} />
+					<FormSubmitButton
+						label={`Stop${selectedCount ? ` (${selectedCount})` : ""}`}
+						pendingLabel="Stopping..."
+						size="xs"
+						variant="outline"
+						disabled={!selectedCount}
+					/>
+				</form>
+				<DestructiveActionModal
+					action={bulkDestroyStacksAction}
+					title={`Destroy ${selectedCount} stack(s)`}
+					description="This stops and destroys runtime resources for the selected stacks."
+					triggerLabel={`Destroy${selectedCount ? ` (${selectedCount})` : ""}`}
+					confirmLabel="Destroy"
+					pendingLabel="Destroying..."
+					triggerVariant="danger"
+					triggerSize="xs"
+					disabled={!selectedCount}
+					hiddenFields={{
+						stackIds: selectedTrackedIds,
+						projects: selectedUntrackedPayload,
+					}}
+				/>
+				<DestructiveActionModal
+					action={bulkRemoveStacksAction}
+					title={`Remove ${selectedCount} stack(s)`}
+					description="Tracked stacks are removed from Dockroot. Compose stacks are fully removed with containers, volumes, and local images."
+					triggerLabel={`Remove${selectedCount ? ` (${selectedCount})` : ""}`}
+					confirmLabel="Remove"
+					pendingLabel="Removing..."
+					triggerVariant="warning"
+					triggerSize="xs"
+					disabled={!selectedCount}
+					hiddenFields={{
+						stackIds: selectedTrackedIds,
+						projects: selectedUntrackedPayload,
+					}}
+				/>
+				<button
+					type="button"
+					onClick={() => setSelectedRowKeys({})}
+					disabled={!selectedCount}
+					className="ml-auto text-xs text-muted transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+				>
+					Clear
+				</button>
+			</div>
 
 			<DataTable>
 				<DataTableHeader>
 					<tr>
+						<DataTableHead className="w-8">
+							<input
+								type="checkbox"
+								aria-label="Select all stacks"
+								checked={allSelectableSelected}
+								onChange={(event) => {
+									if (!event.target.checked) {
+										setSelectedRowKeys({});
+										return;
+									}
+									setSelectedRowKeys((current) => ({
+										...current,
+										...Object.fromEntries(selectableRowKeys.map((rowKey) => [rowKey, true])),
+									}));
+								}}
+								className="h-3.5 w-3.5 rounded border-default/30 bg-background"
+							/>
+						</DataTableHead>
 						<DataTableHead className="w-8" />
 						<DataTableHead>Name</DataTableHead>
 						<DataTableHead>Status</DataTableHead>
@@ -193,6 +323,21 @@ export function StacksTableWorkspace({
 							return (
 								<Fragment key={rowKey}>
 									<DataTableRow className="align-top">
+										<DataTableCell>
+											<input
+												type="checkbox"
+												aria-label={`Select ${stack.name}`}
+												disabled={stack.isProtected}
+												checked={Boolean(selectedRowKeys[rowKey])}
+												onChange={(event) =>
+													setSelectedRowKeys((current) => ({
+														...current,
+														[rowKey]: event.target.checked,
+													}))
+												}
+												className="h-3.5 w-3.5 rounded border-default/30 bg-background"
+											/>
+										</DataTableCell>
 										<DataTableCell>
 											<button
 												type="button"
@@ -425,7 +570,7 @@ export function StacksTableWorkspace({
 									</DataTableRow>
 									{expanded ? (
 										<DataTableRow>
-											<DataTableCell colSpan={7}>
+											<DataTableCell colSpan={8}>
 												<div className="rounded-lg border border-default/8 bg-background/60 p-3">
 													<div className="mb-2 flex items-center justify-between">
 														<p className="text-[10px] font-semibold uppercase tracking-wider text-muted/60">
@@ -477,7 +622,7 @@ export function StacksTableWorkspace({
 							);
 						})
 					) : (
-						<DataTableEmpty colSpan={7}>No stacks found.</DataTableEmpty>
+						<DataTableEmpty colSpan={8}>No stacks found.</DataTableEmpty>
 					)}
 				</DataTableBody>
 			</DataTable>

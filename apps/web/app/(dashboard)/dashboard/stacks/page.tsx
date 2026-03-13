@@ -1,5 +1,9 @@
 import {
 	adoptComposeProjectAction,
+	bulkDestroyStacksAction,
+	bulkRemoveStacksAction,
+	bulkRestartStacksAction,
+	bulkStopStacksAction,
 	controlComposeProjectAction,
 	createGitHubStackAction,
 	createStackAction,
@@ -98,6 +102,10 @@ export default async function StacksPage({
 				destroyStackAction={destroyStackAction}
 				adoptComposeProjectAction={adoptComposeProjectAction}
 				controlComposeProjectAction={controlComposeProjectAction}
+				bulkRestartStacksAction={bulkRestartStacksAction}
+				bulkStopStacksAction={bulkStopStacksAction}
+				bulkDestroyStacksAction={bulkDestroyStacksAction}
+				bulkRemoveStacksAction={bulkRemoveStacksAction}
 			/>
 		</div>
 	);
