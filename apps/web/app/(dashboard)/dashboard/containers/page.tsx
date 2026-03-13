@@ -123,7 +123,7 @@ export default async function ContainersPage({
 						name="q"
 						defaultValue={params.q || ""}
 						placeholder="Search by name or image..."
-						className="flex-1 border-0 bg-transparent shadow-none focus:ring-0"
+						className="flex-1"
 					/>
 					<Select name="status" defaultValue={status} className="w-32 h-7 text-xs">
 						<option value="all">All</option>

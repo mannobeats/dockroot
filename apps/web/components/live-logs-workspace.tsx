@@ -232,146 +232,150 @@ export function LiveLogsWorkspace({
 	});
 
 	return (
-		<div className="grid gap-5 xl:grid-cols-[300px_1fr]">
-			{/* Container selector */}
-			<Panel padding="md">
-				<div className="flex items-center justify-between">
-					<p className="text-sm font-semibold tracking-tight">Containers</p>
-					<div className="flex items-center gap-1">
-						<Button
-							type="button"
-							onClick={() => {
-								setMode("single");
-								setSelectedIds((current) => (current[0] ? [current[0]] : current));
-							}}
-							variant={mode === "single" ? "secondary" : "outline"}
-							size="xs"
-						>
-							Single
-						</Button>
-						<Button
-							type="button"
-							onClick={() => setMode("grouped")}
-							variant={mode === "grouped" ? "secondary" : "outline"}
-							size="xs"
-						>
-							Grouped
-						</Button>
+		<div className="flex gap-5 xl:flex-row flex-col" style={{ height: "calc(100vh - 180px)" }}>
+			{/* Container selector — fixed height, scrollable list */}
+			<div className="flex w-full flex-col xl:w-[300px] xl:shrink-0">
+				<Panel padding="md" className="flex h-full flex-col overflow-hidden">
+					<div className="flex items-center justify-between">
+						<p className="text-sm font-semibold tracking-tight">Containers</p>
+						<div className="flex items-center gap-1">
+							<Button
+								type="button"
+								onClick={() => {
+									setMode("single");
+									setSelectedIds((current) => (current[0] ? [current[0]] : current));
+								}}
+								variant={mode === "single" ? "secondary" : "outline"}
+								size="xs"
+							>
+								Single
+							</Button>
+							<Button
+								type="button"
+								onClick={() => setMode("grouped")}
+								variant={mode === "grouped" ? "secondary" : "outline"}
+								size="xs"
+							>
+								Grouped
+							</Button>
+						</div>
 					</div>
-				</div>
-				<Input
-					type="search"
-					value={query}
-					onChange={(event) => setQuery(event.target.value)}
-					placeholder="Search..."
-					inputSize="sm"
-					className="mt-3 text-xs"
-					aria-label="Filter containers"
-				/>
-				<div className="mt-3 space-y-1">
-					{filtered.length ? (
-						filtered.map((container) => {
-							const active = selectedIds.includes(container.id);
-							return (
-								<button
-									key={container.id}
-									type="button"
-									onClick={() =>
-										setSelectedIds((current) => {
-											if (mode === "single") {
-												return current[0] === container.id && current.length === 1
-													? current
-													: [container.id];
-											}
+					<Input
+						type="search"
+						value={query}
+						onChange={(event) => setQuery(event.target.value)}
+						placeholder="Search..."
+						inputSize="sm"
+						className="mt-3 text-xs"
+						aria-label="Filter containers"
+					/>
+					<div className="mt-3 flex-1 space-y-1 overflow-y-auto">
+						{filtered.length ? (
+							filtered.map((container) => {
+								const active = selectedIds.includes(container.id);
+								return (
+									<button
+										key={container.id}
+										type="button"
+										onClick={() =>
+											setSelectedIds((current) => {
+												if (mode === "single") {
+													return current[0] === container.id && current.length === 1
+														? current
+														: [container.id];
+												}
 
-											const next = active
-												? current.filter((value) => value !== container.id)
-												: [...current, container.id];
-											return next;
-										})
-									}
-									className={`block w-full rounded-xl px-3.5 py-3 text-left text-xs transition-all duration-200 ${
-										active
-											? "bg-accent/8 text-foreground shadow-[var(--shadow-xs)]"
-											: "text-muted hover:bg-foreground/[0.03] hover:text-foreground"
-									}`}
-								>
-									<div className="flex items-start justify-between gap-2">
-										<div className="min-w-0">
-											<p className="truncate font-medium">{container.name}</p>
-											<p className="mt-0.5 truncate text-muted">{container.image}</p>
+												const next = active
+													? current.filter((value) => value !== container.id)
+													: [...current, container.id];
+												return next;
+											})
+										}
+										className={`block w-full rounded-lg px-3 py-2.5 text-left text-xs transition-all duration-150 ${
+											active
+												? "bg-foreground/[0.06] text-foreground"
+												: "text-muted hover:bg-foreground/[0.03] hover:text-foreground"
+										}`}
+									>
+										<div className="flex items-start justify-between gap-2">
+											<div className="min-w-0">
+												<p className="truncate font-medium">{container.name}</p>
+												<p className="mt-0.5 truncate text-muted">{container.image}</p>
+											</div>
+											<StatusBadge status={container.state} />
 										</div>
-										<StatusBadge status={container.state} />
-									</div>
-								</button>
-							);
-						})
-					) : (
-						<EmptyState
-							title="No matching containers"
-							description="Try a different name, image, or container id."
-							className="p-4"
-						/>
-					)}
-				</div>
-			</Panel>
-
-			{/* Log viewer */}
-			<Panel padding="md">
-				<div className="flex items-center justify-between">
-					<div>
-						<p className="text-sm font-semibold tracking-tight">
-							{mode === "grouped"
-								? "Grouped logs"
-								: containers.find((item) => item.id === selectedIds[0])?.name || "Logs"}
-						</p>
-						<p className="text-xs text-muted">
-							{mode === "grouped" ? `${selectedIds.length} containers` : "docker logs -f"}
-						</p>
+									</button>
+								);
+							})
+						) : (
+							<EmptyState
+								title="No matching containers"
+								description="Try a different name, image, or container id."
+								className="p-4"
+							/>
+						)}
 					</div>
-					<div className="flex flex-wrap items-center gap-1.5">
-						<Button
-							type="button"
-							onClick={() => setPaused((current) => !current)}
-							variant="outline"
-							size="xs"
-						>
-							{paused ? "Resume" : "Pause"}
-						</Button>
-						<Button
-							type="button"
-							onClick={() => setAutoScroll((current) => !current)}
-							variant={autoScroll ? "secondary" : "outline"}
-							size="xs"
-						>
-							Auto-scroll
-						</Button>
-						<Button
-							onClick={() =>
-								setLogsByContainer((current) =>
-									Object.fromEntries(Object.keys(current).map((key) => [key, ""])),
-								)
-							}
-							variant="outline"
-							size="xs"
-						>
-							Clear
-						</Button>
-						{selectedIds[0] ? (
-							<LinkButton
-								href={`/dashboard/shell?target=container&containerId=${selectedIds[0]}${environmentId ? `&environment=${environmentId}` : ""}`}
+				</Panel>
+			</div>
+
+			{/* Log viewer — fills remaining space */}
+			<div className="flex min-h-0 flex-1 flex-col">
+				<Panel padding="md" className="flex h-full flex-col overflow-hidden">
+					<div className="flex items-center justify-between">
+						<div>
+							<p className="text-sm font-semibold tracking-tight">
+								{mode === "grouped"
+									? "Grouped logs"
+									: containers.find((item) => item.id === selectedIds[0])?.name || "Logs"}
+							</p>
+							<p className="text-xs text-muted">
+								{mode === "grouped" ? `${selectedIds.length} containers` : "docker logs -f"}
+							</p>
+						</div>
+						<div className="flex flex-wrap items-center gap-1.5">
+							<Button
+								type="button"
+								onClick={() => setPaused((current) => !current)}
 								variant="outline"
 								size="xs"
 							>
-								Shell
-							</LinkButton>
-						) : null}
+								{paused ? "Resume" : "Pause"}
+							</Button>
+							<Button
+								type="button"
+								onClick={() => setAutoScroll((current) => !current)}
+								variant={autoScroll ? "secondary" : "outline"}
+								size="xs"
+							>
+								Auto-scroll
+							</Button>
+							<Button
+								onClick={() =>
+									setLogsByContainer((current) =>
+										Object.fromEntries(Object.keys(current).map((key) => [key, ""])),
+									)
+								}
+								variant="outline"
+								size="xs"
+							>
+								Clear
+							</Button>
+							{selectedIds[0] ? (
+								<LinkButton
+									href={`/dashboard/shell?target=container&containerId=${selectedIds[0]}${environmentId ? `&environment=${environmentId}` : ""}`}
+									variant="outline"
+									size="xs"
+								>
+									Shell
+								</LinkButton>
+							) : null}
+						</div>
 					</div>
-				</div>
-				<LogBlock ref={logViewportRef} className="mt-3 h-[680px] p-4">
-					{combinedLogs || "No logs available."}
-				</LogBlock>
-			</Panel>
+					<LogBlock ref={logViewportRef} className="mt-3 flex-1 overflow-y-auto p-4">
+						{combinedLogs || "No logs available."}
+					</LogBlock>
+				</Panel>
+			</div>
 		</div>
 	);
 }

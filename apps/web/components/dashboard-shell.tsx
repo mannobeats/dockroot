@@ -18,16 +18,13 @@ export function DashboardShell({
 	return (
 		<div className="flex h-screen overflow-hidden bg-background">
 			<Sidebar
+				environments={environments}
 				defaultEnvironmentId={defaultEnvironmentId}
 				mobileOpen={mobileOpen}
 				onMobileClose={() => setMobileOpen(false)}
 			/>
 			<main className="flex min-w-0 flex-1 flex-col">
-				<Topbar
-					onMenuToggle={() => setMobileOpen((prev) => !prev)}
-					environments={environments}
-					defaultEnvironmentId={defaultEnvironmentId}
-				/>
+				<Topbar onMenuToggle={() => setMobileOpen((prev) => !prev)} />
 				<div className="flex-1 overflow-auto p-4 lg:p-6">
 					<div className="mx-auto max-w-[1400px]">{children}</div>
 				</div>

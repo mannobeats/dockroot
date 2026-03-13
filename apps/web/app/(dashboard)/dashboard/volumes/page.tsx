@@ -59,7 +59,7 @@ export default async function VolumesPage({
 						name="q"
 						defaultValue={params.q || ""}
 						placeholder="Search volumes..."
-						className="border-0 bg-transparent shadow-none focus:ring-0"
+						className="w-full"
 					/>
 				</form>
 

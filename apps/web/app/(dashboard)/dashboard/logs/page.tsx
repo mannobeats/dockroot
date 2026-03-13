@@ -56,7 +56,7 @@ export default async function LogsPage({
 	);
 
 	return (
-		<div className="animate-in space-y-6">
+		<div className="animate-in space-y-4">
 			<PageHeader
 				kicker="Runtime"
 				title="Logs"

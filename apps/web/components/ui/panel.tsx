@@ -11,7 +11,7 @@ const panelVariants = cva("rounded-xl border bg-surface transition-colors durati
 			lg: "p-5",
 		},
 		tone: {
-			default: "border-default/10 shadow-[var(--shadow-xs)]",
+			default: "border-default/18 shadow-[var(--shadow-xs)]",
 			subtle: "border-default/40 shadow-[var(--shadow-sm)]",
 			dashed: "border-dashed border-default/15",
 			ghost: "border-transparent shadow-none bg-transparent",

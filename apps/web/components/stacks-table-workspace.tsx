@@ -237,7 +237,7 @@ export function StacksTableWorkspace({
 					placeholder="Search stacks... (press /)"
 					value={search}
 					onChange={(event) => setSearch(event.target.value)}
-					className="border-0 bg-transparent shadow-none focus:ring-0"
+					className="w-full"
 				/>
 			</div>
 			<div className="flex min-h-12 flex-wrap items-center gap-1.5 border-b border-default/8 px-3 py-2">
