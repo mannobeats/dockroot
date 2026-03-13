@@ -386,6 +386,32 @@ export async function createInstallationAccessToken(
 	});
 }
 
+export async function deleteGitHubAppInstallation(
+	installationId: string,
+	provider?: GitHubProviderConfig,
+) {
+	const authProvider = provider || (await getRequiredGitHubProviderConfig());
+	const headers = new Headers({
+		Accept: "application/vnd.github+json",
+		"X-GitHub-Api-Version": "2022-11-28",
+		"User-Agent": "dockroot-manager",
+		Authorization: `Bearer ${await createGitHubAppJwt(authProvider)}`,
+	});
+
+	const response = await fetch(`${GITHUB_API_BASE}/app/installations/${installationId}`, {
+		method: "DELETE",
+		headers,
+		cache: "no-store",
+	});
+
+	if (!response.ok && response.status !== 404) {
+		const details = await response.text().catch(() => "");
+		throw new Error(
+			`GitHub installation delete failed (${response.status} ${response.statusText})${details ? `: ${details}` : ""}.`,
+		);
+	}
+}
+
 export async function listInstallationRepositories(
 	installationId: string,
 	provider?: GitHubProviderConfig,

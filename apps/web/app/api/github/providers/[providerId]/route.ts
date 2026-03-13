@@ -20,8 +20,12 @@ export async function DELETE(
 	}
 
 	try {
-		await deleteGitHubProvider(userId, providerId.trim());
-		return NextResponse.json({ ok: true });
+		const result = await deleteGitHubProvider(userId, providerId.trim());
+		return NextResponse.json({
+			ok: true,
+			remoteUninstalled: result.remoteUninstalled,
+			remoteFailures: result.remoteFailures,
+		});
 	} catch (error) {
 		return NextResponse.json(
 			{ error: error instanceof Error ? error.message : "Failed to delete provider." },

@@ -219,14 +219,26 @@ export function StackGitHubForm({
 				const response = await fetch(`/api/github/providers/${encodeURIComponent(providerId)}`, {
 					method: "DELETE",
 				});
-				const payload = (await response.json()) as { error?: string };
+				const payload = (await response.json()) as {
+					error?: string;
+					remoteUninstalled?: number;
+					remoteFailures?: string[];
+				};
 				if (!response.ok) {
 					throw new Error(payload.error || "Unable to delete GitHub App.");
 				}
 
 				await refreshProviders();
 				await refreshInstallations();
-				setProviderActionMessage("GitHub App removed.");
+				if ((payload.remoteFailures || []).length) {
+					setProviderActionMessage(
+						`App removed from Dockroot. ${payload.remoteUninstalled || 0} installations uninstalled on GitHub; some failed.`,
+					);
+				} else {
+					setProviderActionMessage(
+						`App removed from Dockroot. ${payload.remoteUninstalled || 0} GitHub installations uninstalled.`,
+					);
+				}
 			} catch (error) {
 				setProviderActionMessage(
 					error instanceof Error ? error.message : "Unable to delete GitHub App.",
@@ -507,7 +519,7 @@ export function StackGitHubForm({
 												void deleteProvider(provider.id);
 											}}
 										>
-											Delete
+											Remove
 										</button>
 									</div>
 									<input
@@ -608,7 +620,7 @@ export function StackGitHubForm({
 							}}
 							disabled={!selectedProviderId}
 						>
-							Delete App
+							Remove App
 						</Button>
 						<Select
 							value={installationId}

@@ -15,9 +15,11 @@ import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { decryptSecret } from "@/lib/crypto-secrets";
 import {
+	deleteGitHubAppInstallation,
 	downloadRepositoryTarball,
 	fetchRepositoryTextFile,
 	getGitHubInstallation,
+	getGitHubProviderConfigById,
 	getInstallationProviderConfigByInternalInstallationId,
 	getRepositoryBranchHeadSha,
 	listChangedFilesForCompare,
@@ -579,9 +581,30 @@ export async function deleteGitHubProvider(_userId: string, providerId: string) 
 		where: eq(githubInstallations.providerId, providerId),
 		columns: {
 			id: true,
+			githubInstallationId: true,
 		},
 	});
 	const installationIds = providerInstallations.map((installation) => installation.id);
+	const providerConfig = await getGitHubProviderConfigById(providerId);
+	let remoteUninstalled = 0;
+	const remoteFailures: string[] = [];
+
+	for (const installation of providerInstallations) {
+		if (!providerConfig) {
+			break;
+		}
+
+		try {
+			await deleteGitHubAppInstallation(installation.githubInstallationId, providerConfig);
+			remoteUninstalled += 1;
+		} catch (error) {
+			remoteFailures.push(
+				error instanceof Error
+					? `${installation.githubInstallationId}: ${error.message}`
+					: `${installation.githubInstallationId}: delete failed`,
+			);
+		}
+	}
 
 	if (installationIds.length) {
 		await db
@@ -601,6 +624,11 @@ export async function deleteGitHubProvider(_userId: string, providerId: string) 
 	await db.delete(githubProviders).where(eq(githubProviders.id, providerId));
 
 	revalidatePath("/dashboard/stacks");
+
+	return {
+		remoteUninstalled,
+		remoteFailures,
+	};
 }
 
 export async function getGitHubProviderStatus() {
