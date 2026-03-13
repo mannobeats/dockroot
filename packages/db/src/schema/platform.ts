@@ -1,5 +1,14 @@
 import { relations } from "drizzle-orm";
-import { boolean, index, pgEnum, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import {
+	boolean,
+	index,
+	integer,
+	pgEnum,
+	pgTable,
+	text,
+	timestamp,
+	uniqueIndex,
+} from "drizzle-orm/pg-core";
 import { user } from "./auth";
 
 export const environmentKindEnum = pgEnum("environment_kind", ["local", "agent"]);
@@ -25,6 +34,21 @@ export const deploymentStatusEnum = pgEnum("deployment_status", [
 	"failed",
 ]);
 export const deploymentOperationEnum = pgEnum("deployment_operation", ["deploy", "destroy"]);
+export const containerUpdateResultEnum = pgEnum("container_update_result", [
+	"not_available",
+	"available",
+	"check_failed",
+	"update_queued",
+	"update_succeeded",
+	"update_failed",
+	"skipped",
+]);
+export const containerUpdateRunTypeEnum = pgEnum("container_update_run_type", ["check", "update"]);
+export const containerUpdateRunStatusEnum = pgEnum("container_update_run_status", [
+	"running",
+	"succeeded",
+	"failed",
+]);
 
 export const githubProviders = pgTable(
 	"github_providers",
@@ -221,6 +245,139 @@ export const githubWebhookDeliveries = pgTable(
 	],
 );
 
+export const containerUpdatePolicies = pgTable(
+	"container_update_policies",
+	{
+		id: text("id").primaryKey(),
+		environmentId: text("environment_id")
+			.notNull()
+			.references(() => environments.id, { onDelete: "cascade" }),
+		containerName: text("container_name").notNull(),
+		checkEnabled: boolean("check_enabled").notNull().default(true),
+		updateEnabled: boolean("update_enabled").notNull().default(false),
+		createdByUserId: text("created_by_user_id")
+			.notNull()
+			.references(() => user.id, { onDelete: "cascade" }),
+		createdAt: timestamp("created_at").notNull(),
+		updatedAt: timestamp("updated_at").notNull(),
+	},
+	(table) => [
+		uniqueIndex("container_update_policies_unique").on(
+			table.environmentId,
+			table.createdByUserId,
+			table.containerName,
+		),
+		index("container_update_policies_environment_idx").on(table.environmentId),
+		index("container_update_policies_user_idx").on(table.createdByUserId),
+	],
+);
+
+export const containerUpdateStates = pgTable(
+	"container_update_states",
+	{
+		id: text("id").primaryKey(),
+		environmentId: text("environment_id")
+			.notNull()
+			.references(() => environments.id, { onDelete: "cascade" }),
+		containerName: text("container_name").notNull(),
+		containerId: text("container_id"),
+		imageRef: text("image_ref"),
+		runningImageId: text("running_image_id"),
+		latestImageId: text("latest_image_id"),
+		updateAvailable: boolean("update_available").notNull().default(false),
+		lastResult: containerUpdateResultEnum("last_result"),
+		lastError: text("last_error"),
+		checkedAt: timestamp("checked_at"),
+		updatedAt: timestamp("updated_at"),
+		createdByUserId: text("created_by_user_id")
+			.notNull()
+			.references(() => user.id, { onDelete: "cascade" }),
+		createdAt: timestamp("created_at").notNull(),
+		modifiedAt: timestamp("modified_at").notNull(),
+	},
+	(table) => [
+		uniqueIndex("container_update_states_unique").on(
+			table.environmentId,
+			table.createdByUserId,
+			table.containerName,
+		),
+		index("container_update_states_environment_idx").on(table.environmentId),
+		index("container_update_states_user_idx").on(table.createdByUserId),
+		index("container_update_states_available_idx").on(table.updateAvailable),
+	],
+);
+
+export const containerUpdateSchedules = pgTable(
+	"container_update_schedules",
+	{
+		id: text("id").primaryKey(),
+		environmentId: text("environment_id")
+			.notNull()
+			.references(() => environments.id, { onDelete: "cascade" }),
+		autoCheckEnabled: boolean("auto_check_enabled").notNull().default(false),
+		autoUpdateEnabled: boolean("auto_update_enabled").notNull().default(false),
+		checkIntervalMinutes: integer("check_interval_minutes").notNull().default(60),
+		updateIntervalMinutes: integer("update_interval_minutes").notNull().default(240),
+		pullBeforeCheck: boolean("pull_before_check").notNull().default(true),
+		updateOnlyRunning: boolean("update_only_running").notNull().default(true),
+		nextCheckAt: timestamp("next_check_at"),
+		nextUpdateAt: timestamp("next_update_at"),
+		lastCheckAt: timestamp("last_check_at"),
+		lastUpdateAt: timestamp("last_update_at"),
+		runningLeaseUntil: timestamp("running_lease_until"),
+		runningWorkerId: text("running_worker_id"),
+		createdByUserId: text("created_by_user_id")
+			.notNull()
+			.references(() => user.id, { onDelete: "cascade" }),
+		createdAt: timestamp("created_at").notNull(),
+		updatedAt: timestamp("updated_at").notNull(),
+	},
+	(table) => [
+		uniqueIndex("container_update_schedules_unique").on(table.environmentId, table.createdByUserId),
+		index("container_update_schedules_environment_idx").on(table.environmentId),
+		index("container_update_schedules_user_idx").on(table.createdByUserId),
+		index("container_update_schedules_next_check_idx").on(table.nextCheckAt),
+		index("container_update_schedules_next_update_idx").on(table.nextUpdateAt),
+	],
+);
+
+export const containerUpdateRuns = pgTable(
+	"container_update_runs",
+	{
+		id: text("id").primaryKey(),
+		scheduleId: text("schedule_id").references(() => containerUpdateSchedules.id, {
+			onDelete: "set null",
+		}),
+		environmentId: text("environment_id")
+			.notNull()
+			.references(() => environments.id, { onDelete: "cascade" }),
+		runType: containerUpdateRunTypeEnum("run_type").notNull(),
+		status: containerUpdateRunStatusEnum("status").notNull().default("running"),
+		totalContainers: integer("total_containers").notNull().default(0),
+		checkedContainers: integer("checked_containers").notNull().default(0),
+		availableContainers: integer("available_containers").notNull().default(0),
+		queuedStacks: integer("queued_stacks").notNull().default(0),
+		updatedContainers: integer("updated_containers").notNull().default(0),
+		skippedContainers: integer("skipped_containers").notNull().default(0),
+		failedContainers: integer("failed_containers").notNull().default(0),
+		summary: text("summary"),
+		error: text("error"),
+		startedAt: timestamp("started_at").notNull(),
+		finishedAt: timestamp("finished_at"),
+		createdByUserId: text("created_by_user_id")
+			.notNull()
+			.references(() => user.id, { onDelete: "cascade" }),
+		createdAt: timestamp("created_at").notNull(),
+		updatedAt: timestamp("updated_at").notNull(),
+	},
+	(table) => [
+		index("container_update_runs_schedule_idx").on(table.scheduleId),
+		index("container_update_runs_environment_idx").on(table.environmentId),
+		index("container_update_runs_user_idx").on(table.createdByUserId),
+		index("container_update_runs_started_idx").on(table.startedAt),
+	],
+);
+
 export const environmentRelations = relations(environments, ({ many, one }) => ({
 	agent: many(agents),
 	stacks: many(stacks),
@@ -294,5 +451,57 @@ export const githubWebhookDeliveryRelations = relations(githubWebhookDeliveries,
 	provider: one(githubProviders, {
 		fields: [githubWebhookDeliveries.providerId],
 		references: [githubProviders.id],
+	}),
+}));
+
+export const containerUpdatePolicyRelations = relations(containerUpdatePolicies, ({ one }) => ({
+	environment: one(environments, {
+		fields: [containerUpdatePolicies.environmentId],
+		references: [environments.id],
+	}),
+	createdBy: one(user, {
+		fields: [containerUpdatePolicies.createdByUserId],
+		references: [user.id],
+	}),
+}));
+
+export const containerUpdateStateRelations = relations(containerUpdateStates, ({ one }) => ({
+	environment: one(environments, {
+		fields: [containerUpdateStates.environmentId],
+		references: [environments.id],
+	}),
+	createdBy: one(user, {
+		fields: [containerUpdateStates.createdByUserId],
+		references: [user.id],
+	}),
+}));
+
+export const containerUpdateScheduleRelations = relations(
+	containerUpdateSchedules,
+	({ many, one }) => ({
+		environment: one(environments, {
+			fields: [containerUpdateSchedules.environmentId],
+			references: [environments.id],
+		}),
+		createdBy: one(user, {
+			fields: [containerUpdateSchedules.createdByUserId],
+			references: [user.id],
+		}),
+		runs: many(containerUpdateRuns),
+	}),
+);
+
+export const containerUpdateRunRelations = relations(containerUpdateRuns, ({ one }) => ({
+	schedule: one(containerUpdateSchedules, {
+		fields: [containerUpdateRuns.scheduleId],
+		references: [containerUpdateSchedules.id],
+	}),
+	environment: one(environments, {
+		fields: [containerUpdateRuns.environmentId],
+		references: [environments.id],
+	}),
+	createdBy: one(user, {
+		fields: [containerUpdateRuns.createdByUserId],
+		references: [user.id],
 	}),
 }));

@@ -873,6 +873,38 @@ io.on("connection", (socket) => {
 
 setInterval(emitRuntimeMetrics(), 5000);
 
+const updateSchedulerWorkerId = `dockroot-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
+
+async function tickContainerUpdateScheduler() {
+	if (!process.env.DOCKROOT_TOKEN_PEPPER) {
+		return;
+	}
+
+	try {
+		await fetch(`${getAppBaseUrl()}/api/internal/updates/tick`, {
+			method: "POST",
+			headers: {
+				"content-type": "application/json",
+				"x-dockroot-internal-token": process.env.DOCKROOT_TOKEN_PEPPER,
+			},
+			body: JSON.stringify({
+				workerId: updateSchedulerWorkerId,
+				maxSchedules: 3,
+			}),
+		});
+	} catch (error) {
+		console.error(
+			"[updates:scheduler] tick failed:",
+			error instanceof Error ? error.message : "unknown error",
+		);
+	}
+}
+
+setInterval(() => {
+	void tickContainerUpdateScheduler();
+}, 30_000).unref?.();
+
 server.listen(port, hostname, () => {
 	console.log(`> Ready on http://${hostname}:${port}`);
+	void tickContainerUpdateScheduler();
 });

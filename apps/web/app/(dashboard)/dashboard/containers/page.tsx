@@ -1,4 +1,12 @@
-import { bulkControlContainerAction, controlContainerAction } from "@/app/(dashboard)/actions";
+import {
+	applyContainerUpdatesAction,
+	bulkApplyContainerUpdatesAction,
+	bulkCheckContainerUpdatesAction,
+	bulkControlContainerAction,
+	checkContainerUpdatesAction,
+	controlContainerAction,
+	setContainerUpdatePolicyAction,
+} from "@/app/(dashboard)/actions";
 import { ContainersTableWorkspace } from "@/components/containers-table-workspace";
 import { LiveRuntimePanel } from "@/components/live-runtime-panel";
 import { PageHeader } from "@/components/page-header";
@@ -6,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Panel } from "@/components/ui/panel";
 import { Select } from "@/components/ui/select";
 import { isPrivilegedRole, requireUserSession } from "@/lib/authorization";
+import { getContainerUpdatePolicyMap, getContainerUpdateStateMap } from "@/lib/container-updates";
 import { resolveRuntimeEnvironment } from "@/lib/environment-runtime";
 import { getGlobalSettings } from "@/lib/platform";
 import { listAccessibleContainersForUser } from "@/lib/runtime-access";
@@ -35,6 +44,38 @@ export default async function ContainersPage({
 	const runningCount = filtered.filter(
 		(container: Record<string, string>) => container.State === "running",
 	).length;
+	const { map: policyMap } = await getContainerUpdatePolicyMap(userId, environment.id);
+	const { map: stateMap } = await getContainerUpdateStateMap(userId, environment.id);
+	const updatePolicyMap: Record<
+		string,
+		{
+			checkEnabled: boolean;
+			updateEnabled: boolean;
+		}
+	> = {};
+	for (const [name, value] of policyMap) {
+		updatePolicyMap[name] = {
+			checkEnabled: value.checkEnabled,
+			updateEnabled: value.updateEnabled,
+		};
+	}
+	const updateStateMap: Record<
+		string,
+		{
+			updateAvailable: boolean;
+			lastResult: string | null;
+			checkedAt: Date | null;
+			updatedAt: Date | null;
+		}
+	> = {};
+	for (const [name, value] of stateMap) {
+		updateStateMap[name] = {
+			updateAvailable: value.updateAvailable,
+			lastResult: value.lastResult,
+			checkedAt: value.checkedAt,
+			updatedAt: value.updatedAt,
+		};
+	}
 	const protectedContainerIds =
 		environment.kind === "local"
 			? filtered
@@ -87,8 +128,15 @@ export default async function ContainersPage({
 					managerUrl={settings.managerUrl || undefined}
 					controlContainerAction={controlContainerAction}
 					bulkControlContainerAction={bulkControlContainerAction}
+					checkContainerUpdatesAction={checkContainerUpdatesAction}
+					bulkCheckContainerUpdatesAction={bulkCheckContainerUpdatesAction}
+					applyContainerUpdatesAction={applyContainerUpdatesAction}
+					bulkApplyContainerUpdatesAction={bulkApplyContainerUpdatesAction}
+					setContainerUpdatePolicyAction={setContainerUpdatePolicyAction}
 					protectedContainerIds={protectedContainerIds}
 					protectedContainerLabels={protectedContainerLabels}
+					updatePolicyMap={updatePolicyMap}
+					updateStateMap={updateStateMap}
 				/>
 			</Panel>
 		</div>

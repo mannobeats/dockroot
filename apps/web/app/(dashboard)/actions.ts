@@ -2,7 +2,17 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { isPrivilegedRole, requirePrivilegedSession, requireUserSession } from "@/lib/authorization";
+import {
+	isPrivilegedRole,
+	requirePrivilegedSession,
+	requireUserSession,
+} from "@/lib/authorization";
+import {
+	runContainerUpdateApply,
+	runContainerUpdateCheck,
+	setContainerUpdatePolicy,
+	updateContainerUpdateSchedule,
+} from "@/lib/container-updates";
 import {
 	controlContainerForEnvironment,
 	createNetworkForEnvironment,
@@ -74,7 +84,11 @@ function requireDestructiveConfirmation(formData: FormData) {
 	}
 }
 
-function normalizeInUseDeleteError(resource: "image" | "volume" | "network", target: string, error: unknown) {
+function normalizeInUseDeleteError(
+	resource: "image" | "volume" | "network",
+	target: string,
+	error: unknown,
+) {
 	const message = error instanceof Error ? error.message : String(error || "");
 	const lower = message.toLowerCase();
 	if (resource === "image") {
@@ -88,12 +102,16 @@ function normalizeInUseDeleteError(resource: "image" | "volume" | "network", tar
 	}
 	if (resource === "volume") {
 		if (lower.includes("volume is in use") || lower.includes("has active mounts")) {
-			return new Error(`Cannot delete volume ${target}: it is currently attached to one or more containers.`);
+			return new Error(
+				`Cannot delete volume ${target}: it is currently attached to one or more containers.`,
+			);
 		}
 	}
 	if (resource === "network") {
 		if (lower.includes("has active endpoints") || lower.includes("resource is in use")) {
-			return new Error(`Cannot delete network ${target}: one or more containers are still connected to it.`);
+			return new Error(
+				`Cannot delete network ${target}: one or more containers are still connected to it.`,
+			);
 		}
 	}
 	return error instanceof Error ? error : new Error(message || "Action failed.");
@@ -104,7 +122,9 @@ function getContainerDisplayName(container: Record<string, string>) {
 }
 
 function listContainersUsingImage(containers: Record<string, string>[], imageRef: string) {
-	return containers.filter((container) => (container.Image || "").trim() === imageRef).map(getContainerDisplayName);
+	return containers
+		.filter((container) => (container.Image || "").trim() === imageRef)
+		.map(getContainerDisplayName);
 }
 
 export async function adoptComposeProjectAction(formData: FormData) {
@@ -319,7 +339,11 @@ export async function bulkRestartStacksAction(formData: FormData) {
 		if (isProtectedManagerStack(project.projectName)) {
 			continue;
 		}
-		await controlComposeProject(project.projectName, project.configFiles?.filter(Boolean) || [], "restart");
+		await controlComposeProject(
+			project.projectName,
+			project.configFiles?.filter(Boolean) || [],
+			"restart",
+		);
 	}
 
 	revalidatePath("/dashboard/stacks");
@@ -356,7 +380,11 @@ export async function bulkStopStacksAction(formData: FormData) {
 		if (isProtectedManagerStack(project.projectName)) {
 			continue;
 		}
-		await controlComposeProject(project.projectName, project.configFiles?.filter(Boolean) || [], "stop");
+		await controlComposeProject(
+			project.projectName,
+			project.configFiles?.filter(Boolean) || [],
+			"stop",
+		);
 	}
 
 	revalidatePath("/dashboard/stacks");
@@ -649,7 +677,9 @@ export async function bulkControlContainerAction(formData: FormData) {
 		environment.kind === "local"
 			? await listContainers()
 			: await listAccessibleContainersForUser(auth.userId, auth.role, environment.id);
-	const allowedIds = new Set(containers.map((entry: Record<string, string>) => entry.ID).filter(Boolean));
+	const allowedIds = new Set(
+		containers.map((entry: Record<string, string>) => entry.ID).filter(Boolean),
+	);
 
 	for (const containerId of Array.from(new Set(containerIds))) {
 		if (!allowedIds.has(containerId)) {
@@ -922,4 +952,234 @@ export async function updateGlobalSettingsAction(formData: FormData) {
 		userId,
 		managerUrl,
 	});
+}
+
+export async function setContainerUpdatePolicyAction(formData: FormData) {
+	const auth = await requireUserSession();
+	const environmentId = getValue(formData, "environmentId") || undefined;
+	const containerName = getValue(formData, "containerName");
+	const mode = getValue(formData, "mode");
+	const enabled = getBoolValue(formData, "enabled");
+
+	if (!containerName || !["check", "update"].includes(mode)) {
+		throw new Error("Container policy input is invalid.");
+	}
+
+	await setContainerUpdatePolicy({
+		userId: auth.userId,
+		environmentId,
+		containerName,
+		checkEnabled: mode === "check" ? enabled : undefined,
+		updateEnabled: mode === "update" ? enabled : undefined,
+	});
+
+	revalidatePath("/dashboard/containers");
+	revalidatePath("/dashboard/schedules");
+}
+
+export async function checkContainerUpdatesAction(formData: FormData) {
+	const auth = await requireUserSession();
+	const environmentId = getValue(formData, "environmentId") || undefined;
+	const containerId = getValue(formData, "containerId");
+
+	if (!containerId) {
+		throw new Error("Container is required.");
+	}
+
+	await requireAccessibleContainerForUser({
+		containerId,
+		userId: auth.userId,
+		role: auth.role,
+		environmentId,
+	});
+	const environment = await resolveRuntimeEnvironment(auth.userId, environmentId);
+	const sourceContainers =
+		environment.kind === "local"
+			? await listContainers()
+			: await listAccessibleContainersForUser(auth.userId, auth.role, environment.id);
+	const container = sourceContainers.find(
+		(entry: Record<string, string>) => entry.ID === containerId,
+	);
+	if (!container) {
+		throw new Error("Container not found.");
+	}
+
+	await runContainerUpdateCheck({
+		userId: auth.userId,
+		environmentId: environment.id,
+		containerNames: [container.Names || container.Name || ""],
+		respectPolicies: false,
+	});
+
+	revalidatePath("/dashboard/containers");
+	revalidatePath("/dashboard/schedules");
+}
+
+export async function bulkCheckContainerUpdatesAction(formData: FormData) {
+	const auth = await requireUserSession();
+	const environmentId = getValue(formData, "environmentId") || undefined;
+	const containerIds = getValues(formData, "containerIds");
+
+	if (!containerIds.length) {
+		throw new Error("At least one container is required.");
+	}
+
+	const environment = await resolveRuntimeEnvironment(auth.userId, environmentId);
+	const sourceContainers =
+		environment.kind === "local"
+			? await listContainers()
+			: await listAccessibleContainersForUser(auth.userId, auth.role, environment.id);
+	const allowedIds = new Set(sourceContainers.map((entry: Record<string, string>) => entry.ID));
+	const containerNames = Array.from(new Set(containerIds))
+		.filter((containerId) => allowedIds.has(containerId))
+		.map((containerId) => {
+			const container = sourceContainers.find(
+				(entry: Record<string, string>) => entry.ID === containerId,
+			);
+			return container?.Names || container?.Name || "";
+		})
+		.filter(Boolean);
+
+	if (!containerNames.length) {
+		throw new Error("No accessible containers selected.");
+	}
+
+	await runContainerUpdateCheck({
+		userId: auth.userId,
+		environmentId: environment.id,
+		containerNames,
+		respectPolicies: false,
+	});
+
+	revalidatePath("/dashboard/containers");
+	revalidatePath("/dashboard/schedules");
+}
+
+export async function applyContainerUpdatesAction(formData: FormData) {
+	const auth = await requireUserSession();
+	const environmentId = getValue(formData, "environmentId") || undefined;
+	const containerId = getValue(formData, "containerId");
+
+	if (!containerId) {
+		throw new Error("Container is required.");
+	}
+
+	await requireAccessibleContainerForUser({
+		containerId,
+		userId: auth.userId,
+		role: auth.role,
+		environmentId,
+	});
+	const environment = await resolveRuntimeEnvironment(auth.userId, environmentId);
+	const sourceContainers =
+		environment.kind === "local"
+			? await listContainers()
+			: await listAccessibleContainersForUser(auth.userId, auth.role, environment.id);
+	const container = sourceContainers.find(
+		(entry: Record<string, string>) => entry.ID === containerId,
+	);
+	if (!container) {
+		throw new Error("Container not found.");
+	}
+
+	await runContainerUpdateApply({
+		userId: auth.userId,
+		environmentId: environment.id,
+		containerNames: [container.Names || container.Name || ""],
+		respectPolicies: false,
+		updateOnlyRunning: getBoolValue(formData, "updateOnlyRunning"),
+	});
+
+	revalidatePath("/dashboard/containers");
+	revalidatePath("/dashboard/stacks");
+	revalidatePath("/dashboard/schedules");
+}
+
+export async function bulkApplyContainerUpdatesAction(formData: FormData) {
+	const auth = await requireUserSession();
+	const environmentId = getValue(formData, "environmentId") || undefined;
+	const containerIds = getValues(formData, "containerIds");
+
+	if (!containerIds.length) {
+		throw new Error("At least one container is required.");
+	}
+
+	const environment = await resolveRuntimeEnvironment(auth.userId, environmentId);
+	const sourceContainers =
+		environment.kind === "local"
+			? await listContainers()
+			: await listAccessibleContainersForUser(auth.userId, auth.role, environment.id);
+	const allowedIds = new Set(sourceContainers.map((entry: Record<string, string>) => entry.ID));
+	const containerNames = Array.from(new Set(containerIds))
+		.filter((containerId) => allowedIds.has(containerId))
+		.map((containerId) => {
+			const container = sourceContainers.find(
+				(entry: Record<string, string>) => entry.ID === containerId,
+			);
+			return container?.Names || container?.Name || "";
+		})
+		.filter(Boolean);
+
+	if (!containerNames.length) {
+		throw new Error("No accessible containers selected.");
+	}
+
+	await runContainerUpdateApply({
+		userId: auth.userId,
+		environmentId: environment.id,
+		containerNames,
+		respectPolicies: false,
+		updateOnlyRunning: getBoolValue(formData, "updateOnlyRunning"),
+	});
+
+	revalidatePath("/dashboard/containers");
+	revalidatePath("/dashboard/stacks");
+	revalidatePath("/dashboard/schedules");
+}
+
+export async function runContainerUpdateCheckNowAction(formData: FormData) {
+	const { userId } = await requirePrivilegedSession();
+	const environmentId = getValue(formData, "environmentId") || undefined;
+	await runContainerUpdateCheck({
+		userId,
+		environmentId,
+		respectPolicies: true,
+	});
+	revalidatePath("/dashboard/containers");
+	revalidatePath("/dashboard/schedules");
+}
+
+export async function runContainerUpdateApplyNowAction(formData: FormData) {
+	const { userId } = await requirePrivilegedSession();
+	const environmentId = getValue(formData, "environmentId") || undefined;
+	await runContainerUpdateApply({
+		userId,
+		environmentId,
+		respectPolicies: true,
+		updateOnlyRunning: true,
+	});
+	revalidatePath("/dashboard/containers");
+	revalidatePath("/dashboard/stacks");
+	revalidatePath("/dashboard/schedules");
+}
+
+export async function updateContainerUpdateScheduleAction(formData: FormData) {
+	const { userId } = await requirePrivilegedSession();
+	const environmentId = getValue(formData, "environmentId");
+	if (!environmentId) {
+		throw new Error("Environment is required.");
+	}
+
+	await updateContainerUpdateSchedule({
+		userId,
+		environmentId,
+		autoCheckEnabled: getBoolValue(formData, "autoCheckEnabled"),
+		autoUpdateEnabled: getBoolValue(formData, "autoUpdateEnabled"),
+		checkIntervalMinutes: Number(getValue(formData, "checkIntervalMinutes") || "60"),
+		updateIntervalMinutes: Number(getValue(formData, "updateIntervalMinutes") || "240"),
+		pullBeforeCheck: getBoolValue(formData, "pullBeforeCheck"),
+		updateOnlyRunning: getBoolValue(formData, "updateOnlyRunning"),
+	});
+
+	revalidatePath("/dashboard/schedules");
 }

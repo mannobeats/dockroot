@@ -1,6 +1,16 @@
 "use client";
 
-import { ExternalLink, Lock, Logs as LogsIcon, Play, RefreshCw, Square, SquareTerminal, Trash2 } from "lucide-react";
+import {
+	ArrowUpCircle,
+	ExternalLink,
+	Lock,
+	Logs as LogsIcon,
+	Play,
+	RefreshCw,
+	Square,
+	SquareTerminal,
+	Trash2,
+} from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { DestructiveActionModal } from "@/components/destructive-action-modal";
@@ -43,16 +53,45 @@ export function ContainersTableWorkspace({
 	managerUrl,
 	controlContainerAction,
 	bulkControlContainerAction,
+	checkContainerUpdatesAction,
+	bulkCheckContainerUpdatesAction,
+	applyContainerUpdatesAction,
+	bulkApplyContainerUpdatesAction,
+	setContainerUpdatePolicyAction,
 	protectedContainerIds,
 	protectedContainerLabels,
+	updatePolicyMap,
+	updateStateMap,
 }: {
 	containers: ContainerRow[];
 	environmentId: string;
 	managerUrl?: string;
 	controlContainerAction: FormAction;
 	bulkControlContainerAction: FormAction;
+	checkContainerUpdatesAction: FormAction;
+	bulkCheckContainerUpdatesAction: FormAction;
+	applyContainerUpdatesAction: FormAction;
+	bulkApplyContainerUpdatesAction: FormAction;
+	setContainerUpdatePolicyAction: FormAction;
 	protectedContainerIds: string[];
 	protectedContainerLabels: Record<string, string>;
+	updatePolicyMap: Record<
+		string,
+		{
+			checkEnabled: boolean;
+			updateEnabled: boolean;
+		}
+	>;
+	updateStateMap: Record<
+		string,
+		{
+			updateAvailable: boolean;
+			lastResult: string | null;
+			lastError?: string | null;
+			checkedAt: string | Date | null;
+			updatedAt: string | Date | null;
+		}
+	>;
 }) {
 	const [selectedIds, setSelectedIds] = useState<Record<string, boolean>>({});
 	const protectedSet = useMemo(() => new Set(protectedContainerIds), [protectedContainerIds]);
@@ -83,13 +122,65 @@ export function ContainersTableWorkspace({
 						: "Select one or more containers"}
 				</p>
 				<form
+					action={bulkCheckContainerUpdatesAction}
+					onSubmit={() => {
+						setSelectedIds({});
+					}}
+				>
+					{selectedContainers.map((container) => (
+						<input
+							key={`check-${container.ID}`}
+							type="hidden"
+							name="containerIds"
+							value={container.ID}
+						/>
+					))}
+					<input type="hidden" name="environmentId" value={environmentId} />
+					<FormSubmitButton
+						label={`Check updates${selectedContainers.length ? ` (${selectedContainers.length})` : ""}`}
+						pendingLabel="Checking..."
+						size="xs"
+						variant="outline"
+						disabled={!selectedContainers.length}
+					/>
+				</form>
+				<form
+					action={bulkApplyContainerUpdatesAction}
+					onSubmit={() => {
+						setSelectedIds({});
+					}}
+				>
+					{selectedContainers.map((container) => (
+						<input
+							key={`apply-${container.ID}`}
+							type="hidden"
+							name="containerIds"
+							value={container.ID}
+						/>
+					))}
+					<input type="hidden" name="environmentId" value={environmentId} />
+					<input type="hidden" name="updateOnlyRunning" value="true" />
+					<FormSubmitButton
+						label={`Update${selectedContainers.length ? ` (${selectedContainers.length})` : ""}`}
+						pendingLabel="Queueing..."
+						size="xs"
+						variant="secondary"
+						disabled={!selectedContainers.length}
+					/>
+				</form>
+				<form
 					action={bulkControlContainerAction}
 					onSubmit={() => {
 						setSelectedIds({});
 					}}
 				>
 					{selectedStopped.map((container) => (
-						<input key={`start-${container.ID}`} type="hidden" name="containerIds" value={container.ID} />
+						<input
+							key={`start-${container.ID}`}
+							type="hidden"
+							name="containerIds"
+							value={container.ID}
+						/>
 					))}
 					<input type="hidden" name="action" value="start" />
 					<input type="hidden" name="environmentId" value={environmentId} />
@@ -108,7 +199,12 @@ export function ContainersTableWorkspace({
 					}}
 				>
 					{selectedRunning.map((container) => (
-						<input key={`stop-${container.ID}`} type="hidden" name="containerIds" value={container.ID} />
+						<input
+							key={`stop-${container.ID}`}
+							type="hidden"
+							name="containerIds"
+							value={container.ID}
+						/>
 					))}
 					<input type="hidden" name="action" value="stop" />
 					<input type="hidden" name="environmentId" value={environmentId} />
@@ -127,7 +223,12 @@ export function ContainersTableWorkspace({
 					}}
 				>
 					{selectedRunning.map((container) => (
-						<input key={`restart-${container.ID}`} type="hidden" name="containerIds" value={container.ID} />
+						<input
+							key={`restart-${container.ID}`}
+							type="hidden"
+							name="containerIds"
+							value={container.ID}
+						/>
 					))}
 					<input type="hidden" name="action" value="restart" />
 					<input type="hidden" name="environmentId" value={environmentId} />
@@ -200,6 +301,7 @@ export function ContainersTableWorkspace({
 						<DataTableHead>Image</DataTableHead>
 						<DataTableHead>State</DataTableHead>
 						<DataTableHead>Status</DataTableHead>
+						<DataTableHead>Updates</DataTableHead>
 						<DataTableHead>Ports</DataTableHead>
 						<DataTableHead className="w-24 text-right">Actions</DataTableHead>
 					</tr>
@@ -212,6 +314,12 @@ export function ContainersTableWorkspace({
 							const composeProject = summarizeComposeProject(container.Labels);
 							const isProtected = protectedSet.has(container.ID);
 							const protectedLabel = protectedContainerLabels[container.ID] || "";
+							const containerName = container.Names || container.Name || "";
+							const updatePolicy = updatePolicyMap[containerName];
+							const updateState = updateStateMap[containerName];
+							const checkEnabled = updatePolicy?.checkEnabled ?? true;
+							const updateEnabled = updatePolicy?.updateEnabled ?? false;
+							const updateAvailable = Boolean(updateState?.updateAvailable);
 
 							return (
 								<DataTableRow key={`${container.ID}-${container.Names}`}>
@@ -244,7 +352,9 @@ export function ContainersTableWorkspace({
 												</Badge>
 											) : null}
 										</div>
-										{composeProject ? <p className="text-[11px] text-muted">{composeProject}</p> : null}
+										{composeProject ? (
+											<p className="text-[11px] text-muted">{composeProject}</p>
+										) : null}
 									</DataTableCell>
 									<DataTableCell className="max-w-[180px] truncate text-xs text-muted">
 										{container.Image}
@@ -252,12 +362,98 @@ export function ContainersTableWorkspace({
 									<DataTableCell>
 										<StatusBadge status={state || "offline"} />
 									</DataTableCell>
-									<DataTableCell className="text-xs text-muted">{container.Status || "—"}</DataTableCell>
+									<DataTableCell className="text-xs text-muted">
+										{container.Status || "—"}
+									</DataTableCell>
+									<DataTableCell>
+										<div className="space-y-1 text-[11px]">
+											<div className="flex items-center gap-1">
+												<form action={setContainerUpdatePolicyAction}>
+													<input type="hidden" name="environmentId" value={environmentId} />
+													<input type="hidden" name="containerName" value={containerName} />
+													<input type="hidden" name="mode" value="check" />
+													<input
+														type="hidden"
+														name="enabled"
+														value={checkEnabled ? "false" : "true"}
+													/>
+													<FormSubmitButton
+														label={checkEnabled ? "Check off" : "Check on"}
+														pendingLabel="..."
+														size="xs"
+														variant="ghost"
+														className="h-6 px-2"
+														disabled={isProtected}
+													/>
+												</form>
+												<form action={setContainerUpdatePolicyAction}>
+													<input type="hidden" name="environmentId" value={environmentId} />
+													<input type="hidden" name="containerName" value={containerName} />
+													<input type="hidden" name="mode" value="update" />
+													<input
+														type="hidden"
+														name="enabled"
+														value={updateEnabled ? "false" : "true"}
+													/>
+													<FormSubmitButton
+														label={updateEnabled ? "Auto off" : "Auto on"}
+														pendingLabel="..."
+														size="xs"
+														variant="ghost"
+														className="h-6 px-2"
+														disabled={isProtected}
+													/>
+												</form>
+											</div>
+											<div className="flex items-center gap-1">
+												{updateAvailable ? (
+													<Badge variant="warning" className="text-[10px]">
+														Update available
+													</Badge>
+												) : (
+													<Badge variant="default" className="text-[10px]">
+														Up to date
+													</Badge>
+												)}
+											</div>
+										</div>
+									</DataTableCell>
 									<DataTableCell>
 										<RuntimePortLinks ports={container.Ports} compact managerUrl={managerUrl} />
 									</DataTableCell>
 									<DataTableCell>
 										<div className="flex items-center justify-end gap-0.5">
+											<form action={checkContainerUpdatesAction}>
+												<input type="hidden" name="containerId" value={container.ID} />
+												<input type="hidden" name="environmentId" value={environmentId} />
+												<FormSubmitButton
+													label=""
+													pendingLabel=""
+													disabled={isProtected}
+													variant="ghost"
+													size="xs"
+													title="Check updates"
+													className="h-7 w-7 p-0"
+												>
+													<RefreshCw className="h-3.5 w-3.5" />
+												</FormSubmitButton>
+											</form>
+											<form action={applyContainerUpdatesAction}>
+												<input type="hidden" name="containerId" value={container.ID} />
+												<input type="hidden" name="environmentId" value={environmentId} />
+												<input type="hidden" name="updateOnlyRunning" value="true" />
+												<FormSubmitButton
+													label=""
+													pendingLabel=""
+													disabled={isProtected || !updateAvailable}
+													variant="ghost"
+													size="xs"
+													title="Queue update"
+													className="h-7 w-7 p-0"
+												>
+													<ArrowUpCircle className="h-3.5 w-3.5" />
+												</FormSubmitButton>
+											</form>
 											{isRunning ? (
 												<>
 													<form action={controlContainerAction}>
@@ -368,7 +564,7 @@ export function ContainersTableWorkspace({
 							);
 						})
 					) : (
-						<DataTableEmpty colSpan={7}>No containers matched the current filters.</DataTableEmpty>
+						<DataTableEmpty colSpan={8}>No containers matched the current filters.</DataTableEmpty>
 					)}
 				</DataTableBody>
 			</DataTable>
