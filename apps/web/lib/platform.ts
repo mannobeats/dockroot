@@ -1786,28 +1786,31 @@ export async function triggerGitHubPushDeploy(input: {
 	}
 	const provider = await getInstallationProviderConfigByInternalInstallationId(installation.id);
 	const nowAt = now();
+	let deliveryProcessed = false;
 
 	if (input.deliveryId) {
 		const existingDelivery = await db.query.githubWebhookDeliveries.findFirst({
 			where: eq(githubWebhookDeliveries.deliveryId, input.deliveryId),
 		});
-		if (existingDelivery) {
+		if (existingDelivery?.processedAt) {
 			return;
 		}
-		await db.insert(githubWebhookDeliveries).values({
-			id: crypto.randomUUID(),
-			providerId: installation.providerId || provider?.id || null,
-			deliveryId: input.deliveryId,
-			event: "push",
-			createdAt: nowAt,
-			processedAt: null,
-		});
+		if (!existingDelivery) {
+			await db.insert(githubWebhookDeliveries).values({
+				id: crypto.randomUUID(),
+				providerId: installation.providerId || provider?.id || null,
+				deliveryId: input.deliveryId,
+				event: "push",
+				createdAt: nowAt,
+				processedAt: null,
+			});
+		}
 	}
 
 	let compareChangedPaths = input.changedPaths || [];
-	if (!compareChangedPaths.length && input.before && input.after) {
+	if (input.before && input.after) {
 		try {
-			compareChangedPaths = await listChangedFilesForCompare({
+			const compareFiles = await listChangedFilesForCompare({
 				installationId: input.githubInstallationId,
 				owner: input.owner,
 				repository: input.repository,
@@ -1815,8 +1818,9 @@ export async function triggerGitHubPushDeploy(input: {
 				head: input.after,
 				provider: provider || undefined,
 			});
+			compareChangedPaths = Array.from(new Set([...compareChangedPaths, ...compareFiles]));
 		} catch {
-			compareChangedPaths = [];
+			compareChangedPaths = Array.from(new Set(compareChangedPaths));
 		}
 	}
 
@@ -1837,75 +1841,104 @@ export async function triggerGitHubPushDeploy(input: {
 			lastAutoDeployedCommitSha: true,
 		},
 	});
+	const stackFailures: string[] = [];
 
 	for (const stack of matchingStacks) {
-		if (
-			input.after &&
-			stack.lastAutoDeployedCommitSha &&
-			stack.lastAutoDeployedCommitSha === input.after
-		) {
-			continue;
-		}
+		try {
+			if (
+				input.after &&
+				stack.lastAutoDeployedCommitSha &&
+				stack.lastAutoDeployedCommitSha === input.after
+			) {
+				continue;
+			}
 
-		const patterns = parseAutoDeployPathPatterns(stack.autoDeployPaths);
-		if (
-			!shouldTriggerAutoDeployForPaths({
-				patterns,
-				changedPaths: compareChangedPaths,
-				composePath: stack.githubPath,
-				envPath: stack.githubEnvPath,
-			})
-		) {
-			continue;
-		}
+			const patterns = parseAutoDeployPathPatterns(stack.autoDeployPaths);
+			if (
+				!shouldTriggerAutoDeployForPaths({
+					patterns,
+					changedPaths: compareChangedPaths,
+					composePath: stack.githubPath,
+					envPath: stack.githubEnvPath,
+				})
+			) {
+				continue;
+			}
 
-		const fullStack = await db.query.stacks.findFirst({
-			where: eq(stacks.id, stack.id),
-			with: {
-				githubInstallation: true,
-			},
-		});
+			const perStackDeliveryId =
+				input.deliveryId && input.deliveryId.trim()
+					? `${input.deliveryId}:${stack.id}`
+					: null;
+			if (perStackDeliveryId) {
+				const existingDeployment = await db.query.deployments.findFirst({
+					where: eq(deployments.webhookDeliveryId, perStackDeliveryId),
+					columns: { id: true },
+				});
+				if (existingDeployment) {
+					continue;
+				}
+			}
 
-		if (
-			fullStack?.githubInstallation &&
-			fullStack.githubOwner &&
-			fullStack.githubRepository &&
-			fullStack.githubBranch &&
-			fullStack.githubPath
-		) {
-			const source = await materializeGitHubStackSource({
-				githubInstallationId: fullStack.githubInstallation.githubInstallationId,
-				owner: fullStack.githubOwner,
-				repository: fullStack.githubRepository,
-				branch: fullStack.githubBranch,
-				composePath: fullStack.githubPath,
-				envPath: fullStack.githubEnvPath || undefined,
-				provider: provider || undefined,
+			const fullStack = await db.query.stacks.findFirst({
+				where: eq(stacks.id, stack.id),
+				with: {
+					githubInstallation: true,
+				},
 			});
 
-			await db
-				.update(stacks)
-				.set({
-					composeYaml: source.composeYaml,
-					envFileContent: source.envFileContent,
-					lastAutoDeployedCommitSha: source.sourceCommitSha,
-					updatedAt: now(),
-				})
-				.where(eq(stacks.id, fullStack.id));
-		}
+			if (
+				fullStack?.githubInstallation &&
+				fullStack.githubOwner &&
+				fullStack.githubRepository &&
+				fullStack.githubBranch &&
+				fullStack.githubPath
+			) {
+				const source = await materializeGitHubStackSource({
+					githubInstallationId: fullStack.githubInstallation.githubInstallationId,
+					owner: fullStack.githubOwner,
+					repository: fullStack.githubRepository,
+					branch: fullStack.githubBranch,
+					composePath: fullStack.githubPath,
+					envPath: fullStack.githubEnvPath || undefined,
+					provider: provider || undefined,
+				});
 
-		await queueOrRunDeployment({
-			stackId: stack.id,
-			userId: stack.createdByUserId,
-			operation: "deploy",
-			webhookDeliveryId: input.deliveryId || null,
-		});
+				await db
+					.update(stacks)
+					.set({
+						composeYaml: source.composeYaml,
+						envFileContent: source.envFileContent,
+						lastAutoDeployedCommitSha: source.sourceCommitSha,
+						updatedAt: now(),
+					})
+					.where(eq(stacks.id, fullStack.id));
+			}
+
+			await queueOrRunDeployment({
+				stackId: stack.id,
+				userId: stack.createdByUserId,
+				operation: "deploy",
+				webhookDeliveryId: perStackDeliveryId,
+			});
+		} catch (error) {
+			stackFailures.push(
+				error instanceof Error ? `${stack.id}: ${error.message}` : `${stack.id}: unknown error`,
+			);
+		}
 	}
 
-	if (input.deliveryId) {
+	if (input.deliveryId && stackFailures.length === 0) {
 		await db
 			.update(githubWebhookDeliveries)
 			.set({ processedAt: now() })
 			.where(eq(githubWebhookDeliveries.deliveryId, input.deliveryId));
+		deliveryProcessed = true;
+	}
+
+	if (input.deliveryId && !deliveryProcessed && stackFailures.length > 0) {
+		console.error("[github-webhook] push deploy failed for one or more stacks", {
+			deliveryId: input.deliveryId,
+			failures: stackFailures,
+		});
 	}
 }

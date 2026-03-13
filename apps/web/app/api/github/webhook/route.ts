@@ -18,10 +18,18 @@ export async function POST(request: Request) {
 	}
 
 	if (event === "installation" || event === "installation_repositories") {
-		const payload = JSON.parse(rawBody) as {
+		let payload: {
 			action?: string;
 			installation?: { id: number };
 		};
+		try {
+			payload = JSON.parse(rawBody) as {
+				action?: string;
+				installation?: { id: number };
+			};
+		} catch {
+			return NextResponse.json({ error: "Invalid JSON payload" }, { status: 400 });
+		}
 		if (payload.installation?.id) {
 			if (payload.action === "deleted" || payload.action === "suspend") {
 				await disconnectGitHubInstallation(
@@ -39,7 +47,7 @@ export async function POST(request: Request) {
 	}
 
 	if (event === "push") {
-		const payload = JSON.parse(rawBody) as {
+		let payload: {
 			installation?: { id: number };
 			before?: string;
 			after?: string;
@@ -54,6 +62,25 @@ export async function POST(request: Request) {
 				removed?: string[];
 			}>;
 		};
+		try {
+			payload = JSON.parse(rawBody) as {
+				installation?: { id: number };
+				before?: string;
+				after?: string;
+				ref?: string;
+				repository?: {
+					name: string;
+					owner?: { login: string };
+				};
+				commits?: Array<{
+					added?: string[];
+					modified?: string[];
+					removed?: string[];
+				}>;
+			};
+		} catch {
+			return NextResponse.json({ error: "Invalid JSON payload" }, { status: 400 });
+		}
 
 		if (
 			payload.installation?.id &&
