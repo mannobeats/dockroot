@@ -616,9 +616,7 @@ export async function deleteGitHubProvider(_userId: string, providerId: string) 
 			})
 			.where(inArray(stacks.githubInstallationId, installationIds));
 
-		await db
-			.delete(githubInstallations)
-			.where(eq(githubInstallations.providerId, providerId));
+		await db.delete(githubInstallations).where(eq(githubInstallations.providerId, providerId));
 	}
 
 	await db.delete(githubProviders).where(eq(githubProviders.id, providerId));
@@ -1866,9 +1864,7 @@ export async function triggerGitHubPushDeploy(input: {
 			}
 
 			const perStackDeliveryId =
-				input.deliveryId && input.deliveryId.trim()
-					? `${input.deliveryId}:${stack.id}`
-					: null;
+				input.deliveryId && input.deliveryId.trim() ? `${input.deliveryId}:${stack.id}` : null;
 			if (perStackDeliveryId) {
 				const existingDeployment = await db.query.deployments.findFirst({
 					where: eq(deployments.webhookDeliveryId, perStackDeliveryId),

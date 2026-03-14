@@ -47,8 +47,6 @@ export function TerminalPanel({
 	} | null>(null);
 	const fitRef = useRef<{ fit: () => void } | null>(null);
 	const sessionIdRef = useRef<string | null>(null);
-	const cursorRef = useRef(0);
-	const pollTimerRef = useRef<number | null>(null);
 	const pendingChunksRef = useRef<Array<{ sessionId: string; data: string }>>([]);
 	const pendingExitsRef = useRef<Array<{ sessionId: string; exitCode?: number }>>([]);
 	const [status, setStatus] = useState("Connecting...");
@@ -94,7 +92,6 @@ export function TerminalPanel({
 			terminal.focus();
 			terminalInstanceRef.current = terminal;
 			fitRef.current = fitAddon;
-			cursorRef.current = 0;
 			pendingChunksRef.current = [];
 			pendingExitsRef.current = [];
 
@@ -121,180 +118,16 @@ export function TerminalPanel({
 
 			const resizeObserver = new ResizeObserver(() => {
 				fitAddon.fit();
-				if (sessionIdRef.current && environmentId) {
-					void fetch(
-						`/api/runtime/terminal/${encodeURIComponent(sessionIdRef.current)}?environmentId=${encodeURIComponent(environmentId)}`,
-						{
-							method: "POST",
-							headers: {
-								"content-type": "application/json",
-							},
-							body: JSON.stringify({
-								type: "resize",
-								cols: terminal.cols,
-								rows: terminal.rows,
-							}),
-						},
-					);
+				if (sessionIdRef.current) {
+					const socket = getSocket();
+					socket.emit("terminal:resize", {
+						sessionId: sessionIdRef.current,
+						cols: terminal.cols,
+						rows: terminal.rows,
+					});
 				}
 			});
 			resizeObserver.observe(terminalRef.current);
-
-			if (environmentId) {
-				const abortController = new AbortController();
-
-				const createResponse = await fetch("/api/runtime/terminal", {
-					method: "POST",
-					headers: {
-						"content-type": "application/json",
-					},
-					body: JSON.stringify({
-						target,
-						containerId,
-						environmentId,
-						shell,
-						customShell,
-						cols: terminal.cols,
-						rows: terminal.rows,
-					}),
-					signal: abortController.signal,
-				});
-
-				if (abortController.signal.aborted) {
-					resizeObserver.disconnect();
-					return;
-				}
-
-				const createPayload = (await createResponse.json()) as {
-					sessionId?: string;
-					error?: string;
-				};
-
-				if (!createResponse.ok || !createPayload.sessionId) {
-					setStatus(createPayload.error || "Unable to start shell session.");
-					terminal.writeln(`\r\n${createPayload.error || "Unable to start shell session."}`);
-					resizeObserver.disconnect();
-					return;
-				}
-
-				sessionIdRef.current = createPayload.sessionId;
-				setStatus(`Connected to ${label}`);
-				let writeQueue: Promise<void> = Promise.resolve();
-				let writeQueueClosed = false;
-
-				const disposable = terminal.onData((data) => {
-					if (!sessionIdRef.current || !environmentId || abortController.signal.aborted) {
-						return;
-					}
-
-					const activeSessionId = sessionIdRef.current;
-					writeQueue = writeQueue
-						.then(async () => {
-							if (
-								writeQueueClosed ||
-								abortController.signal.aborted ||
-								sessionIdRef.current !== activeSessionId
-							) {
-								return;
-							}
-							await fetch(
-								`/api/runtime/terminal/${encodeURIComponent(activeSessionId)}?environmentId=${encodeURIComponent(environmentId)}`,
-								{
-									method: "POST",
-									headers: {
-										"content-type": "application/json",
-									},
-									body: JSON.stringify({
-										type: "input",
-										data,
-									}),
-									signal: abortController.signal,
-								},
-							);
-						})
-						.catch(() => {});
-				});
-
-				const poll = async () => {
-					if (abortController.signal.aborted || !sessionIdRef.current || !environmentId) {
-						return;
-					}
-
-					try {
-						const response = await fetch(
-							`/api/runtime/terminal/${encodeURIComponent(sessionIdRef.current)}?environmentId=${encodeURIComponent(environmentId)}&cursor=${cursorRef.current}&waitMs=1200`,
-							{
-								cache: "no-store",
-								signal: abortController.signal,
-							},
-						);
-
-						if (abortController.signal.aborted) {
-							return;
-						}
-
-						const payload = (await response.json()) as {
-							chunks?: string[];
-							cursor?: number;
-							closed?: boolean;
-							exitCode?: number;
-							error?: string;
-						};
-
-						if (!response.ok) {
-							setStatus(payload.error || "Shell disconnected.");
-							return;
-						}
-
-						for (const chunk of payload.chunks || []) {
-							terminal.write(sanitizeTerminalChunk(chunk));
-						}
-						cursorRef.current = Number(payload.cursor || cursorRef.current);
-
-						if (payload.closed) {
-							setStatus(`Session closed (${payload.exitCode ?? 0})`);
-							terminal.writeln(`\r\nSession closed (${payload.exitCode ?? 0}).`);
-							return;
-						}
-
-						if (!abortController.signal.aborted) {
-							const hasNewData = (payload.chunks?.length || 0) > 0;
-							pollTimerRef.current = window.setTimeout(poll, hasNewData ? 40 : 140);
-						}
-					} catch {
-						if (!abortController.signal.aborted) {
-							setStatus("Shell disconnected.");
-						}
-					}
-				};
-
-				pollTimerRef.current = window.setTimeout(poll, 100);
-
-				cleanup = () => {
-					abortController.abort();
-					writeQueueClosed = true;
-					disposable.dispose();
-					resizeObserver.disconnect();
-					if (pollTimerRef.current) {
-						window.clearTimeout(pollTimerRef.current);
-						pollTimerRef.current = null;
-					}
-					if (sessionIdRef.current && environmentId) {
-						void fetch(
-							`/api/runtime/terminal/${encodeURIComponent(sessionIdRef.current)}?environmentId=${encodeURIComponent(environmentId)}`,
-							{
-								method: "DELETE",
-							},
-						);
-					}
-					terminal.dispose();
-					terminalInstanceRef.current = null;
-					fitRef.current = null;
-					sessionIdRef.current = null;
-				};
-
-				return;
-			}
 
 			const socket = getSocket();
 
@@ -328,6 +161,7 @@ export function TerminalPanel({
 				{
 					target,
 					containerId,
+					environmentId,
 					shell,
 					customShell,
 					cols: terminal.cols,

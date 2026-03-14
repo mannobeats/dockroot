@@ -102,11 +102,12 @@ async function fetchAgentText(
 	return (await fetchAgent(environment, path, init)).text();
 }
 
-async function fetchLocalTerminal(path: string, init?: RequestInit) {
+async function fetchLocalTerminal(userId: string, path: string, init?: RequestInit) {
 	const response = await fetch(`http://127.0.0.1:${process.env.PORT || 3080}${path}`, {
 		...init,
 		headers: {
 			"x-dockroot-internal-token": process.env.DOCKROOT_TOKEN_PEPPER || "",
+			"x-dockroot-user-id": userId,
 			...(init?.headers || {}),
 		},
 		cache: "no-store",
@@ -323,7 +324,7 @@ export async function createTerminalSessionForEnvironment(input: {
 }) {
 	const environment = await getEnvironmentRecord(input.environmentId, input.userId);
 	if (environment.kind === "local") {
-		return fetchLocalTerminal("/internal/local-terminal/sessions", {
+		return fetchLocalTerminal(input.userId, "/internal/local-terminal/sessions", {
 			method: "POST",
 			headers: {
 				"content-type": "application/json",
@@ -366,6 +367,7 @@ export async function readTerminalSessionForEnvironment(
 	const environment = await getEnvironmentRecord(environmentId, userId);
 	if (environment.kind === "local") {
 		return fetchLocalTerminal(
+			userId,
 			`/internal/local-terminal/sessions/${encodeURIComponent(sessionId)}?cursor=${Number(cursor || 0)}&waitMs=${Number(waitMs || 0)}`,
 		);
 	}
@@ -385,6 +387,7 @@ export async function writeTerminalInputForEnvironment(input: {
 	const environment = await getEnvironmentRecord(input.environmentId, input.userId);
 	if (environment.kind === "local") {
 		return fetchLocalTerminal(
+			input.userId,
 			`/internal/local-terminal/sessions/${encodeURIComponent(input.sessionId)}`,
 			{
 				method: "POST",
@@ -415,6 +418,7 @@ export async function resizeTerminalSessionForEnvironment(input: {
 	const environment = await getEnvironmentRecord(input.environmentId, input.userId);
 	if (environment.kind === "local") {
 		return fetchLocalTerminal(
+			input.userId,
 			`/internal/local-terminal/sessions/${encodeURIComponent(input.sessionId)}`,
 			{
 				method: "POST",
@@ -443,6 +447,7 @@ export async function closeTerminalSessionForEnvironment(
 	const environment = await getEnvironmentRecord(environmentId, userId);
 	if (environment.kind === "local") {
 		return fetchLocalTerminal(
+			userId,
 			`/internal/local-terminal/sessions/${encodeURIComponent(sessionId)}`,
 			{
 				method: "DELETE",

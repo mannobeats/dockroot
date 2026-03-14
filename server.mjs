@@ -1,12 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { execFile, spawn } from "node:child_process";
-import { chmodSync, existsSync, statSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { createServer } from "node:http";
-import { createRequire } from "node:module";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 import { promisify } from "node:util";
 import postgres from "postgres";
-import * as pty from "node-pty";
 import next from "next";
 import { Server as SocketIOServer } from "socket.io";
 import { applyRuntimeBootstrap } from "./scripts/bootstrap-runtime.mjs";
@@ -48,42 +46,13 @@ const dockerBinary = resolveExecutable(process.env.DOCKER_BIN, [
 	"/opt/homebrew/bin/docker",
 	"docker",
 ]);
-const supportedShells = new Set(["sh", "bash", "ash", "zsh"]);
-const defaultShellOrder = ["sh", "bash", "ash", "zsh"];
 const prometheusUrl = process.env.PROMETHEUS_URL || "http://localhost:9090";
-let ptyHelperPermissionsChecked = false;
 
 /** Maximum concurrent socket terminal sessions per user. */
 const MAX_SOCKET_SESSIONS_PER_USER = 5;
 
 /** Auto-close socket terminal sessions after 10 minutes of inactivity. */
 const SOCKET_IDLE_TIMEOUT_MS = 10 * 60 * 1000;
-
-function ensurePtySpawnHelperExecutable() {
-	if (ptyHelperPermissionsChecked) {
-		return;
-	}
-	ptyHelperPermissionsChecked = true;
-
-	try {
-		const require = createRequire(import.meta.url);
-		const utils = require("node-pty/lib/utils");
-		const utilsPath = require.resolve("node-pty/lib/utils");
-		const native = utils?.loadNativeModule?.("pty");
-		const nativeDir = native?.dir ? resolve(dirname(utilsPath), native.dir) : null;
-		const helperPath = nativeDir ? resolve(nativeDir, "spawn-helper") : null;
-		if (!helperPath || !existsSync(helperPath)) {
-			return;
-		}
-
-		const mode = statSync(helperPath).mode & 0o777;
-		if ((mode & 0o111) === 0) {
-			chmodSync(helperPath, mode | 0o755);
-		}
-	} catch {
-		// socket terminal falls back to compatibility mode when PTY remains unavailable
-	}
-}
 function resolveExecutable(primaryCandidate, fallbackCandidates) {
 	for (const candidate of [primaryCandidate, ...fallbackCandidates]) {
 		if (!candidate) {
@@ -147,61 +116,6 @@ function clampTerminalColumns(value) {
 function clampTerminalRows(value) {
 	const parsed = Number(value || 36);
 	return Number.isFinite(parsed) ? Math.max(12, Math.min(120, Math.floor(parsed))) : 36;
-}
-
-function isSafeCustomShell(value) {
-	return typeof value === "string" && /^[A-Za-z0-9_./-]{1,120}$/.test(value);
-}
-
-function escapeSingleQuotes(value) {
-	return value.replaceAll("'", "'\"'\"'");
-}
-
-function resolveShellCandidates(payload) {
-	const requestedShell =
-		typeof payload?.shell === "string" ? payload.shell.trim().toLowerCase() : defaultShellOrder[0];
-	const customShell = typeof payload?.customShell === "string" ? payload.customShell.trim() : "";
-	if (requestedShell === "custom" && !isSafeCustomShell(customShell)) {
-		throw new Error("Invalid custom shell.");
-	}
-
-	const candidates = [];
-	if (requestedShell === "custom" && customShell) {
-		candidates.push(customShell);
-	}
-	if (supportedShells.has(requestedShell)) {
-		candidates.push(requestedShell);
-	}
-	for (const candidate of defaultShellOrder) {
-		candidates.push(candidate);
-	}
-
-	return Array.from(new Set(candidates));
-}
-
-function buildShellProbeScript(candidates) {
-	const tokens = candidates.map((candidate) => `'${escapeSingleQuotes(candidate)}'`).join(" ");
-	return `for shell_bin in ${tokens}; do if command -v "$shell_bin" >/dev/null 2>&1; then printf "%s" "$shell_bin"; exit 0; fi; done; exit 127`;
-}
-
-async function resolveContainerShell(containerId, candidates) {
-	try {
-		const probe = await execFileAsync(
-			dockerBinary,
-			["exec", containerId, "sh", "-lc", buildShellProbeScript(candidates)],
-			{
-				maxBuffer: 1024 * 64,
-			},
-		);
-		const resolved = probe.stdout.trim();
-		if (resolved) {
-			return resolved;
-		}
-	} catch {
-		// Fall through to first viable candidate.
-	}
-
-	return candidates[0] || "sh";
 }
 
 async function readJsonBody(req) {
@@ -448,7 +362,16 @@ const server = createServer(async (req, res) => {
 
 			if (req.method === "POST") {
 				const payload = await readJsonBody(req);
-				sendJson(res, 200, await createLocalTerminalSession(payload));
+				const userIdHeader = String(req.headers["x-dockroot-user-id"] || "").trim();
+				const userId =
+					typeof payload.userId === "string" && payload.userId.trim()
+						? payload.userId.trim()
+						: userIdHeader;
+				if (!userId) {
+					sendJson(res, 403, { error: "Missing terminal owner." });
+					return;
+				}
+				sendJson(res, 200, await createLocalTerminalSession({ ...payload, userId }));
 				return;
 			}
 		}
@@ -461,6 +384,11 @@ const server = createServer(async (req, res) => {
 			}
 
 			const sessionId = decodeURIComponent(sessionMatch[1]);
+			const userId = String(req.headers["x-dockroot-user-id"] || "").trim();
+			if (!userId || !verifySessionOwnership(sessionId, userId)) {
+				sendJson(res, 403, { error: "Forbidden" });
+				return;
+			}
 
 			try {
 				if (req.method === "GET") {
@@ -533,7 +461,23 @@ io.use(async (socket, nextMiddleware) => {
 });
 
 io.on("connection", (socket) => {
-	function closeTerminalSession(sessionId) {
+	const authCookie = String(socket.request.headers.cookie || "");
+
+	async function requestTerminalApi(path, init = {}) {
+		const response = await fetch(`${getAppBaseUrl()}${path}`, {
+			...init,
+			headers: {
+				accept: "application/json",
+				cookie: authCookie,
+				...(init.headers || {}),
+			},
+			cache: "no-store",
+		});
+		const payload = await response.json().catch(() => ({}));
+		return { ok: response.ok, payload };
+	}
+
+	function scheduleTerminalIdleTimeout(sessionId) {
 		const session = terminalSessions.get(sessionId);
 		if (!session) {
 			return;
@@ -543,8 +487,46 @@ io.on("connection", (socket) => {
 			clearTimeout(session.idleTimer);
 			session.idleTimer = null;
 		}
-		session.kill();
+
+		session.idleTimer = setTimeout(() => {
+			socket.emit("terminal:exit", {
+				sessionId,
+				exitCode: -1,
+			});
+			void closeTerminalSession(sessionId);
+		}, SOCKET_IDLE_TIMEOUT_MS);
+		session.idleTimer.unref?.();
+	}
+
+	async function closeTerminalSession(sessionId, options = {}) {
+		const { skipBackendClose = false } = options;
+		const session = terminalSessions.get(sessionId);
+		if (!session) {
+			return;
+		}
+
 		terminalSessions.delete(sessionId);
+		if (session.idleTimer) {
+			clearTimeout(session.idleTimer);
+			session.idleTimer = null;
+		}
+		if (session.pollAbort) {
+			session.pollAbort.abort();
+		}
+
+		if (session.kind === "proxy" && !skipBackendClose) {
+			const environmentQuery = session.environmentId
+				? `?environmentId=${encodeURIComponent(session.environmentId)}`
+				: "";
+			try {
+				await requestTerminalApi(
+					`/api/runtime/terminal/${encodeURIComponent(session.backendSessionId)}${environmentQuery}`,
+					{ method: "DELETE" },
+				);
+			} catch {
+				// Session state is already cleaned up locally; ignore backend close failures.
+			}
+		}
 	}
 
 	function closeLogSession(sessionId) {
@@ -577,17 +559,8 @@ io.on("connection", (socket) => {
 
 	socket.on("terminal:create", async (payload, callback) => {
 		try {
-			const sessionId = randomUUID();
-			const cols = clampTerminalColumns(payload?.cols);
-			const rows = clampTerminalRows(payload?.rows);
-
-			if (
-				!payload?.containerId ||
-				!(await canAccessContainer(socket.data.userId, socket.data.role, payload.containerId))
-			) {
-				callback?.({
-					error: "Container access denied.",
-				});
+			if (!payload?.containerId) {
+				callback?.({ error: "containerId is required." });
 				return;
 			}
 
@@ -605,143 +578,115 @@ io.on("connection", (socket) => {
 				return;
 			}
 
-			const shellCandidates = resolveShellCandidates(payload);
-			const shell = await resolveContainerShell(payload.containerId, shellCandidates);
+			const createResult = await requestTerminalApi("/api/runtime/terminal", {
+				method: "POST",
+				headers: {
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					target: "container",
+					containerId: payload.containerId,
+					environmentId: payload.environmentId,
+					shell: payload.shell,
+					customShell: payload.customShell,
+					cols: clampTerminalColumns(payload?.cols),
+					rows: clampTerminalRows(payload?.rows),
+				}),
+			});
 
-			const command = {
-				file: dockerBinary,
-				ptyArgs: ["exec", "-it", payload.containerId, shell, "-i"],
-				pipeArgs: ["exec", "-i", payload.containerId, shell, "-i"],
-				cwd: "/",
-			};
-
-			let compatibilityMode = false;
-			let socketProcess;
-			ensurePtySpawnHelperExecutable();
-			try {
-				const ptyProcess = pty.spawn(command.file, command.ptyArgs, {
-					name: "xterm-color",
-					cols,
-					rows,
-					cwd: command.cwd,
-					env: {
-						...process.env,
-						TERM: process.env.TERM || "xterm-256color",
-						COLORTERM: process.env.COLORTERM || "truecolor",
-					},
+			const backendSessionId = String(createResult.payload?.sessionId || "");
+			if (!createResult.ok || !backendSessionId) {
+				callback?.({
+					error:
+						String(createResult.payload?.error || "").trim() ||
+						"Unable to start terminal session.",
 				});
-				socketProcess = {
-					write: (data) => ptyProcess.write(data),
-					resize: (nextCols, nextRows) =>
-						ptyProcess.resize(clampTerminalColumns(nextCols), clampTerminalRows(nextRows)),
-					kill: () => ptyProcess.kill(),
-					onData: (listener) => ptyProcess.onData(listener),
-					onExit: (listener) => ptyProcess.onExit(listener),
-				};
-			} catch {
-				compatibilityMode = true;
-				const child = spawn(command.file, command.pipeArgs, {
-					cwd: command.cwd,
-					env: {
-						...process.env,
-						TERM: process.env.TERM || "xterm-256color",
-						COLORTERM: process.env.COLORTERM || "truecolor",
-					},
-					stdio: ["pipe", "pipe", "pipe"],
-				});
-				socketProcess = {
-					write: (data) => child.stdin?.write(String(data || "").replaceAll("\r", "\n")),
-					resize: () => {},
-					kill: () => {
-						child.kill("SIGTERM");
-						setTimeout(() => {
-							child.kill("SIGKILL");
-						}, 1_000).unref?.();
-					},
-					onData: (listener) => {
-						child.stdout.on("data", (chunk) => listener(String(chunk || "")));
-						child.stderr.on("data", (chunk) => listener(String(chunk || "")));
-					},
-					onExit: (listener) => {
-						child.on("exit", (exitCode) => listener({ exitCode: exitCode ?? 0 }));
-						child.on("error", () => listener({ exitCode: 1 }));
-					},
-				};
+				return;
 			}
 
-			// Set up idle timeout for this socket session
-			let idleTimer = null;
-			const resetIdle = () => {
-				if (idleTimer) {
-					clearTimeout(idleTimer);
-				}
-				idleTimer = setTimeout(() => {
-					socket.emit("terminal:exit", {
-						sessionId,
-						exitCode: -1,
-					});
-					closeTerminalSession(sessionId);
-				}, SOCKET_IDLE_TIMEOUT_MS);
-				idleTimer.unref?.();
-			};
-
-			const terminalSession = {
-				kind: "pty",
-				write: (data) => socketProcess.write(data),
-				resize: (nextCols, nextRows) =>
-					socketProcess.resize(clampTerminalColumns(nextCols), clampTerminalRows(nextRows)),
-				kill: () => socketProcess.kill(),
-				onData: (listener) => socketProcess.onData(listener),
-				onExit: (listener) => socketProcess.onExit(listener),
-			};
-
+			const sessionId = randomUUID();
+			const pollAbort = new AbortController();
 			terminalSessions.set(sessionId, {
-				...terminalSession,
+				kind: "proxy",
+				backendSessionId,
+				environmentId:
+					typeof payload?.environmentId === "string" && payload.environmentId.trim()
+						? payload.environmentId.trim()
+						: "",
 				socketId: socket.id,
 				userId: socket.data.userId,
-				idleTimer,
+				idleTimer: null,
+				pollAbort,
+				cursor: 0,
+				writeQueue: Promise.resolve(),
 			});
 
-			let handshakeComplete = false;
-			const initialOutput = [];
-			terminalSession.onData((data) => {
-				if (!handshakeComplete) {
-					initialOutput.push(data);
-					return;
+			callback?.({ sessionId });
+
+			const poll = async () => {
+				try {
+					while (true) {
+						const session = terminalSessions.get(sessionId);
+						if (!session || session.kind !== "proxy" || pollAbort.signal.aborted) {
+							return;
+						}
+
+						const environmentQuery = session.environmentId
+							? `&environmentId=${encodeURIComponent(session.environmentId)}`
+							: "";
+						const readResult = await requestTerminalApi(
+							`/api/runtime/terminal/${encodeURIComponent(session.backendSessionId)}?cursor=${Number(session.cursor || 0)}&waitMs=1200${environmentQuery}`,
+							{
+								signal: pollAbort.signal,
+							},
+						);
+
+						if (pollAbort.signal.aborted) {
+							return;
+						}
+						if (!readResult.ok) {
+							socket.emit("terminal:exit", {
+								sessionId,
+								exitCode: -2,
+							});
+							await closeTerminalSession(sessionId);
+							return;
+						}
+
+						const chunks = Array.isArray(readResult.payload?.chunks)
+							? readResult.payload.chunks
+							: [];
+						for (const chunk of chunks) {
+							socket.emit("terminal:data", {
+								sessionId,
+								data: String(chunk || ""),
+							});
+						}
+						session.cursor = Number(readResult.payload?.cursor || session.cursor || 0);
+
+						if (readResult.payload?.closed) {
+							socket.emit("terminal:exit", {
+								sessionId,
+								exitCode: Number(readResult.payload?.exitCode ?? 0),
+							});
+							await closeTerminalSession(sessionId, { skipBackendClose: true });
+							return;
+						}
+					}
+				} catch {
+					if (pollAbort.signal.aborted) {
+						return;
+					}
+					socket.emit("terminal:exit", {
+						sessionId,
+						exitCode: -2,
+					});
+					await closeTerminalSession(sessionId);
 				}
+			};
 
-				socket.emit("terminal:data", {
-					sessionId,
-					data,
-				});
-			});
-
-			terminalSession.onExit(({ exitCode }) => {
-				const session = terminalSessions.get(sessionId);
-				if (session?.idleTimer) {
-					clearTimeout(session.idleTimer);
-					session.idleTimer = null;
-				}
-				socket.emit("terminal:exit", {
-					sessionId,
-					exitCode,
-				});
-				terminalSessions.delete(sessionId);
-			});
-
-			await new Promise((resolve) => {
-				setTimeout(resolve, 75);
-			});
-			handshakeComplete = true;
-			if (compatibilityMode) {
-				initialOutput.unshift("Terminal is running in compatibility mode.\r\n");
-			}
-
-			resetIdle();
-			callback?.({
-				sessionId,
-				initialData: initialOutput.join(""),
-			});
+			void poll();
+			scheduleTerminalIdleTimeout(sessionId);
 		} catch (error) {
 			callback?.({
 				error: error instanceof Error ? error.message : "Unable to start terminal session.",
@@ -751,34 +696,62 @@ io.on("connection", (socket) => {
 
 	socket.on("terminal:input", (payload) => {
 		const session = terminalSessions.get(payload?.sessionId);
-		if (session?.socketId === socket.id && typeof payload?.data === "string") {
-			session.write(payload.data.slice(0, 8192));
-			// Reset idle timeout on user input
-			if (session.idleTimer) {
-				clearTimeout(session.idleTimer);
-			}
-			session.idleTimer = setTimeout(() => {
-				socket.emit("terminal:exit", {
-					sessionId: payload.sessionId,
-					exitCode: -1,
-				});
-				closeTerminalSession(payload.sessionId);
-			}, SOCKET_IDLE_TIMEOUT_MS);
-			session.idleTimer.unref?.();
+		if (
+			session?.socketId === socket.id &&
+			session.kind === "proxy" &&
+			typeof payload?.data === "string"
+		) {
+			const environmentQuery = session.environmentId
+				? `?environmentId=${encodeURIComponent(session.environmentId)}`
+				: "";
+			session.writeQueue = session.writeQueue
+				.then(() =>
+					requestTerminalApi(
+						`/api/runtime/terminal/${encodeURIComponent(session.backendSessionId)}${environmentQuery}`,
+						{
+							method: "POST",
+							headers: {
+								"content-type": "application/json",
+							},
+							body: JSON.stringify({
+								type: "input",
+								data: String(payload.data || "").slice(0, 8192),
+							}),
+						},
+					),
+				)
+				.catch(() => {});
+			scheduleTerminalIdleTimeout(payload.sessionId);
 		}
 	});
 
 	socket.on("terminal:resize", (payload) => {
 		const session = terminalSessions.get(payload?.sessionId);
-		if (session?.socketId === socket.id && session.resize) {
-			session.resize(clampTerminalColumns(payload.cols), clampTerminalRows(payload.rows));
+		if (session?.socketId === socket.id && session.kind === "proxy") {
+			const environmentQuery = session.environmentId
+				? `?environmentId=${encodeURIComponent(session.environmentId)}`
+				: "";
+			void requestTerminalApi(
+				`/api/runtime/terminal/${encodeURIComponent(session.backendSessionId)}${environmentQuery}`,
+				{
+					method: "POST",
+					headers: {
+						"content-type": "application/json",
+					},
+					body: JSON.stringify({
+						type: "resize",
+						cols: clampTerminalColumns(payload?.cols),
+						rows: clampTerminalRows(payload?.rows),
+					}),
+				},
+			);
 		}
 	});
 
 	socket.on("terminal:close", (payload) => {
 		const session = terminalSessions.get(payload?.sessionId);
 		if (session?.socketId === socket.id) {
-			closeTerminalSession(payload.sessionId);
+			void closeTerminalSession(payload.sessionId);
 		}
 	});
 
@@ -859,7 +832,7 @@ io.on("connection", (socket) => {
 	socket.on("disconnect", () => {
 		for (const [sessionId, session] of terminalSessions.entries()) {
 			if (session.socketId === socket.id) {
-				closeTerminalSession(sessionId);
+				void closeTerminalSession(sessionId);
 			}
 		}
 
