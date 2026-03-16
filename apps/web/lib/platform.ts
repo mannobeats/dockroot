@@ -691,28 +691,33 @@ export async function listRuntimeActions(userId: string, limit = 80) {
 	const environmentIds = ownedEnvironments.map((environment) => environment.id);
 	const boundedLimit = Math.max(1, Math.min(500, Math.floor(limit)));
 
-	if (!environmentIds.length) {
+	try {
+		if (!environmentIds.length) {
+			return db.query.runtimeActionEvents.findMany({
+				where: eq(runtimeActionEvents.actorUserId, userId),
+				orderBy: [desc(runtimeActionEvents.occurredAt)],
+				limit: boundedLimit,
+				with: {
+					environment: true,
+				},
+			});
+		}
+
 		return db.query.runtimeActionEvents.findMany({
-			where: eq(runtimeActionEvents.actorUserId, userId),
+			where: or(
+				eq(runtimeActionEvents.actorUserId, userId),
+				inArray(runtimeActionEvents.environmentId, environmentIds),
+			),
 			orderBy: [desc(runtimeActionEvents.occurredAt)],
 			limit: boundedLimit,
 			with: {
 				environment: true,
 			},
 		});
+	} catch (error) {
+		console.error("Failed to list runtime actions", error);
+		return [];
 	}
-
-	return db.query.runtimeActionEvents.findMany({
-		where: or(
-			eq(runtimeActionEvents.actorUserId, userId),
-			inArray(runtimeActionEvents.environmentId, environmentIds),
-		),
-		orderBy: [desc(runtimeActionEvents.occurredAt)],
-		limit: boundedLimit,
-		with: {
-			environment: true,
-		},
-	});
 }
 
 export async function getStackById({ stackId, userId }: { stackId: string; userId: string }) {
@@ -1898,8 +1903,9 @@ export async function triggerGitHubPushDeploy(input: {
 				continue;
 			}
 
-			const perStackDeliveryId =
-				input.deliveryId && input.deliveryId.trim() ? `${input.deliveryId}:${stack.id}` : null;
+			const perStackDeliveryId = input.deliveryId?.trim()
+				? `${input.deliveryId}:${stack.id}`
+				: null;
 			if (perStackDeliveryId) {
 				const existingDeployment = await db.query.deployments.findFirst({
 					where: eq(deployments.webhookDeliveryId, perStackDeliveryId),

@@ -45,10 +45,9 @@ export async function GET(request: Request) {
 		}
 
 		const converted = await exchangeGitHubManifestCode(code);
-		const webhookSecret =
-			converted.webhook_secret && converted.webhook_secret.trim()
-				? converted.webhook_secret
-				: crypto.randomBytes(24).toString("hex");
+		const webhookSecret = converted.webhook_secret?.trim()
+			? converted.webhook_secret
+			: crypto.randomBytes(24).toString("hex");
 		await upsertGitHubProviderFromManifest({
 			userId: actor.id,
 			name: parsedState.providerName?.trim() || converted.slug || "GitHub App",

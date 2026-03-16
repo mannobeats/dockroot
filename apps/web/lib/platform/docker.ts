@@ -646,7 +646,13 @@ export async function deployStackLocally({
 		const args =
 			operation === "destroy"
 				? [...baseArgs, "down", "--remove-orphans"]
-				: [...baseArgs, "up", "-d", "--remove-orphans"];
+				: [
+						...baseArgs,
+						"up",
+						"-d",
+						...(sourceType === "github" ? ["--build"] : []),
+						"--remove-orphans",
+					];
 
 		const child = spawn("docker", args, {
 			stdio: ["ignore", "pipe", "pipe"],
