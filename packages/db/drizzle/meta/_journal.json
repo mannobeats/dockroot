@@ -71,6 +71,13 @@
       "when": 1773403200000,
       "tag": "0009_container_update_major_targets",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1773475200000,
+      "tag": "0010_runtime_action_events",
+      "breakpoints": true
     }
   ]
 }

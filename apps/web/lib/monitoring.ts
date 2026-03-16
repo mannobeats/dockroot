@@ -88,6 +88,37 @@ const deploymentEventsCounter = new Counter({
 	registers: [register],
 });
 
+const wsConnectionsGauge = new Gauge({
+	name: "dockroot_ws_connections_active",
+	help: "Number of active websocket connections on the Dockroot server",
+	registers: [register],
+});
+
+const wsAuthenticatedConnectionsGauge = new Gauge({
+	name: "dockroot_ws_connections_authenticated",
+	help: "Number of active authenticated websocket connections",
+	registers: [register],
+});
+
+const wsTerminalSessionsGauge = new Gauge({
+	name: "dockroot_ws_terminal_sessions_active",
+	help: "Number of active websocket-backed terminal sessions",
+	registers: [register],
+});
+
+const wsLogSessionsGauge = new Gauge({
+	name: "dockroot_ws_log_sessions_active",
+	help: "Number of active websocket-backed log sessions",
+	registers: [register],
+});
+
+const wsRejectionsGauge = new Gauge({
+	name: "dockroot_ws_rejections_total",
+	help: "Cumulative websocket handshake rejections by reason",
+	labelNames: ["reason"],
+	registers: [register],
+});
+
 export function initializeMonitoring() {
 	if (initialized) {
 		return;
@@ -140,6 +171,28 @@ async function syncAppMetrics() {
 	hostMemoryGauge.set(
 		(runtime.host.totalMemoryGb - runtime.host.freeMemoryGb) * 1024 * 1024 * 1024,
 	);
+
+	const wsMetricsReader = (
+		globalThis as {
+			__dockroot_get_ws_metrics?: () => {
+				connections?: number;
+				authenticatedConnections?: number;
+				terminalSessions?: number;
+				logSessions?: number;
+				rejections?: Record<string, number>;
+			};
+		}
+	).__dockroot_get_ws_metrics;
+
+	const wsMetrics = wsMetricsReader?.();
+	wsConnectionsGauge.set(Number(wsMetrics?.connections || 0));
+	wsAuthenticatedConnectionsGauge.set(Number(wsMetrics?.authenticatedConnections || 0));
+	wsTerminalSessionsGauge.set(Number(wsMetrics?.terminalSessions || 0));
+	wsLogSessionsGauge.set(Number(wsMetrics?.logSessions || 0));
+
+	for (const reason of ["origin", "unauthorized", "connectionLimit"] as const) {
+		wsRejectionsGauge.set({ reason }, Number(wsMetrics?.rejections?.[reason] || 0));
+	}
 }
 
 export async function getMetricsRegistry(): Promise<Registry> {

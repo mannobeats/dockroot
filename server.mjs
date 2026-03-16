@@ -40,6 +40,7 @@ const handle = app.getRequestHandler();
 const execFileAsync = promisify(execFile);
 const terminalSessions = new Map();
 const logSessions = new Map();
+const runtimeActionEvents = [];
 const sql = postgres(getDatabaseUrl(), { max: 5 });
 const dockerBinary = resolveExecutable(process.env.DOCKER_BIN, [
 	"/usr/local/bin/docker",
@@ -56,6 +57,85 @@ const MAX_SOCKET_CONNECTIONS_PER_USER = 12;
 
 /** Auto-close socket terminal sessions after 10 minutes of inactivity. */
 const SOCKET_IDLE_TIMEOUT_MS = 10 * 60 * 1000;
+
+/** Maximum in-memory runtime action events retained for diagnostics. */
+const MAX_RUNTIME_ACTION_EVENTS = 200;
+
+const wsRejectionCounters = {
+	origin: 0,
+	unauthorized: 0,
+	connectionLimit: 0,
+};
+
+function getSocketRuntimeMetrics() {
+	let authenticatedConnections = 0;
+	for (const socket of io.of("/").sockets.values()) {
+		if (socket.data?.userId) {
+			authenticatedConnections += 1;
+		}
+	}
+	return {
+		connections: io.of("/").sockets.size,
+		authenticatedConnections,
+		terminalSessions: terminalSessions.size,
+		logSessions: logSessions.size,
+		rejections: { ...wsRejectionCounters },
+	};
+}
+
+function emitRuntimeAction(type, payload = {}) {
+	const status = type.includes("failed") || type.includes("error") ? "error" : "success";
+	const event = {
+		id: randomUUID(),
+		at: Date.now(),
+		type,
+		status,
+		...payload,
+	};
+	runtimeActionEvents.push(event);
+	if (runtimeActionEvents.length > MAX_RUNTIME_ACTION_EVENTS) {
+		runtimeActionEvents.splice(0, runtimeActionEvents.length - MAX_RUNTIME_ACTION_EVENTS);
+	}
+
+	for (const [socketId, socket] of io.of("/").sockets) {
+		if (socket.data?.role && isPrivilegedRole(socket.data.role)) {
+			io.to(socketId).emit("runtime:action", event);
+		}
+	}
+
+	void sql`
+		insert into runtime_action_events (
+			id,
+			environment_id,
+			actor_user_id,
+			actor_role,
+			source,
+			action_type,
+			status,
+			container_id,
+			session_id,
+			details,
+			occurred_at,
+			created_at
+		)
+		values (
+			${event.id},
+			${payload.environmentId ? String(payload.environmentId) : null},
+			${payload.userId ? String(payload.userId) : null},
+			${payload.role ? String(payload.role) : null},
+			"socket",
+			${event.type},
+			${event.status},
+			${payload.containerId ? String(payload.containerId) : null},
+			${payload.sessionId ? String(payload.sessionId) : null},
+			${JSON.stringify(payload)},
+			${new Date(event.at)},
+			${new Date(event.at)}
+		)
+	`.catch(() => {
+		// Avoid breaking runtime operations when audit persistence fails.
+	});
+}
 function resolveExecutable(primaryCandidate, fallbackCandidates) {
 	for (const candidate of [primaryCandidate, ...fallbackCandidates]) {
 		if (!candidate) {
@@ -259,6 +339,7 @@ async function canAccessContainer(userId, role, containerId) {
 function emitRuntimeMetrics() {
 	return async () => {
 		const metrics = await getRuntimeMetrics();
+		const ws = getSocketRuntimeMetrics();
 
 		for (const [socketId, socket] of io.of("/").sockets) {
 			if (socket.data?.role && isPrivilegedRole(socket.data.role)) {
@@ -266,6 +347,7 @@ function emitRuntimeMetrics() {
 					at: Date.now(),
 					containers: metrics.containers,
 					host: metrics.host,
+					ws,
 				});
 			}
 		}
@@ -374,6 +456,25 @@ const server = createServer(async (req, res) => {
 			sendJson(res, 200, { status: "ok" });
 			return;
 		}
+		if (url.pathname === "/internal/ws-metrics") {
+			if (req.headers["x-dockroot-internal-token"] !== process.env.DOCKROOT_TOKEN_PEPPER) {
+				sendJson(res, 403, { error: "Forbidden" });
+				return;
+			}
+			sendJson(res, 200, getSocketRuntimeMetrics());
+			return;
+		}
+		if (url.pathname === "/internal/runtime-actions") {
+			if (req.headers["x-dockroot-internal-token"] !== process.env.DOCKROOT_TOKEN_PEPPER) {
+				sendJson(res, 403, { error: "Forbidden" });
+				return;
+			}
+			const limit = Math.max(1, Math.min(500, Number(url.searchParams.get("limit") || 100)));
+			sendJson(res, 200, {
+				events: runtimeActionEvents.slice(-limit),
+			});
+			return;
+		}
 		if (url.pathname === "/internal/local-terminal/sessions") {
 			if (req.headers["x-dockroot-internal-token"] !== process.env.DOCKROOT_TOKEN_PEPPER) {
 				sendJson(res, 403, { error: "Forbidden" });
@@ -462,6 +563,7 @@ const io = new SocketIOServer(server, {
 });
 
 globalThis.__dockroot_io = io;
+globalThis.__dockroot_get_ws_metrics = getSocketRuntimeMetrics;
 
 io.use(async (socket, nextMiddleware) => {
 	try {
@@ -472,6 +574,7 @@ io.use(async (socket, nextMiddleware) => {
 			requestOrigin &&
 			!trustedOrigins.some((origin) => origin === requestOrigin)
 		) {
+			wsRejectionCounters.origin += 1;
 			nextMiddleware(new Error("Socket origin denied."));
 			return;
 		}
@@ -479,6 +582,7 @@ io.use(async (socket, nextMiddleware) => {
 		const auth = await getSessionFromSocket(socket);
 
 		if (!auth) {
+			wsRejectionCounters.unauthorized += 1;
 			nextMiddleware(new Error("Unauthorized"));
 			return;
 		}
@@ -490,6 +594,7 @@ io.use(async (socket, nextMiddleware) => {
 			}
 		}
 		if (activeConnectionsForUser >= MAX_SOCKET_CONNECTIONS_PER_USER) {
+			wsRejectionCounters.connectionLimit += 1;
 			nextMiddleware(new Error("Too many active socket connections."));
 			return;
 		}
@@ -504,6 +609,12 @@ io.use(async (socket, nextMiddleware) => {
 
 io.on("connection", (socket) => {
 	const authCookie = String(socket.request.headers.cookie || "");
+	emitRuntimeAction("socket.connected", {
+		userId: socket.data.userId,
+		role: socket.data.role,
+		socketId: socket.id,
+		environmentId: null,
+	});
 
 	async function requestTerminalApi(path, init = {}) {
 		const response = await fetch(`${getAppBaseUrl()}${path}`, {
@@ -603,6 +714,12 @@ io.on("connection", (socket) => {
 		try {
 			if (!payload?.containerId) {
 				callback?.({ error: "containerId is required." });
+					emitRuntimeAction("terminal.create.failed", {
+						userId: socket.data.userId,
+						socketId: socket.id,
+						reason: "missing_container_id",
+						environmentId: payload?.environmentId,
+					});
 				return;
 			}
 
@@ -613,12 +730,19 @@ io.on("connection", (socket) => {
 					userSessionCount += 1;
 				}
 			}
-			if (userSessionCount >= MAX_SOCKET_SESSIONS_PER_USER) {
-				callback?.({
-					error: "Too many active terminal sessions. Close an existing session first.",
-				});
-				return;
-			}
+				if (userSessionCount >= MAX_SOCKET_SESSIONS_PER_USER) {
+					callback?.({
+						error: "Too many active terminal sessions. Close an existing session first.",
+					});
+					emitRuntimeAction("terminal.create.failed", {
+						userId: socket.data.userId,
+						socketId: socket.id,
+						containerId: payload.containerId,
+						reason: "session_limit",
+						environmentId: payload.environmentId,
+					});
+					return;
+				}
 
 			const createResult = await requestTerminalApi("/api/runtime/terminal", {
 				method: "POST",
@@ -637,14 +761,21 @@ io.on("connection", (socket) => {
 			});
 
 			const backendSessionId = String(createResult.payload?.sessionId || "");
-			if (!createResult.ok || !backendSessionId) {
-				callback?.({
-					error:
-						String(createResult.payload?.error || "").trim() ||
-						"Unable to start terminal session.",
-				});
-				return;
-			}
+				if (!createResult.ok || !backendSessionId) {
+					callback?.({
+						error:
+							String(createResult.payload?.error || "").trim() ||
+							"Unable to start terminal session.",
+					});
+					emitRuntimeAction("terminal.create.failed", {
+						userId: socket.data.userId,
+						socketId: socket.id,
+						containerId: payload.containerId,
+						reason: "backend_create_failed",
+						environmentId: payload.environmentId,
+					});
+					return;
+				}
 
 			const sessionId = randomUUID();
 			const pollAbort = new AbortController();
@@ -663,7 +794,14 @@ io.on("connection", (socket) => {
 				writeQueue: Promise.resolve(),
 			});
 
-			callback?.({ sessionId });
+				callback?.({ sessionId });
+				emitRuntimeAction("terminal.create.succeeded", {
+					userId: socket.data.userId,
+					socketId: socket.id,
+					containerId: payload.containerId,
+					sessionId,
+					environmentId: payload.environmentId,
+				});
 
 			const poll = async () => {
 				try {
@@ -733,6 +871,13 @@ io.on("connection", (socket) => {
 			callback?.({
 				error: error instanceof Error ? error.message : "Unable to start terminal session.",
 			});
+			emitRuntimeAction("terminal.create.failed", {
+				userId: socket.data.userId,
+				socketId: socket.id,
+				containerId: payload?.containerId,
+				reason: "unexpected_error",
+				environmentId: payload?.environmentId,
+			});
 		}
 	});
 
@@ -793,6 +938,12 @@ io.on("connection", (socket) => {
 	socket.on("terminal:close", (payload) => {
 		const session = terminalSessions.get(payload?.sessionId);
 		if (session?.socketId === socket.id) {
+			emitRuntimeAction("terminal.close", {
+				userId: socket.data.userId,
+				socketId: socket.id,
+				sessionId: payload.sessionId,
+				environmentId: session.environmentId || null,
+			});
 			void closeTerminalSession(payload.sessionId);
 		}
 	});
@@ -813,12 +964,18 @@ io.on("connection", (socket) => {
 				}
 			}
 
-			if (!allowedContainerIds.length) {
-				callback?.({
-					error: "No accessible containers selected for log streaming.",
-				});
-				return;
-			}
+				if (!allowedContainerIds.length) {
+					callback?.({
+						error: "No accessible containers selected for log streaming.",
+					});
+					emitRuntimeAction("logs.subscribe.failed", {
+						userId: socket.data.userId,
+						socketId: socket.id,
+						reason: "no_accessible_containers",
+						environmentId: payload?.environmentId,
+					});
+					return;
+				}
 			const processes = allowedContainerIds.map((containerId) => {
 				const child = spawn(
 					dockerBinary,
@@ -854,24 +1011,49 @@ io.on("connection", (socket) => {
 				socketId: socket.id,
 			});
 
-			callback?.({
-				sessionId,
-			});
-		} catch (error) {
-			callback?.({
-				error: error instanceof Error ? error.message : "Unable to start log stream.",
-			});
-		}
-	});
+				callback?.({
+					sessionId,
+				});
+				emitRuntimeAction("logs.subscribe.succeeded", {
+					userId: socket.data.userId,
+					socketId: socket.id,
+					sessionId,
+					containerCount: allowedContainerIds.length,
+					environmentId: payload?.environmentId,
+				});
+			} catch (error) {
+				callback?.({
+					error: error instanceof Error ? error.message : "Unable to start log stream.",
+				});
+				emitRuntimeAction("logs.subscribe.failed", {
+					userId: socket.data.userId,
+					socketId: socket.id,
+					reason: "unexpected_error",
+					environmentId: payload?.environmentId,
+				});
+			}
+		});
 
 	socket.on("logs:unsubscribe", (payload) => {
 		const session = logSessions.get(payload?.sessionId);
 		if (session?.socketId === socket.id) {
+			emitRuntimeAction("logs.unsubscribe", {
+				userId: socket.data.userId,
+				socketId: socket.id,
+				sessionId: payload.sessionId,
+				environmentId: null,
+			});
 			closeLogSession(payload.sessionId);
 		}
 	});
 
 	socket.on("disconnect", () => {
+		emitRuntimeAction("socket.disconnected", {
+			userId: socket.data.userId,
+			role: socket.data.role,
+			socketId: socket.id,
+			environmentId: null,
+		});
 		for (const [sessionId, session] of terminalSessions.entries()) {
 			if (session.socketId === socket.id) {
 				void closeTerminalSession(sessionId);

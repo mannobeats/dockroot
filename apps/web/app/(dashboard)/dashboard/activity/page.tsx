@@ -3,7 +3,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LogBlock } from "@/components/ui/log-block";
 import { Panel } from "@/components/ui/panel";
-import { listDeployments } from "@/lib/platform";
+import { listDeployments, listRuntimeActions } from "@/lib/platform";
 import { getServerSession } from "@/lib/session";
 
 export default async function ActivityPage() {
@@ -14,10 +14,14 @@ export default async function ActivityPage() {
 	}
 
 	const deployments = await listDeployments(session.user.id);
+	const runtimeActions = await listRuntimeActions(session.user.id, 120);
 
 	return (
 		<div className="animate-in space-y-5">
-			<PageHeader title="Activity" description={`${deployments.length} deployments`} />
+			<PageHeader
+				title="Activity"
+				description={`${deployments.length} deployments · ${runtimeActions.length} runtime actions`}
+			/>
 
 			<div className="space-y-2">
 				{deployments.length ? (
@@ -54,6 +58,49 @@ export default async function ActivityPage() {
 					<EmptyState title="No deployment activity yet" />
 				)}
 			</div>
+
+			<Panel padding="sm">
+				<div className="mb-3 flex items-center justify-between">
+					<h2 className="text-sm font-semibold">Runtime actions</h2>
+					<p className="text-[11px] text-muted">Latest socket/terminal/log operations</p>
+				</div>
+				{runtimeActions.length ? (
+					<div className="space-y-2">
+						{runtimeActions.map((event) => (
+							<div
+								key={event.id}
+								className="rounded-lg border border-default/10 bg-surface-2 px-3 py-2.5"
+							>
+								<div className="flex items-start justify-between gap-3">
+									<div className="min-w-0">
+										<div className="flex items-center gap-2">
+											<p className="text-xs font-semibold">{event.actionType}</p>
+											<StatusBadge
+												status={
+													event.status === "error"
+														? "failed"
+														: event.status === "warning"
+															? "queued"
+															: "running"
+												}
+											/>
+										</div>
+										<p className="mt-0.5 text-[11px] text-muted">
+											{event.environment?.name || "No environment"} · {event.source}
+											{event.containerId ? ` · ${event.containerId}` : ""}
+										</p>
+									</div>
+									<p className="shrink-0 text-[11px] text-muted">
+										{event.occurredAt.toLocaleString()}
+									</p>
+								</div>
+							</div>
+						))}
+					</div>
+				) : (
+					<EmptyState title="No runtime actions yet" />
+				)}
+			</Panel>
 		</div>
 	);
 }

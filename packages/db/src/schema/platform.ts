@@ -34,6 +34,12 @@ export const deploymentStatusEnum = pgEnum("deployment_status", [
 	"failed",
 ]);
 export const deploymentOperationEnum = pgEnum("deployment_operation", ["deploy", "destroy"]);
+export const runtimeActionStatusEnum = pgEnum("runtime_action_status", [
+	"info",
+	"success",
+	"warning",
+	"error",
+]);
 export const containerUpdateResultEnum = pgEnum("container_update_result", [
 	"not_available",
 	"available",
@@ -250,6 +256,34 @@ export const githubWebhookDeliveries = pgTable(
 	],
 );
 
+export const runtimeActionEvents = pgTable(
+	"runtime_action_events",
+	{
+		id: text("id").primaryKey(),
+		environmentId: text("environment_id").references(() => environments.id, {
+			onDelete: "set null",
+		}),
+		actorUserId: text("actor_user_id").references(() => user.id, {
+			onDelete: "set null",
+		}),
+		actorRole: text("actor_role"),
+		source: text("source").notNull().default("socket"),
+		actionType: text("action_type").notNull(),
+		status: runtimeActionStatusEnum("status").notNull().default("info"),
+		containerId: text("container_id"),
+		sessionId: text("session_id"),
+		details: text("details"),
+		occurredAt: timestamp("occurred_at").notNull(),
+		createdAt: timestamp("created_at").notNull(),
+	},
+	(table) => [
+		index("runtime_action_events_environment_idx").on(table.environmentId),
+		index("runtime_action_events_actor_idx").on(table.actorUserId),
+		index("runtime_action_events_occurred_idx").on(table.occurredAt),
+		index("runtime_action_events_action_type_idx").on(table.actionType),
+	],
+);
+
 export const containerUpdatePolicies = pgTable(
 	"container_update_policies",
 	{
@@ -391,6 +425,7 @@ export const environmentRelations = relations(environments, ({ many, one }) => (
 	agent: many(agents),
 	stacks: many(stacks),
 	deployments: many(deployments),
+	runtimeActions: many(runtimeActionEvents),
 	createdBy: one(user, {
 		fields: [environments.createdByUserId],
 		references: [user.id],
@@ -460,6 +495,17 @@ export const githubWebhookDeliveryRelations = relations(githubWebhookDeliveries,
 	provider: one(githubProviders, {
 		fields: [githubWebhookDeliveries.providerId],
 		references: [githubProviders.id],
+	}),
+}));
+
+export const runtimeActionEventRelations = relations(runtimeActionEvents, ({ one }) => ({
+	environment: one(environments, {
+		fields: [runtimeActionEvents.environmentId],
+		references: [environments.id],
+	}),
+	actor: one(user, {
+		fields: [runtimeActionEvents.actorUserId],
+		references: [user.id],
 	}),
 }));
 

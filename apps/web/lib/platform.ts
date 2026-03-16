@@ -9,6 +9,7 @@ import {
 	githubInstallations,
 	githubProviders,
 	githubWebhookDeliveries,
+	runtimeActionEvents,
 	stacks,
 } from "@dockroot/db";
 import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
@@ -675,6 +676,40 @@ export async function listDeployments(userId: string) {
 		limit: 25,
 		with: {
 			stack: true,
+			environment: true,
+		},
+	});
+}
+
+export async function listRuntimeActions(userId: string, limit = 80) {
+	await ensureDefaultLocalEnvironment(userId);
+
+	const ownedEnvironments = await db.query.environments.findMany({
+		where: eq(environments.createdByUserId, userId),
+		columns: { id: true },
+	});
+	const environmentIds = ownedEnvironments.map((environment) => environment.id);
+	const boundedLimit = Math.max(1, Math.min(500, Math.floor(limit)));
+
+	if (!environmentIds.length) {
+		return db.query.runtimeActionEvents.findMany({
+			where: eq(runtimeActionEvents.actorUserId, userId),
+			orderBy: [desc(runtimeActionEvents.occurredAt)],
+			limit: boundedLimit,
+			with: {
+				environment: true,
+			},
+		});
+	}
+
+	return db.query.runtimeActionEvents.findMany({
+		where: or(
+			eq(runtimeActionEvents.actorUserId, userId),
+			inArray(runtimeActionEvents.environmentId, environmentIds),
+		),
+		orderBy: [desc(runtimeActionEvents.occurredAt)],
+		limit: boundedLimit,
+		with: {
 			environment: true,
 		},
 	});

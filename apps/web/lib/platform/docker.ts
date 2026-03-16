@@ -93,7 +93,7 @@ function sanitizeTempFileName(fileName: string) {
 	const base = path.basename(String(fileName || "").trim());
 	const cleaned = base
 		.replaceAll(/[^A-Za-z0-9._-]/g, "_")
-		.replaceAll(/^\.+/, "")
+		.replace(/^\.+/, "")
 		.slice(0, 128);
 	return cleaned || "upload.bin";
 }
@@ -632,36 +632,21 @@ export async function deployStackLocally({
 			operation,
 		});
 
+		const baseArgs = [
+			"compose",
+			"-p",
+			stackSlug,
+			"--project-directory",
+			workingDirectory,
+			...(envPath ? ["--env-file", envPath] : []),
+			"-f",
+			composePath,
+		];
+
 		const args =
 			operation === "destroy"
-				? [
-						"compose",
-						"-p",
-						stackSlug,
-						"--project-directory",
-						workingDirectory,
-						"--env-file",
-						envPath,
-						"-f",
-						composePath,
-						"down",
-						"--remove-orphans",
-					]
-				: [
-						"compose",
-						"-p",
-						stackSlug,
-						"--project-directory",
-						workingDirectory,
-						"--env-file",
-						envPath,
-						"-f",
-						composePath,
-						"up",
-						"-d",
-						"--build",
-						"--remove-orphans",
-					];
+				? [...baseArgs, "down", "--remove-orphans"]
+				: [...baseArgs, "up", "-d", "--remove-orphans"];
 
 		const child = spawn("docker", args, {
 			stdio: ["ignore", "pipe", "pipe"],
@@ -817,11 +802,20 @@ async function prepareStackWorkspace(input: StackWorkspaceInput) {
 			input.composeFilePath,
 			"compose.yaml",
 		);
-		const envPath = resolveWorkspaceFilePath(input.repoDir, input.envFilePath, ".env");
+		const defaultEnvPath = path.join(path.dirname(composePath), ".env");
+		const envPath = input.envFilePath
+			? resolveWorkspaceFilePath(input.repoDir, input.envFilePath, ".env")
+			: input.envFileContent !== null && input.envFileContent !== undefined
+				? defaultEnvPath
+				: null;
 		await ensureDirectory(path.dirname(composePath));
-		await ensureDirectory(path.dirname(envPath));
 		await writeFile(composePath, input.composeYaml, "utf8");
-		await writeFile(envPath, input.envFileContent || "", "utf8");
+		if (envPath) {
+			if (input.envFileContent !== null && input.envFileContent !== undefined) {
+				await ensureDirectory(path.dirname(envPath));
+				await writeFile(envPath, input.envFileContent || "", "utf8");
+			}
+		}
 
 		return {
 			composePath,
@@ -858,10 +852,14 @@ export async function deleteLocalStackResources(stackSlug: string) {
 		stack?.sourceType === "github"
 			? resolveWorkspaceFilePath(repoDir, stack.githubPath || undefined, "compose.yaml")
 			: path.join(stackDir, "compose.yaml");
-	const envPath =
+	const envPathCandidate =
 		stack?.sourceType === "github"
 			? resolveWorkspaceFilePath(repoDir, stack.githubEnvPath || undefined, ".env")
 			: path.join(stackDir, ".env");
+	const envPathExists = await access(envPathCandidate)
+		.then(() => true)
+		.catch(() => false);
+	const envPath = envPathExists ? envPathCandidate : null;
 	const workingDirectory = stack?.sourceType === "github" ? path.dirname(composePath) : stackDir;
 	const composeFileExists = await access(composePath)
 		.then(() => true)
@@ -874,8 +872,7 @@ export async function deleteLocalStackResources(stackSlug: string) {
 			stackSlug,
 			"--project-directory",
 			workingDirectory,
-			"--env-file",
-			envPath,
+			...(envPath ? ["--env-file", envPath] : []),
 			"-f",
 			composePath,
 			"down",
