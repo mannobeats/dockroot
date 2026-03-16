@@ -51,6 +51,9 @@ const prometheusUrl = process.env.PROMETHEUS_URL || "http://localhost:9090";
 /** Maximum concurrent socket terminal sessions per user. */
 const MAX_SOCKET_SESSIONS_PER_USER = 5;
 
+/** Maximum concurrent socket connections per user. */
+const MAX_SOCKET_CONNECTIONS_PER_USER = 12;
+
 /** Auto-close socket terminal sessions after 10 minutes of inactivity. */
 const SOCKET_IDLE_TIMEOUT_MS = 10 * 60 * 1000;
 function resolveExecutable(primaryCandidate, fallbackCandidates) {
@@ -92,9 +95,26 @@ function getCorsConfig() {
 		return { origin: origins, credentials: true };
 	}
 
+	if (!dev) {
+		console.warn(
+			"[socket] No trusted origins configured; denying cross-origin socket connections in production.",
+		);
+		return { origin: false, credentials: true };
+	}
+
+	const localDevOrigins = [
+		`http://localhost:${port}`,
+		`http://127.0.0.1:${port}`,
+		"http://localhost:3000",
+		"http://127.0.0.1:3000",
+	];
 	return {
 		origin: (requestOrigin, callback) => {
-			callback(null, requestOrigin || false);
+			if (!requestOrigin || localDevOrigins.includes(requestOrigin)) {
+				callback(null, true);
+				return;
+			}
+			callback(null, false);
 		},
 		credentials: true,
 	};
@@ -445,10 +465,32 @@ globalThis.__dockroot_io = io;
 
 io.use(async (socket, nextMiddleware) => {
 	try {
+		const trustedOrigins = getTrustedOrigins();
+		const requestOrigin = String(socket.request.headers.origin || "").trim();
+		if (
+			trustedOrigins &&
+			requestOrigin &&
+			!trustedOrigins.some((origin) => origin === requestOrigin)
+		) {
+			nextMiddleware(new Error("Socket origin denied."));
+			return;
+		}
+
 		const auth = await getSessionFromSocket(socket);
 
 		if (!auth) {
 			nextMiddleware(new Error("Unauthorized"));
+			return;
+		}
+
+		let activeConnectionsForUser = 0;
+		for (const connected of io.of("/").sockets.values()) {
+			if (connected.data?.userId === auth.userId) {
+				activeConnectionsForUser += 1;
+			}
+		}
+		if (activeConnectionsForUser >= MAX_SOCKET_CONNECTIONS_PER_USER) {
+			nextMiddleware(new Error("Too many active socket connections."));
 			return;
 		}
 

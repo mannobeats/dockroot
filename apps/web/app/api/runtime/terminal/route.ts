@@ -5,6 +5,23 @@ import { requireAccessibleContainerForUser } from "@/lib/runtime-access";
 
 export const runtime = "nodejs";
 
+function terminalErrorStatus(error: unknown) {
+	if (!(error instanceof Error)) {
+		return 500;
+	}
+	if (
+		error.message === "Unauthorized" ||
+		error.message === "Forbidden" ||
+		error.message === "Agent request was not authorized."
+	) {
+		return 403;
+	}
+	if (error.message === "Container not found" || error.message === "Terminal session not found.") {
+		return 404;
+	}
+	return 500;
+}
+
 export async function POST(request: Request) {
 	try {
 		const auth = await requireUserSession(request.headers);
@@ -44,13 +61,7 @@ export async function POST(request: Request) {
 	} catch (error) {
 		return NextResponse.json(
 			{ error: "Unable to start terminal session." },
-			{
-				status:
-					error instanceof Error &&
-					(error.message === "Unauthorized" || error.message === "Forbidden")
-						? 403
-						: 500,
-			},
+			{ status: terminalErrorStatus(error) },
 		);
 	}
 }

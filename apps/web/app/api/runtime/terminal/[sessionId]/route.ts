@@ -9,6 +9,23 @@ import {
 
 export const runtime = "nodejs";
 
+function terminalErrorStatus(error: unknown) {
+	if (!(error instanceof Error)) {
+		return 500;
+	}
+	if (
+		error.message === "Unauthorized" ||
+		error.message === "Forbidden" ||
+		error.message === "Agent request was not authorized."
+	) {
+		return 403;
+	}
+	if (error.message === "Terminal session not found." || error.message === "Container not found") {
+		return 404;
+	}
+	return 500;
+}
+
 export async function GET(
 	request: Request,
 	{ params }: { params: Promise<{ sessionId: string }> },
@@ -31,7 +48,7 @@ export async function GET(
 	} catch (error) {
 		return NextResponse.json(
 			{ error: error instanceof Error ? error.message : "Unable to read terminal session." },
-			{ status: 500 },
+			{ status: terminalErrorStatus(error) },
 		);
 	}
 }
@@ -76,7 +93,7 @@ export async function POST(
 	} catch (error) {
 		return NextResponse.json(
 			{ error: error instanceof Error ? error.message : "Unable to write terminal session." },
-			{ status: 500 },
+			{ status: terminalErrorStatus(error) },
 		);
 	}
 }
@@ -94,7 +111,7 @@ export async function DELETE(
 	} catch (error) {
 		return NextResponse.json(
 			{ error: error instanceof Error ? error.message : "Unable to close terminal session." },
-			{ status: 500 },
+			{ status: terminalErrorStatus(error) },
 		);
 	}
 }

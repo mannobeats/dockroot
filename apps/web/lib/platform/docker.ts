@@ -42,10 +42,22 @@ type ComposeProjectExport = {
 	configFiles: string[];
 };
 
+const DEFAULT_DOCKER_COMMAND_TIMEOUT_MS = 60_000;
+
+function getDockerCommandTimeoutMs() {
+	const configured = Number(process.env.DOCKROOT_DOCKER_COMMAND_TIMEOUT_MS || "");
+	if (!Number.isFinite(configured) || configured <= 0) {
+		return DEFAULT_DOCKER_COMMAND_TIMEOUT_MS;
+	}
+	return Math.max(5_000, Math.min(10 * 60_000, Math.floor(configured)));
+}
+
 async function runDockerCommand(args: string[]) {
 	try {
 		const result = await execFileAsync("docker", args, {
 			maxBuffer: 1024 * 1024 * 8,
+			timeout: getDockerCommandTimeoutMs(),
+			killSignal: "SIGTERM",
 		});
 		return {
 			stdout: result.stdout,
@@ -54,14 +66,36 @@ async function runDockerCommand(args: string[]) {
 			ok: true,
 		} satisfies DockerCommandResult;
 	} catch (error) {
-		const message = error instanceof Error ? error.message : "Docker command failed";
+		const execError = error as {
+			stdout?: string;
+			stderr?: string;
+			code?: number;
+			signal?: string | null;
+			message?: string;
+		};
+		const code = typeof execError?.code === "number" ? execError.code : 1;
+		const stderr =
+			typeof execError?.stderr === "string" && execError.stderr.trim()
+				? execError.stderr
+				: execError?.signal
+					? `Docker command terminated by signal ${execError.signal}.`
+					: execError?.message || "Docker command failed";
 		return {
-			stdout: "",
-			stderr: message,
-			code: 1,
+			stdout: typeof execError?.stdout === "string" ? execError.stdout : "",
+			stderr,
+			code,
 			ok: false,
 		} satisfies DockerCommandResult;
 	}
+}
+
+function sanitizeTempFileName(fileName: string) {
+	const base = path.basename(String(fileName || "").trim());
+	const cleaned = base
+		.replaceAll(/[^A-Za-z0-9._-]/g, "_")
+		.replaceAll(/^\.+/, "")
+		.slice(0, 128);
+	return cleaned || "upload.bin";
 }
 
 function parseJsonLines<T>(content: string) {
@@ -318,7 +352,8 @@ async function withTempFile<T>(
 	run: (filePath: string) => Promise<T>,
 ) {
 	const tempDir = await mkdtemp(path.join(os.tmpdir(), "dockroot-"));
-	const tempFile = path.join(tempDir, fileName);
+	const safeFileName = sanitizeTempFileName(fileName);
+	const tempFile = path.join(tempDir, safeFileName);
 
 	try {
 		await writeFile(tempFile, content);
@@ -351,7 +386,8 @@ export async function uploadContainerFile(
 	fileName: string,
 	content: Buffer,
 ) {
-	return withTempFile(fileName, content, async (tempFile) => {
+	const safeFileName = sanitizeTempFileName(path.posix.basename(String(fileName || "").trim()));
+	return withTempFile(safeFileName, content, async (tempFile) => {
 		await runDockerCommand([
 			"exec",
 			"-e",
@@ -364,7 +400,7 @@ export async function uploadContainerFile(
 		return runDockerCommand([
 			"cp",
 			tempFile,
-			`${containerId}:${targetDirectory.replace(/\/$/, "")}/${fileName}`,
+			`${containerId}:${targetDirectory.replace(/\/$/, "")}/${safeFileName}`,
 		]);
 	});
 }
@@ -505,7 +541,7 @@ export async function controlContainer(
 			? ["rm", "-f", ...(options?.removeVolumes ? ["-v"] : []), containerId]
 			: [action, containerId];
 	const result = await runDockerCommand(args);
-	const ok = !result.stderr;
+	const ok = result.ok;
 
 	emitRealtime("container:state", {
 		containerId,
