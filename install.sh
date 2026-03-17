@@ -12,10 +12,16 @@ DOCKROOT_INSTALL_DIR="${DOCKROOT_INSTALL_DIR:-/opt/dockroot}"
 DOCKROOT_IMAGE="ghcr.io/mannobeats/dockroot"
 DOCKROOT_SERVICE_NAME="dockroot"
 SKIP_DOCKER="${SKIP_DOCKER:-false}"
-NONINTERACTIVE="${NONINTERACTIVE:-false}"
+
+# Auto-detect non-interactive mode when stdin is a pipe (curl | bash)
+if [ -t 0 ]; then
+  NONINTERACTIVE="${NONINTERACTIVE:-false}"
+else
+  NONINTERACTIVE="${NONINTERACTIVE:-true}"
+fi
 
 # ── Color palette ────────────────────────────────────────────────────────────
-if [ -t 1 ] && command -v tput &>/dev/null; then
+if command -v tput &>/dev/null && tput colors &>/dev/null; then
   BOLD="$(tput bold)"
   DIM="$(tput dim)"
   RESET="$(tput sgr0)"
@@ -89,14 +95,19 @@ separator() {
 ask_yes_no() {
   local prompt="$1" default="${2:-y}"
   if [ "$NONINTERACTIVE" = "true" ]; then
+    if [ "$default" = "y" ]; then
+      echo "    ${CYAN}?${RESET} ${prompt} ${DIM}[Y/n]${RESET} y (auto)"
+    else
+      echo "    ${CYAN}?${RESET} ${prompt} ${DIM}[y/N]${RESET} n (auto)"
+    fi
     [ "$default" = "y" ] && return 0 || return 1
   fi
   local yn
   if [ "$default" = "y" ]; then
-    read -rp "    ${CYAN}?${RESET} ${prompt} ${DIM}[Y/n]${RESET} " yn
+    read -rp "    ${CYAN}?${RESET} ${prompt} ${DIM}[Y/n]${RESET} " yn </dev/tty
     yn="${yn:-y}"
   else
-    read -rp "    ${CYAN}?${RESET} ${prompt} ${DIM}[y/N]${RESET} " yn
+    read -rp "    ${CYAN}?${RESET} ${prompt} ${DIM}[y/N]${RESET} " yn </dev/tty
     yn="${yn:-n}"
   fi
   [[ "$yn" =~ ^[Yy] ]]
@@ -105,11 +116,12 @@ ask_yes_no() {
 ask_value() {
   local prompt="$1" default="$2" var_name="$3"
   if [ "$NONINTERACTIVE" = "true" ]; then
+    echo "    ${CYAN}?${RESET} ${prompt} ${DIM}[${default}]${RESET} ${default} (auto)"
     eval "$var_name=\"$default\""
     return
   fi
   local val
-  read -rp "    ${CYAN}?${RESET} ${prompt} ${DIM}[${default}]${RESET} " val
+  read -rp "    ${CYAN}?${RESET} ${prompt} ${DIM}[${default}]${RESET} " val </dev/tty
   val="${val:-$default}"
   eval "$var_name=\"$val\""
 }
@@ -201,7 +213,7 @@ check_root() {
 check_docker() {
   if command -v docker &>/dev/null; then
     DOCKER_INSTALLED=true
-    DOCKER_VERSION="$(docker --version 2>/dev/null | grep -oP '[\d.]+' | head -1 || echo 'unknown')"
+    DOCKER_VERSION="$(docker --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo 'unknown')"
 
     # Check if Docker daemon is running
     if docker info &>/dev/null; then
@@ -248,10 +260,23 @@ check_curl() {
 # ── Docker installation ──────────────────────────────────────────────────────
 install_docker() {
   step "Installing Docker" "via official get.docker.com script"
+  echo ""
 
-  if curl -fsSL https://get.docker.com | sh >/dev/null 2>&1; then
+  # Download script first, then execute — avoids pipe-in-pipe issues
+  local docker_script="/tmp/get-docker-$$.sh"
+  if ! curl -fsSL https://get.docker.com -o "$docker_script"; then
+    step_fail "Installing Docker"
+    error "Failed to download Docker install script."
+    info "https://docs.docker.com/engine/install/"
+    exit 1
+  fi
+
+  if sh "$docker_script"; then
+    rm -f "$docker_script"
+    echo ""
     step_done "Installing Docker"
   else
+    rm -f "$docker_script"
     step_fail "Installing Docker"
     error "Docker installation failed. Please install Docker manually:"
     info "https://docs.docker.com/engine/install/"
@@ -263,6 +288,9 @@ install_docker() {
     systemctl enable docker >/dev/null 2>&1 || true
     systemctl start docker >/dev/null 2>&1 || true
   fi
+
+  # Wait briefly for the daemon to be ready
+  sleep 3
 
   # Re-check Docker
   check_docker
@@ -543,15 +571,24 @@ SERVICE
 
 pull_images() {
   step "Pulling images" "this may take a moment"
-  (cd "$DOCKROOT_INSTALL_DIR" && $COMPOSE_CMD pull --quiet 2>/dev/null) || true
-  step_done "Pulling images"
+  echo ""
+  if (cd "$DOCKROOT_INSTALL_DIR" && $COMPOSE_CMD pull 2>&1); then
+    echo ""
+    step_done "Pulling images"
+  else
+    echo ""
+    warn "Some images failed to pull — Dockroot may still work if images are cached."
+  fi
 }
 
 start_dockroot() {
   step "Starting Dockroot" ""
-  if (cd "$DOCKROOT_INSTALL_DIR" && $COMPOSE_CMD up -d --remove-orphans 2>/dev/null); then
+  echo ""
+  if (cd "$DOCKROOT_INSTALL_DIR" && $COMPOSE_CMD up -d --remove-orphans 2>&1); then
+    echo ""
     step_done "Starting Dockroot"
   else
+    echo ""
     step_fail "Starting Dockroot"
     error "Failed to start. Check logs with:"
     info "cd ${DOCKROOT_INSTALL_DIR} && ${COMPOSE_CMD} logs"
