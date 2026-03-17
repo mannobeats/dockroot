@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CodeEditor } from "@/components/code-editor";
+import { ResizableEditorPanels } from "@/components/resizable-editor-panels";
 import { Button } from "@/components/ui/button";
 
 export function StackConfigEditor({
@@ -112,34 +112,19 @@ export function StackConfigEditor({
 			</div>
 
 			{/* Editor */}
-			<div className="grid gap-0 overflow-hidden rounded-b-xl border border-default/10 lg:grid-cols-[1.4fr_0.6fr]">
-				<div className="min-h-0 border-b border-default/8 lg:border-b-0 lg:border-r">
-					<div className="border-b border-default/5 bg-foreground/[0.02] px-3 py-1.5">
-						<p className="text-[11px] font-medium text-muted">{composeFileName}</p>
-					</div>
-					<CodeEditor
-						value={composeYaml}
-						onChange={setComposeYaml}
-						language="yaml"
-						minHeight="320px"
-						maxHeight={editorHeight}
-						height={editorHeight}
-					/>
-				</div>
-				<div className="min-h-0">
-					<div className="border-b border-default/5 bg-foreground/[0.02] px-3 py-1.5">
-						<p className="text-[11px] font-medium text-muted">{envFileName || ".env"}</p>
-					</div>
-					<CodeEditor
-						value={envFileContent}
-						onChange={setEnvFileContent}
-						language="env"
-						minHeight="320px"
-						maxHeight={editorHeight}
-						height={editorHeight}
-						placeholder="APP_ENV=production"
-					/>
-				</div>
+			<div className="rounded-b-xl border border-t-0 border-default/10">
+				<ResizableEditorPanels
+					leftLabel={composeFileName}
+					rightLabel={envFileName || ".env"}
+					leftValue={composeYaml}
+					rightValue={envFileContent}
+					onLeftChange={setComposeYaml}
+					onRightChange={setEnvFileContent}
+					leftLanguage="yaml"
+					rightLanguage="env"
+					rightPlaceholder="APP_ENV=production"
+					height={editorHeight}
+				/>
 			</div>
 		</form>
 	);

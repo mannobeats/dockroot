@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { CodeEditor } from "@/components/code-editor";
 import { FormSubmitButton } from "@/components/form-submit-button";
+import { ResizableEditorPanels } from "@/components/resizable-editor-panels";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -54,40 +54,19 @@ export function StackComposeForm({
 				</Field>
 			</div>
 
-			<div className="grid gap-0 overflow-hidden rounded-lg border border-default/8 lg:grid-cols-[1.4fr_0.6fr]">
-				<div className="min-h-0 border-b border-default/8 lg:border-b-0 lg:border-r">
-					<div className="border-b border-default/5 bg-foreground/[0.02] px-3 py-1.5">
-						<p className="text-[11px] font-medium text-muted">
-							{stackName ? `${stackName}.compose.yaml` : "compose.yaml"}
-						</p>
-					</div>
-					<CodeEditor
-						value={composeYaml}
-						onChange={setComposeYaml}
-						language="yaml"
-						minHeight="320px"
-						maxHeight={editorHeight}
-						height={editorHeight}
-						placeholder="services:\n  app:\n    image: nginx:alpine"
-					/>
-				</div>
-				<div className="min-h-0">
-					<div className="border-b border-default/5 bg-foreground/[0.02] px-3 py-1.5">
-						<p className="text-[11px] font-medium text-muted">
-							{stackName ? `${stackName}.env` : ".env"}
-						</p>
-					</div>
-					<CodeEditor
-						value={envFileContent}
-						onChange={setEnvFileContent}
-						language="env"
-						minHeight="320px"
-						maxHeight={editorHeight}
-						height={editorHeight}
-						placeholder={"APP_ENV=production\nAPP_PORT=8080"}
-					/>
-				</div>
-			</div>
+			<ResizableEditorPanels
+				leftLabel={stackName ? `${stackName}.compose.yaml` : "compose.yaml"}
+				rightLabel={stackName ? `${stackName}.env` : ".env"}
+				leftValue={composeYaml}
+				rightValue={envFileContent}
+				onLeftChange={setComposeYaml}
+				onRightChange={setEnvFileContent}
+				leftLanguage="yaml"
+				rightLanguage="env"
+				leftPlaceholder="services:\n  app:\n    image: nginx:alpine"
+				rightPlaceholder={"APP_ENV=production\nAPP_PORT=8080"}
+				height={editorHeight}
+			/>
 
 			<div className="flex justify-end">
 				<FormSubmitButton label="Create stack" pendingLabel="Creating..." size="sm" />

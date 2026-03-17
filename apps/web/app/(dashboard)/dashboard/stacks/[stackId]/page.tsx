@@ -8,7 +8,7 @@ import {
 } from "@/app/(dashboard)/actions";
 import { DestructiveActionModal } from "@/components/destructive-action-modal";
 import { FormSubmitButton } from "@/components/form-submit-button";
-import { LiveStackFeed } from "@/components/live-stack-feed";
+import { DeployLogTrigger } from "@/components/deploy-log-trigger";
 import { StackConfigEditor } from "@/components/stack-config-editor";
 import { StackServicesAccordion } from "@/components/stack-services-accordion";
 import { StatusBadge } from "@/components/status-badge";
@@ -103,7 +103,12 @@ export default async function StackWorkspacePage({
 						</div>
 					</div>
 				</div>
-				<div className="flex items-center gap-1">
+				<div className="flex items-center gap-1.5">
+					<DeployLogTrigger
+						stackId={stack.id}
+						stackName={stack.name}
+						initialLog={latestDeployment?.log}
+					/>
 					<form action={deployStackAction}>
 						<input type="hidden" name="stackId" value={stack.id} />
 						<FormSubmitButton
@@ -146,37 +151,27 @@ export default async function StackWorkspacePage({
 				</div>
 			</div>
 
-			{/* Main grid */}
-			<div className="grid gap-4 xl:grid-cols-[1.4fr_0.6fr]">
-				<div className="space-y-4">
-					<StackConfigEditor
-						stackId={stack.id}
-						composeFileName={stack.composeFileName}
-						envFileName={stack.envFileName}
-						initialComposeYaml={stack.composeYaml}
-						initialEnvFileContent={stack.envFileContent}
-						editorHeight={editorHeight}
-						action={updateStackConfigAction}
-						disabled={isProtected}
-						disabledReason={isProtected ? protectedLabel || undefined : undefined}
-					/>
+			{/* Editor + Services */}
+			<div className="space-y-4">
+				<StackConfigEditor
+					stackId={stack.id}
+					composeFileName={stack.composeFileName}
+					envFileName={stack.envFileName}
+					initialComposeYaml={stack.composeYaml}
+					initialEnvFileContent={stack.envFileContent}
+					editorHeight={editorHeight}
+					action={updateStackConfigAction}
+					disabled={isProtected}
+					disabledReason={isProtected ? protectedLabel || undefined : undefined}
+				/>
 
-					<StackServicesAccordion
-						containers={containers}
-						containerDetailsMap={containerDetailsMap}
-						controlContainerAction={controlContainerAction}
-						environmentId={stack.environment.id}
-						managerUrl={settings.managerUrl}
-					/>
-				</div>
-
-				<div className="space-y-4">
-					<LiveStackFeed
-						stackId={stack.id}
-						initialLog={latestDeployment?.log}
-						height={editorHeight}
-					/>
-				</div>
+				<StackServicesAccordion
+					containers={containers}
+					containerDetailsMap={containerDetailsMap}
+					controlContainerAction={controlContainerAction}
+					environmentId={stack.environment.id}
+					managerUrl={settings.managerUrl}
+				/>
 			</div>
 		</div>
 	);

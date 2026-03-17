@@ -14,8 +14,8 @@ import {
 	Sparkles,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
-import { CodeEditor } from "@/components/code-editor";
 import { FormSubmitButton } from "@/components/form-submit-button";
+import { ResizableEditorPanels } from "@/components/resizable-editor-panels";
 import type { GitHubProviderOption, InstallationOption } from "@/components/github-types";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -750,37 +750,20 @@ export function StackGitHubForm({
 					)}
 				</button>
 				{showEditor ? (
-					<div className="mt-3 grid gap-0 overflow-hidden rounded-lg border border-default/8 lg:grid-cols-[1.4fr_0.6fr]">
-						<div className="min-h-0 border-b border-default/8 lg:border-b-0 lg:border-r">
-							<div className="border-b border-default/5 bg-foreground/[0.02] px-3 py-1.5">
-								<p className="text-[11px] font-medium text-muted">
-									{composePath || "compose.yaml"}
-								</p>
-							</div>
-							<CodeEditor
-								value={composeYaml}
-								onChange={setComposeYaml}
-								language="yaml"
-								minHeight="280px"
-								maxHeight={editorHeight}
-								height={editorHeight}
-								placeholder="Load a repository to populate this editor."
-							/>
-						</div>
-						<div className="min-h-0">
-							<div className="border-b border-default/5 bg-foreground/[0.02] px-3 py-1.5">
-								<p className="text-[11px] font-medium text-muted">{envPath || ".env"}</p>
-							</div>
-							<CodeEditor
-								value={envFileContent}
-								onChange={setEnvFileContent}
-								language="env"
-								minHeight="280px"
-								maxHeight={editorHeight}
-								height={editorHeight}
-								placeholder="Optional env file."
-							/>
-						</div>
+					<div className="mt-3">
+						<ResizableEditorPanels
+							leftLabel={composePath || "compose.yaml"}
+							rightLabel={envPath || ".env"}
+							leftValue={composeYaml}
+							rightValue={envFileContent}
+							onLeftChange={setComposeYaml}
+							onRightChange={setEnvFileContent}
+							leftLanguage="yaml"
+							rightLanguage="env"
+							leftPlaceholder="Load a repository to populate this editor."
+							rightPlaceholder="Optional env file."
+							height={editorHeight}
+						/>
 					</div>
 				) : null}
 			</div>
