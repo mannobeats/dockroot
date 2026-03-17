@@ -1,8 +1,13 @@
 import { PageHeader } from "@/components/page-header";
+import { RuntimeUnavailablePanel } from "@/components/runtime-unavailable-panel";
 import { ShellWorkspace } from "@/components/shell-workspace";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireUserSession } from "@/lib/authorization";
-import { resolveRuntimeEnvironment } from "@/lib/environment-runtime";
+import {
+	getRuntimeConnectionMessage,
+	isRuntimeConnectionError,
+	resolveRuntimeEnvironment,
+} from "@/lib/environment-runtime";
 import { listAccessibleContainersForUser } from "@/lib/runtime-access";
 
 function resolveShell(value: string | undefined): "sh" | "bash" | "ash" | "zsh" | "custom" {
@@ -26,9 +31,16 @@ export default async function ShellPage({
 	const shell = resolveShell(params.shell);
 	const customShell = typeof params.customShell === "string" ? params.customShell : undefined;
 	const environment = await resolveRuntimeEnvironment(userId, params.environment);
-	const containers = (await listAccessibleContainersForUser(userId, role, environment.id)).filter(
-		(container: Record<string, string>) => container.State === "running",
-	);
+	let runtimeIssue: string | null = null;
+	const containers = (
+		await listAccessibleContainersForUser(userId, role, environment.id).catch((error) => {
+			if (isRuntimeConnectionError(error)) {
+				runtimeIssue = getRuntimeConnectionMessage(error);
+				return [];
+			}
+			throw error;
+		})
+	).filter((container: Record<string, string>) => container.State === "running");
 	const selectedContainer = params.containerId
 		? containers.find((container: Record<string, string>) => container.ID === params.containerId) ||
 			null
@@ -42,7 +54,9 @@ export default async function ShellPage({
 				description="Attach to a running container in your environment."
 			/>
 
-			{containers.length === 0 ? (
+			{runtimeIssue ? (
+				<RuntimeUnavailablePanel title="Shell unavailable" message={runtimeIssue} />
+			) : containers.length === 0 ? (
 				<EmptyState
 					title="No accessible containers available"
 					description="Start a running container or deploy a stack before opening a shell."

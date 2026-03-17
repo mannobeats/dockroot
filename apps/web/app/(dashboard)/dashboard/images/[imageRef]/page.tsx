@@ -1,5 +1,6 @@
 import { ArrowLeft, Lock } from "lucide-react";
 import Link from "next/link";
+import { RuntimeUnavailablePanel } from "@/components/runtime-unavailable-panel";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/link-button";
@@ -9,6 +10,8 @@ import { Panel, PanelHeader, PanelTitle } from "@/components/ui/panel";
 import { requirePrivilegedPageSession } from "@/lib/authorization";
 import {
 	getImageDetailsForEnvironment,
+	getRuntimeConnectionMessage,
+	isRuntimeConnectionError,
 	listContainersForEnvironment,
 	resolveRuntimeEnvironment,
 } from "@/lib/environment-runtime";
@@ -26,10 +29,31 @@ export default async function ImageDetailPage({
 	const query = await searchParams;
 	const decodedRef = decodeURIComponent(imageRef);
 	const environment = await resolveRuntimeEnvironment(session.userId, query.environment);
+	let runtimeIssue: string | null = null;
 	const [{ image }, { containers }] = await Promise.all([
-		getImageDetailsForEnvironment(session.userId, decodedRef, environment.id),
-		listContainersForEnvironment(session.userId, environment.id),
+		getImageDetailsForEnvironment(session.userId, decodedRef, environment.id).catch((error) => {
+			if (isRuntimeConnectionError(error)) {
+				runtimeIssue = getRuntimeConnectionMessage(error);
+				return { environment, image: null };
+			}
+			throw error;
+		}),
+		listContainersForEnvironment(session.userId, environment.id).catch((error) => {
+			if (isRuntimeConnectionError(error)) {
+				runtimeIssue = getRuntimeConnectionMessage(error);
+				return { environment, containers: [] };
+			}
+			throw error;
+		}),
 	]);
+
+	if (runtimeIssue) {
+		return (
+			<div className="animate-in space-y-5">
+				<RuntimeUnavailablePanel title="Image details unavailable" message={runtimeIssue} />
+			</div>
+		);
+	}
 
 	if (!image) {
 		return <div className="text-sm text-muted">Image not found.</div>;

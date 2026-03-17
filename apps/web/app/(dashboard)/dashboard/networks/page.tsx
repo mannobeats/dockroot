@@ -8,10 +8,16 @@ import { CreateNetworkModal } from "@/components/create-network-modal";
 import { DestructiveActionModal } from "@/components/destructive-action-modal";
 import { NetworksTableWorkspace } from "@/components/networks-table-workspace";
 import { PageHeader } from "@/components/page-header";
+import { RuntimeUnavailablePanel } from "@/components/runtime-unavailable-panel";
 import { Input } from "@/components/ui/input";
 import { Panel } from "@/components/ui/panel";
 import { requirePrivilegedPageSession } from "@/lib/authorization";
-import { listNetworksForEnvironment, resolveRuntimeEnvironment } from "@/lib/environment-runtime";
+import {
+	getRuntimeConnectionMessage,
+	isRuntimeConnectionError,
+	listNetworksForEnvironment,
+	resolveRuntimeEnvironment,
+} from "@/lib/environment-runtime";
 
 export default async function NetworksPage({
 	searchParams,
@@ -22,7 +28,16 @@ export default async function NetworksPage({
 	const params = await searchParams;
 	const environment = await resolveRuntimeEnvironment(session.userId, params.environment);
 	const query = (params.q || "").toLowerCase();
-	const { networks } = await listNetworksForEnvironment(session.userId, environment.id);
+	let runtimeIssue: string | null = null;
+	const { networks } = await listNetworksForEnvironment(session.userId, environment.id).catch(
+		(error) => {
+			if (isRuntimeConnectionError(error)) {
+				runtimeIssue = getRuntimeConnectionMessage(error);
+				return { environment, networks: [] };
+			}
+			throw error;
+		},
+	);
 	const filtered = networks.filter((network: Record<string, string>) =>
 		!query
 			? true
@@ -51,6 +66,10 @@ export default async function NetworksPage({
 					</div>
 				}
 			/>
+
+			{runtimeIssue ? (
+				<RuntimeUnavailablePanel title="Networks unavailable" message={runtimeIssue} />
+			) : null}
 
 			<Panel>
 				<form className="border-b border-default/8 px-3 py-2">

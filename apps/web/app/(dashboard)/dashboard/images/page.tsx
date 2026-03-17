@@ -8,10 +8,13 @@ import { DestructiveActionModal } from "@/components/destructive-action-modal";
 import { ImagesTableWorkspace } from "@/components/images-table-workspace";
 import { PageHeader } from "@/components/page-header";
 import { PullImageModal } from "@/components/pull-image-modal";
+import { RuntimeUnavailablePanel } from "@/components/runtime-unavailable-panel";
 import { Input } from "@/components/ui/input";
 import { Panel } from "@/components/ui/panel";
 import { requirePrivilegedPageSession } from "@/lib/authorization";
 import {
+	getRuntimeConnectionMessage,
+	isRuntimeConnectionError,
 	listContainersForEnvironment,
 	listImagesForEnvironment,
 	resolveRuntimeEnvironment,
@@ -27,14 +30,31 @@ export default async function ImagesPage({
 	const params = await searchParams;
 	const environment = await resolveRuntimeEnvironment(session.userId, params.environment);
 	const query = (params.q || "").toLowerCase();
-	const { images } = await listImagesForEnvironment(session.userId, environment.id);
+	let runtimeIssue: string | null = null;
+	const { images } = await listImagesForEnvironment(session.userId, environment.id).catch(
+		(error) => {
+			if (isRuntimeConnectionError(error)) {
+				runtimeIssue = getRuntimeConnectionMessage(error);
+				return { environment, images: [] };
+			}
+			throw error;
+		},
+	);
 	const filtered = images.filter((image: Record<string, string>) =>
 		!query
 			? true
 			: `${image.Repository}:${image.Tag}`.toLowerCase().includes(query) ||
 				(image.ID || "").toLowerCase().includes(query),
 	);
-	const { containers } = await listContainersForEnvironment(session.userId, environment.id);
+	const { containers } = await listContainersForEnvironment(session.userId, environment.id).catch(
+		(error) => {
+			if (isRuntimeConnectionError(error)) {
+				runtimeIssue = getRuntimeConnectionMessage(error);
+				return { environment, containers: [] };
+			}
+			throw error;
+		},
+	);
 	const protectedImageRefs =
 		environment.kind === "local" ? getProtectedImageRefs(containers) : new Set<string>();
 	const containerImageRefs = new Set<string>(
@@ -82,6 +102,10 @@ export default async function ImagesPage({
 					</div>
 				}
 			/>
+
+			{runtimeIssue ? (
+				<RuntimeUnavailablePanel title="Images unavailable" message={runtimeIssue} />
+			) : null}
 
 			<Panel>
 				<form className="border-b border-default/8 px-3 py-2">

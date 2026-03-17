@@ -2,6 +2,7 @@ import { AlertTriangle, Boxes, Layers3, PlayCircle, Server } from "lucide-react"
 import Link from "next/link";
 import { DashboardStatusPanel } from "@/components/dashboard-status-panel";
 import { InfrastructureCharts } from "@/components/prometheus-overview";
+import { RuntimeUnavailablePanel } from "@/components/runtime-unavailable-panel";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/link-button";
@@ -9,7 +10,9 @@ import { Panel, PanelContent, PanelHeader } from "@/components/ui/panel";
 import { UtilizationBar } from "@/components/ui/utilization-bar";
 import { isPrivilegedRole, requireUserSession } from "@/lib/authorization";
 import {
+	getRuntimeConnectionMessage,
 	getRuntimeSnapshotForEnvironment,
+	isRuntimeConnectionError,
 	resolveRuntimeEnvironment,
 } from "@/lib/environment-runtime";
 import { getDashboardData } from "@/lib/platform";
@@ -24,13 +27,22 @@ export default async function DashboardPage({
 	const params = await searchParams;
 	const includeRuntime = isPrivilegedRole(role);
 	const environment = await resolveRuntimeEnvironment(userId, params.environment);
-
-	const [data, runtime, metrics, targets] = await Promise.all([
+	let runtimeIssue: string | null = null;
+	const [data, runtimeResult, metrics, targets] = await Promise.all([
 		getDashboardData(userId, { includeRuntime }),
-		includeRuntime ? getRuntimeSnapshotForEnvironment(userId, environment.id) : null,
+		includeRuntime
+			? getRuntimeSnapshotForEnvironment(userId, environment.id).catch((error) => {
+					if (isRuntimeConnectionError(error)) {
+						runtimeIssue = getRuntimeConnectionMessage(error);
+						return null;
+					}
+					throw error;
+				})
+			: null,
 		includeRuntime && environment.kind === "local" ? getPrometheusDashboardMetrics() : null,
 		includeRuntime && environment.kind === "local" ? getMonitoringCollectorHealth() : null,
 	]);
+	const runtime = runtimeResult;
 	const hostTotalMemoryGb = includeRuntime && runtime ? runtime.snapshot.host.totalMemoryGb : null;
 	const fallbackUsedMemoryGb =
 		includeRuntime && runtime
@@ -95,8 +107,12 @@ export default async function DashboardPage({
 		status: d.status,
 		version: d.version,
 		createdAt: d.createdAt.toISOString(),
-		stack: d.stack ? { id: d.stack.id, name: d.stack.name } : { id: "", name: d.stackName || "Deleted stack" },
-		environment: d.environment ? { id: d.environment.id, name: d.environment.name } : { id: "", name: d.environmentName || "Deleted environment" },
+		stack: d.stack
+			? { id: d.stack.id, name: d.stack.name }
+			: { id: "", name: d.stackName || "Deleted stack" },
+		environment: d.environment
+			? { id: d.environment.id, name: d.environment.name }
+			: { id: "", name: d.environmentName || "Deleted environment" },
 	}));
 
 	const containerCount = includeRuntime && runtime ? runtime.snapshot.counts.containers : null;
@@ -143,6 +159,13 @@ export default async function DashboardPage({
 						))}
 					</div>
 				</div>
+			) : null}
+
+			{runtimeIssue ? (
+				<RuntimeUnavailablePanel
+					title={`${environment.name} is not ready yet`}
+					message={runtimeIssue}
+				/>
 			) : null}
 
 			{/* Row 3: Metrics strip */}

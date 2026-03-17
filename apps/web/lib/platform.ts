@@ -792,9 +792,7 @@ export async function deleteActivityEvents(userId: string, eventIds: string[]) {
 			)
 		: eq(deployments.initiatedByUserId, userId);
 
-	await db
-		.delete(deployments)
-		.where(and(inArray(deployments.id, eventIds), deploymentOwnership));
+	await db.delete(deployments).where(and(inArray(deployments.id, eventIds), deploymentOwnership));
 
 	return { deleted: eventIds.length };
 }
@@ -900,6 +898,8 @@ export async function createEnvironment({
 
 	revalidatePath("/dashboard");
 	revalidatePath("/dashboard/environments");
+
+	return environmentId;
 }
 
 export async function createStack({

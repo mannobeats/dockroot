@@ -12,12 +12,17 @@ import { ContainersTableWorkspace } from "@/components/containers-table-workspac
 import { CreateContainerModal } from "@/components/create-container-modal";
 import { LiveRuntimePanel } from "@/components/live-runtime-panel";
 import { PageHeader } from "@/components/page-header";
+import { RuntimeUnavailablePanel } from "@/components/runtime-unavailable-panel";
 import { Input } from "@/components/ui/input";
 import { Panel } from "@/components/ui/panel";
 import { Select } from "@/components/ui/select";
 import { isPrivilegedRole, requireUserSession } from "@/lib/authorization";
 import { getContainerUpdatePolicyMap, getContainerUpdateStateMap } from "@/lib/container-updates";
-import { resolveRuntimeEnvironment } from "@/lib/environment-runtime";
+import {
+	getRuntimeConnectionMessage,
+	isRuntimeConnectionError,
+	resolveRuntimeEnvironment,
+} from "@/lib/environment-runtime";
 import { getGlobalSettings } from "@/lib/platform";
 import { listAccessibleContainersForUser } from "@/lib/runtime-access";
 import { getProtectedContainerLabel, isProtectedManagerContainer } from "@/lib/runtime-protection";
@@ -39,7 +44,16 @@ export default async function ContainersPage({
 	const query = (params.q || "").toLowerCase();
 	const status = (params.status || "all").toLowerCase();
 	const watchStackId = (params.watchStackId || "").trim();
-	const containers = await listAccessibleContainersForUser(userId, role, environment.id);
+	let runtimeIssue: string | null = null;
+	const containers = await listAccessibleContainersForUser(userId, role, environment.id).catch(
+		(error) => {
+			if (isRuntimeConnectionError(error)) {
+				runtimeIssue = getRuntimeConnectionMessage(error);
+				return [];
+			}
+			throw error;
+		},
+	);
 	const includeRuntime = isPrivilegedRole(role) && environment.kind === "local";
 	const filtered = containers.filter((container: Record<string, string>) => {
 		const matchesQuery =
@@ -119,6 +133,10 @@ export default async function ContainersPage({
 			/>
 
 			{includeRuntime ? <LiveRuntimePanel /> : null}
+
+			{runtimeIssue ? (
+				<RuntimeUnavailablePanel title="Containers unavailable" message={runtimeIssue} />
+			) : null}
 
 			{/* Inline search + filter */}
 			<Panel>

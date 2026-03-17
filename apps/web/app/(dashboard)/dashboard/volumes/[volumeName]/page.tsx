@@ -4,6 +4,7 @@ import {
 	deleteVolumeBackupAction,
 	restoreVolumeAction,
 } from "@/app/(dashboard)/actions";
+import { RuntimeUnavailablePanel } from "@/components/runtime-unavailable-panel";
 import { LinkButton } from "@/components/ui/link-button";
 import { LogBlock } from "@/components/ui/log-block";
 import { MetricCard } from "@/components/ui/metric-card";
@@ -11,7 +12,9 @@ import { Panel, PanelHeader, PanelTitle } from "@/components/ui/panel";
 import { VolumeBackupModal } from "@/components/volume-backup-modal";
 import { requirePrivilegedPageSession } from "@/lib/authorization";
 import {
+	getRuntimeConnectionMessage,
 	getVolumeDetailsForEnvironment,
+	isRuntimeConnectionError,
 	resolveRuntimeEnvironment,
 } from "@/lib/environment-runtime";
 import { listVolumeBackupsForUser } from "@/lib/volume-backups";
@@ -28,11 +31,18 @@ export default async function VolumeDetailPage({
 	const query = await searchParams;
 	const decodedName = decodeURIComponent(volumeName);
 	const environment = await resolveRuntimeEnvironment(session.userId, query.environment);
+	let runtimeIssue: string | null = null;
 	const { volume } = await getVolumeDetailsForEnvironment(
 		session.userId,
 		decodedName,
 		environment.id,
-	);
+	).catch((error) => {
+		if (isRuntimeConnectionError(error)) {
+			runtimeIssue = getRuntimeConnectionMessage(error);
+			return { environment, volume: null };
+		}
+		throw error;
+	});
 	const backupsByVolume = await listVolumeBackupsForUser({
 		userId: session.userId,
 		environmentId: environment.id,
@@ -47,6 +57,14 @@ export default async function VolumeDetailPage({
 			: backups.length
 				? "Healthy"
 				: "Not configured";
+
+	if (runtimeIssue) {
+		return (
+			<div className="animate-in space-y-5">
+				<RuntimeUnavailablePanel title="Volume details unavailable" message={runtimeIssue} />
+			</div>
+		);
+	}
 
 	if (!volume) {
 		return <div className="text-sm text-muted">Volume not found.</div>;

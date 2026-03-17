@@ -32,6 +32,38 @@ import {
 	writeContainerFile,
 } from "@/lib/platform/docker";
 
+export class RuntimeConnectionError extends Error {
+	code:
+		| "remote_unavailable"
+		| "agent_not_registered"
+		| "agent_unauthorized"
+		| "agent_request_failed";
+
+	constructor(
+		code:
+			| "remote_unavailable"
+			| "agent_not_registered"
+			| "agent_unauthorized"
+			| "agent_request_failed",
+		message: string,
+	) {
+		super(message);
+		this.name = "RuntimeConnectionError";
+		this.code = code;
+	}
+}
+
+export function isRuntimeConnectionError(error: unknown): error is RuntimeConnectionError {
+	return error instanceof RuntimeConnectionError;
+}
+
+export function getRuntimeConnectionMessage(error: unknown) {
+	if (error instanceof RuntimeConnectionError) {
+		return error.message;
+	}
+	return error instanceof Error ? error.message : "Runtime connection is unavailable.";
+}
+
 async function getEnvironmentRecord(environmentId: string | undefined, userId: string) {
 	if (environmentId) {
 		const environment = await db.query.environments.findFirst({
@@ -62,12 +94,15 @@ async function fetchAgent(
 	init?: RequestInit,
 ) {
 	if (!environment || environment.kind !== "agent") {
-		throw new Error("Remote agent environment is not available.");
+		throw new RuntimeConnectionError(
+			"remote_unavailable",
+			"Remote agent environment is not available.",
+		);
 	}
 
 	const agent = environment.agent?.[0];
 	if (!environment.managerUrl || !agent?.accessToken) {
-		throw new Error("Agent is not registered yet.");
+		throw new RuntimeConnectionError("agent_not_registered", "Agent is not registered yet.");
 	}
 
 	const response = await fetch(`${environment.managerUrl.replace(/\/$/, "")}${path}`, {
@@ -80,7 +115,10 @@ async function fetchAgent(
 	});
 
 	if (!response.ok) {
-		throw new Error(
+		throw new RuntimeConnectionError(
+			response.status === 401 || response.status === 403
+				? "agent_unauthorized"
+				: "agent_request_failed",
 			response.status === 401 || response.status === 403
 				? "Agent request was not authorized."
 				: `Agent request failed for ${path}.`,

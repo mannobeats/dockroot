@@ -10,11 +10,17 @@ import {
 import { CreateVolumeModal } from "@/components/create-volume-modal";
 import { DestructiveActionModal } from "@/components/destructive-action-modal";
 import { PageHeader } from "@/components/page-header";
+import { RuntimeUnavailablePanel } from "@/components/runtime-unavailable-panel";
 import { Input } from "@/components/ui/input";
 import { Panel } from "@/components/ui/panel";
 import { VolumesTableWorkspace } from "@/components/volumes-table-workspace";
 import { requirePrivilegedPageSession } from "@/lib/authorization";
-import { listVolumesForEnvironment, resolveRuntimeEnvironment } from "@/lib/environment-runtime";
+import {
+	getRuntimeConnectionMessage,
+	isRuntimeConnectionError,
+	listVolumesForEnvironment,
+	resolveRuntimeEnvironment,
+} from "@/lib/environment-runtime";
 import { listVolumeBackupsForUser } from "@/lib/volume-backups";
 
 export default async function VolumesPage({
@@ -26,7 +32,16 @@ export default async function VolumesPage({
 	const params = await searchParams;
 	const environment = await resolveRuntimeEnvironment(session.userId, params.environment);
 	const query = (params.q || "").toLowerCase();
-	const { volumes } = await listVolumesForEnvironment(session.userId, environment.id);
+	let runtimeIssue: string | null = null;
+	const { volumes } = await listVolumesForEnvironment(session.userId, environment.id).catch(
+		(error) => {
+			if (isRuntimeConnectionError(error)) {
+				runtimeIssue = getRuntimeConnectionMessage(error);
+				return { environment, volumes: [] };
+			}
+			throw error;
+		},
+	);
 	const filtered = volumes.filter((volume: Record<string, string>) =>
 		!query
 			? true
@@ -60,6 +75,10 @@ export default async function VolumesPage({
 					</div>
 				}
 			/>
+
+			{runtimeIssue ? (
+				<RuntimeUnavailablePanel title="Volumes unavailable" message={runtimeIssue} />
+			) : null}
 
 			<Panel>
 				<form className="border-b border-default/8 px-3 py-2">

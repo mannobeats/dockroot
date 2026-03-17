@@ -1,5 +1,6 @@
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
+import { RuntimeUnavailablePanel } from "@/components/runtime-unavailable-panel";
 import { LinkButton } from "@/components/ui/link-button";
 import { LogBlock } from "@/components/ui/log-block";
 import { MetricCard } from "@/components/ui/metric-card";
@@ -7,6 +8,8 @@ import { Panel, PanelHeader, PanelTitle } from "@/components/ui/panel";
 import { requirePrivilegedPageSession } from "@/lib/authorization";
 import {
 	getNetworkDetailsForEnvironment,
+	getRuntimeConnectionMessage,
+	isRuntimeConnectionError,
 	resolveRuntimeEnvironment,
 } from "@/lib/environment-runtime";
 
@@ -22,11 +25,26 @@ export default async function NetworkDetailPage({
 	const query = await searchParams;
 	const decodedName = decodeURIComponent(networkName);
 	const environment = await resolveRuntimeEnvironment(session.userId, query.environment);
+	let runtimeIssue: string | null = null;
 	const { network } = await getNetworkDetailsForEnvironment(
 		session.userId,
 		decodedName,
 		environment.id,
-	);
+	).catch((error) => {
+		if (isRuntimeConnectionError(error)) {
+			runtimeIssue = getRuntimeConnectionMessage(error);
+			return { environment, network: null };
+		}
+		throw error;
+	});
+
+	if (runtimeIssue) {
+		return (
+			<div className="animate-in space-y-5">
+				<RuntimeUnavailablePanel title="Network details unavailable" message={runtimeIssue} />
+			</div>
+		);
+	}
 
 	if (!network) {
 		return <div className="text-sm text-muted">Network not found.</div>;

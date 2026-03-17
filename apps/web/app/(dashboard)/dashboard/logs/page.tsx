@@ -1,8 +1,11 @@
 import { LiveLogsWorkspace } from "@/components/live-logs-workspace";
 import { PageHeader } from "@/components/page-header";
+import { RuntimeUnavailablePanel } from "@/components/runtime-unavailable-panel";
 import { requireUserSession } from "@/lib/authorization";
 import {
 	getContainerLogsForEnvironment,
+	getRuntimeConnectionMessage,
+	isRuntimeConnectionError,
 	resolveRuntimeEnvironment,
 } from "@/lib/environment-runtime";
 import { listAccessibleContainersForUser } from "@/lib/runtime-access";
@@ -20,7 +23,16 @@ export default async function LogsPage({
 	const { userId, role } = await requireUserSession();
 	const params = await searchParams;
 	const environment = await resolveRuntimeEnvironment(userId, params.environment);
-	const containers = await listAccessibleContainersForUser(userId, role, environment.id);
+	let runtimeIssue: string | null = null;
+	const containers = await listAccessibleContainersForUser(userId, role, environment.id).catch(
+		(error) => {
+			if (isRuntimeConnectionError(error)) {
+				runtimeIssue = getRuntimeConnectionMessage(error);
+				return [];
+			}
+			throw error;
+		},
+	);
 	const initialMode = params.mode === "grouped" ? "grouped" : "single";
 	const requestedIds =
 		initialMode === "grouped"
@@ -42,18 +54,20 @@ export default async function LogsPage({
 	const selectedContainers = containers.filter((container: Record<string, string>) =>
 		initialSelectedIds.includes(container.ID),
 	);
-	const initialLogs = Object.fromEntries(
-		await Promise.all(
-			selectedContainers.map(async (container: Record<string, string>) => [
-				container.ID,
-				(
-					await getContainerLogsForEnvironment(userId, container.ID, environment.id, {
-						tail: 150,
-					})
-				).logs,
-			]),
-		),
-	);
+	const initialLogs = runtimeIssue
+		? {}
+		: Object.fromEntries(
+				await Promise.all(
+					selectedContainers.map(async (container: Record<string, string>) => [
+						container.ID,
+						(
+							await getContainerLogsForEnvironment(userId, container.ID, environment.id, {
+								tail: 150,
+							})
+						).logs,
+					]),
+				),
+			);
 
 	return (
 		<div className="animate-in space-y-4">
@@ -63,19 +77,23 @@ export default async function LogsPage({
 				description={`${environment.name} — stream and inspect container output`}
 			/>
 
-			<LiveLogsWorkspace
-				containers={containers.map((container: Record<string, string>) => ({
-					id: container.ID,
-					name: container.Names,
-					image: container.Image,
-					state: container.State,
-				}))}
-				initialLogs={initialLogs}
-				initialMode={initialMode}
-				initialSelectedIds={initialSelectedIds}
-				transport={environment.kind === "local" ? "local" : "remote"}
-				environmentId={environment.id}
-			/>
+			{runtimeIssue ? (
+				<RuntimeUnavailablePanel title="Logs unavailable" message={runtimeIssue} />
+			) : (
+				<LiveLogsWorkspace
+					containers={containers.map((container: Record<string, string>) => ({
+						id: container.ID,
+						name: container.Names,
+						image: container.Image,
+						state: container.State,
+					}))}
+					initialLogs={initialLogs}
+					initialMode={initialMode}
+					initialSelectedIds={initialSelectedIds}
+					transport={environment.kind === "local" ? "local" : "remote"}
+					environmentId={environment.id}
+				/>
+			)}
 		</div>
 	);
 }

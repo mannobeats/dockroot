@@ -168,7 +168,7 @@ export async function createEnvironmentAction(formData: FormData) {
 		throw new Error("Environment name is required");
 	}
 
-	await createEnvironment({
+	const environmentId = await createEnvironment({
 		userId,
 		name,
 		description,
@@ -185,7 +185,7 @@ export async function createEnvironmentAction(formData: FormData) {
 		},
 	});
 
-	redirect("/dashboard/environments");
+	redirect(`/dashboard/environments/${environmentId}`);
 }
 
 export async function rotateAgentRegistrationTokenAction(formData: FormData) {
