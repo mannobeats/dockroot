@@ -48,7 +48,7 @@ export function StackGitHubForm({
 	appConfigured: boolean;
 	action: (formData: FormData) => void | Promise<void>;
 }) {
-	const editorHeight = "min(55vh, 560px)";
+	const editorHeight = "min(70vh, 800px)";
 	const [step, setStep] = useState<WizardStep>("source");
 	const [installationOptions, setInstallationOptions] = useState(installations);
 	const [_installationState, setInstallationState] = useState<
@@ -750,8 +750,8 @@ export function StackGitHubForm({
 					)}
 				</button>
 				{showEditor ? (
-					<div className="mt-3 grid gap-0 overflow-hidden rounded-lg border border-default/8 xl:grid-cols-[1.4fr_0.6fr]">
-						<div className="min-h-0 border-b border-default/8 xl:border-b-0 xl:border-r">
+					<div className="mt-3 grid gap-0 overflow-hidden rounded-lg border border-default/8 lg:grid-cols-[1.4fr_0.6fr]">
+						<div className="min-h-0 border-b border-default/8 lg:border-b-0 lg:border-r">
 							<div className="border-b border-default/5 bg-foreground/[0.02] px-3 py-1.5">
 								<p className="text-[11px] font-medium text-muted">
 									{composePath || "compose.yaml"}

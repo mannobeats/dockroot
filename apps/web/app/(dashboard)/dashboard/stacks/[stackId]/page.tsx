@@ -24,7 +24,7 @@ export default async function StackWorkspacePage({
 }: {
 	params: Promise<{ stackId: string }>;
 }) {
-	const editorHeight = "min(60vh, 640px)";
+	const editorHeight = "min(70vh, 800px)";
 	const session = await getServerSession();
 
 	if (!session?.user.id) {
@@ -147,7 +147,7 @@ export default async function StackWorkspacePage({
 			</div>
 
 			{/* Main grid */}
-			<div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+			<div className="grid gap-4 xl:grid-cols-[1.4fr_0.6fr]">
 				<div className="space-y-4">
 					<StackConfigEditor
 						stackId={stack.id}

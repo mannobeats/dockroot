@@ -112,8 +112,8 @@ export function StackConfigEditor({
 			</div>
 
 			{/* Editor */}
-			<div className="grid gap-0 overflow-hidden rounded-b-xl border border-default/10 xl:grid-cols-[1.4fr_0.6fr]">
-				<div className="min-h-0 border-b border-default/8 xl:border-b-0 xl:border-r">
+			<div className="grid gap-0 overflow-hidden rounded-b-xl border border-default/10 lg:grid-cols-[1.4fr_0.6fr]">
+				<div className="min-h-0 border-b border-default/8 lg:border-b-0 lg:border-r">
 					<div className="border-b border-default/5 bg-foreground/[0.02] px-3 py-1.5">
 						<p className="text-[11px] font-medium text-muted">{composeFileName}</p>
 					</div>

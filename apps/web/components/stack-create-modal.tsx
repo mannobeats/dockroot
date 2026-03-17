@@ -114,7 +114,8 @@ export function StackCreateModal({
 						role="dialog"
 						aria-modal="true"
 						aria-label={tab === "manual" ? "Create stack" : "Create from GitHub"}
-						className="relative z-10 my-8 w-full max-w-4xl rounded-xl border border-default/10 bg-surface shadow-[var(--shadow-lg)]"
+						className="relative z-10 my-4 flex w-full max-w-[1400px] flex-col rounded-xl border border-default/10 bg-surface shadow-[var(--shadow-lg)]"
+						style={{ maxHeight: "calc(100vh - 2rem)" }}
 					>
 						{/* Header */}
 						<div className="flex items-center justify-between border-b border-default/8 px-5 py-3.5">
@@ -156,7 +157,7 @@ export function StackCreateModal({
 						</div>
 
 						{/* Body */}
-						<div className="p-5">
+						<div className="min-h-0 flex-1 overflow-y-auto p-5">
 							{tab === "manual" ? (
 								<StackComposeForm environments={environments} action={createStackAction} />
 							) : (
