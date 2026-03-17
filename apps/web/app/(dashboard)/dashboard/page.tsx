@@ -1,22 +1,12 @@
-import { Boxes, Layers3, PlayCircle, Server } from "lucide-react";
+import { AlertTriangle, Boxes, Layers3, PlayCircle, Server } from "lucide-react";
 import Link from "next/link";
-import { MonitoringHealthPanel } from "@/components/monitoring-health-panel";
-import { PrometheusOverview } from "@/components/prometheus-overview";
-import { StatCard } from "@/components/stat-card";
+import { DashboardStatusPanel } from "@/components/dashboard-status-panel";
+import { InfrastructureCharts } from "@/components/prometheus-overview";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
-import {
-	DataTable,
-	DataTableBody,
-	DataTableCell,
-	DataTableEmpty,
-	DataTableHead,
-	DataTableHeader,
-	DataTableRow,
-} from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LinkButton } from "@/components/ui/link-button";
-import { Panel } from "@/components/ui/panel";
+import { Panel, PanelHeader, PanelContent } from "@/components/ui/panel";
 import { UtilizationBar } from "@/components/ui/utilization-bar";
 import { isPrivilegedRole, requireUserSession } from "@/lib/authorization";
 import {
@@ -68,6 +58,7 @@ export default async function DashboardPage({
 		if (hour < 17) return "Good afternoon";
 		return "Good evening";
 	})();
+
 	const deploymentAlerts = data.recentDeployments.filter((deployment) =>
 		["failed", "queued", "deploying"].includes(deployment.status),
 	);
@@ -97,9 +88,26 @@ export default async function DashboardPage({
 		})),
 	].slice(0, 4);
 
+	const activityLink = `/dashboard/activity?environment=${environment.id}`;
+
+	// Serialize deployment dates for client component
+	const serializedDeployments = data.recentDeployments.map((d) => ({
+		id: d.id,
+		status: d.status,
+		version: d.version,
+		createdAt: d.createdAt.toISOString(),
+		stack: { id: d.stack.id, name: d.stack.name },
+		environment: { id: d.environment.id, name: d.environment.name },
+	}));
+
+	const containerCount =
+		includeRuntime && runtime ? runtime.snapshot.counts.containers : null;
+	const imageCount =
+		includeRuntime && runtime ? runtime.snapshot.counts.images : null;
+
 	return (
-		<div className="animate-in space-y-6">
-			{/* Greeting + quick action */}
+		<div className="animate-in space-y-5">
+			{/* Row 1: Header */}
 			<div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
 				<div className="min-w-0">
 					<h1 className="break-words text-lg font-bold tracking-tight [overflow-wrap:anywhere]">
@@ -118,175 +126,137 @@ export default async function DashboardPage({
 				</LinkButton>
 			</div>
 
-			{/* Compact stats row */}
-			<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-				<StatCard label="Stacks" value={String(data.stackCount)} detail="tracked" icon={Layers3} />
-				<StatCard
-					label="Environments"
+			{/* Row 2: Attention banner — only when issues exist */}
+			{attentionItems.length > 0 ? (
+				<div className="rounded-lg border border-warning/15 bg-warning/[0.04] px-4 py-3">
+					<div className="flex items-center gap-2 text-xs font-medium text-warning">
+						<AlertTriangle className="h-3.5 w-3.5" />
+						<span>
+							{attentionItems.length} item{attentionItems.length === 1 ? "" : "s"} need
+							{attentionItems.length === 1 ? "s" : ""} attention
+						</span>
+					</div>
+					<div className="mt-2 flex flex-wrap gap-x-4 gap-y-1.5">
+						{attentionItems.map((item) => (
+							<div key={item.id} className="flex items-center gap-2 text-xs">
+								<StatusBadge status={item.status} />
+								<span className="font-medium">{item.title}</span>
+								<span className="text-muted">{item.detail}</span>
+							</div>
+						))}
+					</div>
+				</div>
+			) : null}
+
+			{/* Row 3: Metrics strip */}
+			<div className="flex flex-wrap items-center divide-x divide-default/10">
+				<MetricInline
+					icon={<Layers3 className="h-3.5 w-3.5 text-muted" />}
+					value={String(data.stackCount)}
+					label="Stacks"
+					first
+				/>
+				<MetricInline
+					icon={<Server className="h-3.5 w-3.5 text-muted" />}
 					value={String(data.environmentCount)}
-					detail="local & remote"
-					icon={Server}
+					label="Environments"
 				/>
-				<StatCard
-					label="Deployments"
+				<MetricInline
+					icon={<PlayCircle className="h-3.5 w-3.5 text-muted" />}
 					value={String(data.deploymentCount)}
-					detail="total"
-					icon={PlayCircle}
+					label="Deployments"
 				/>
-				<StatCard
-					label="Containers"
-					value={includeRuntime && runtime ? String(runtime.snapshot.counts.containers) : "—"}
-					detail={
-						includeRuntime && runtime
-							? `${runtime.snapshot.counts.images} images`
-							: "scoped to workspace"
-					}
-					icon={Boxes}
+				<MetricInline
+					icon={<Boxes className="h-3.5 w-3.5 text-muted" />}
+					value={containerCount !== null ? String(containerCount) : "—"}
+					label={imageCount !== null ? `${imageCount} images` : "Containers"}
 				/>
 			</div>
 
-			<div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.85fr)]">
-				<div className="min-w-0 space-y-4">
-					{includeRuntime && metrics ? <PrometheusOverview metrics={metrics} /> : null}
-					{includeRuntime && targets ? <MonitoringHealthPanel collectors={targets} /> : null}
-				</div>
-
-				<div className="space-y-4">
-					<Panel padding="md" className="min-w-0">
-						<div className="flex items-center justify-between gap-3">
-							<div>
-								<p className="text-xs font-medium text-muted">Needs Attention</p>
-								<h2 className="mt-1 text-sm font-semibold">
-									{attentionItems.length
-										? `${attentionItems.length} item${attentionItems.length === 1 ? "" : "s"} need review`
-										: "No urgent issues detected"}
-								</h2>
-							</div>
-							<Badge variant={attentionItems.length ? "warning" : "success"}>
-								{attentionItems.length || "Stable"}
-							</Badge>
-						</div>
-						<div className="mt-4 space-y-2">
-							{attentionItems.length ? (
-								attentionItems.map((item) => (
-									<div
-										key={item.id}
-										className="flex items-start justify-between gap-3 rounded-xl border border-default/10 bg-surface px-3 py-3"
-									>
-										<div className="min-w-0 flex-1">
-											<p className="truncate text-sm font-medium">{item.title}</p>
-											<p className="mt-1 break-words text-[11px] text-muted [overflow-wrap:anywhere]">
-												{item.detail}
-											</p>
-										</div>
-										<div className="shrink-0 pt-0.5">
-											<StatusBadge status={item.status} />
-										</div>
-									</div>
-								))
-							) : (
-								<EmptyState
-									title="Everything looks stable"
-									description="No failed deployments, degraded collectors, or unhealthy environments are currently visible."
-									className="border-default/10 bg-surface-raised p-4"
-								/>
-							)}
-						</div>
-					</Panel>
-
-					<Panel padding="md" className="min-w-0">
-						<div className="flex items-center justify-between gap-3">
-							<div>
-								<p className="text-xs font-medium text-muted">Recent Deployments</p>
-								<h2 className="mt-1 text-sm font-semibold">What changed most recently</h2>
-							</div>
-							<Link
-								href={`/dashboard/activity?environment=${environment.id}`}
-								className="text-xs font-medium text-accent hover:text-accent/80"
-							>
-								View all
-							</Link>
-						</div>
-						<div className="mt-4 space-y-2">
-							{data.recentDeployments.length ? (
-								data.recentDeployments.slice(0, 5).map((deployment) => (
-									<div
-										key={deployment.id}
-										className="rounded-xl border border-default/10 bg-surface px-3 py-3"
-									>
-										<div className="flex items-start justify-between gap-3">
-											<div className="min-w-0 flex-1">
-												<p className="truncate text-sm font-medium">{deployment.stack.name}</p>
-												<p className="mt-1 text-[11px] text-muted">
-													{deployment.environment.name} ·{" "}
-													<span className="font-mono">{deployment.version}</span>
-												</p>
-											</div>
-											<div className="shrink-0 pt-0.5">
-												<StatusBadge status={deployment.status} />
-											</div>
-										</div>
-										<p className="mt-2 text-[11px] text-muted">
-											{deployment.createdAt.toLocaleString()}
-										</p>
-									</div>
-								))
-							) : (
-								<EmptyState
-									title="No deployments yet"
-									description="Tracked stack deployments will appear here."
-									className="border-default/10 bg-surface-raised p-4"
-								/>
-							)}
-						</div>
-					</Panel>
-				</div>
-			</div>
-
-			<div className="grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-				{includeRuntime && runtime ? (
-					<Panel padding="md" className="min-w-0">
-						<div className="flex items-start justify-between gap-3">
+			{/* Row 4: Two-column main content */}
+			<div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.9fr)]">
+				{/* Left: Infrastructure */}
+				{includeRuntime && metrics ? (
+					<Panel className="min-w-0">
+						<PanelHeader>
 							<div className="min-w-0">
-								<p className="text-xs font-medium text-muted">Runtime Host</p>
-								<h2 className="mt-1 break-words text-sm font-semibold [overflow-wrap:anywhere]">
-									{runtime.snapshot.host.hostname}
-								</h2>
-								<p className="mt-1 text-xs text-muted">
-									{runtime.snapshot.host.platform} · {runtime.snapshot.host.architecture} ·{" "}
-									{runtime.snapshot.host.cpus} CPU
-								</p>
+								<p className="text-xs font-medium text-muted">Infrastructure</p>
+								<div className="mt-1.5 flex flex-wrap items-baseline gap-x-4 gap-y-1">
+									<span className="text-xs text-muted">
+										CPU{" "}
+										<span className="font-mono text-sm font-semibold text-foreground">
+											{metrics.cpuPercent?.toFixed(1) ?? "—"}%
+										</span>
+									</span>
+									<span className="text-xs text-muted">
+										Memory{" "}
+										<span className="font-mono text-sm font-semibold text-foreground">
+											{metrics.memoryPercent?.toFixed(1) ?? "—"}%
+										</span>
+									</span>
+									<span className="text-xs text-muted">
+										Containers{" "}
+										<span className="font-mono text-sm font-semibold text-foreground">
+											{metrics.runningContainers ?? 0}
+										</span>
+									</span>
+								</div>
 							</div>
-							<StatusBadge status="healthy" />
-						</div>
-						<div className="mt-4 grid gap-3 sm:grid-cols-2">
-							<UtilizationBar
-								label="Memory"
-								percent={memoryUsedPercent ?? 0}
-								valueLabel={`${memoryUsed ?? "—"} / ${runtime.snapshot.host.totalMemoryGb} GB`}
-							/>
-							<div className="min-w-0 text-xs text-muted">
-								<p className="font-medium text-foreground">Data Directory</p>
-								<p className="mt-1 break-all">{data.dataDir}</p>
-							</div>
-						</div>
+							{runtime ? (
+								<div className="hidden shrink-0 text-right sm:block">
+									<p className="text-[11px] text-muted">{runtime.snapshot.host.hostname}</p>
+									<p className="text-[10px] text-muted/70">
+										{runtime.snapshot.host.platform} · {runtime.snapshot.host.architecture} ·{" "}
+										{runtime.snapshot.host.cpus} CPU
+									</p>
+								</div>
+							) : null}
+						</PanelHeader>
+						<PanelContent>
+							<InfrastructureCharts metrics={metrics} />
+
+							{runtime && hostTotalMemoryGb !== null ? (
+								<div className="mt-4 flex flex-col gap-3 border-t border-default/8 pt-4 sm:flex-row sm:items-end sm:justify-between">
+									<div className="min-w-0 flex-1 sm:max-w-xs">
+										<UtilizationBar
+											label="Memory"
+											percent={memoryUsedPercent ?? 0}
+											valueLabel={`${memoryUsed ?? "—"} / ${hostTotalMemoryGb} GB`}
+										/>
+									</div>
+									<p className="truncate text-[10px] text-muted/60">
+										{data.dataDir}
+									</p>
+								</div>
+							) : null}
+						</PanelContent>
 					</Panel>
 				) : (
 					<Panel padding="md" className="min-w-0">
-						<p className="text-xs font-medium text-muted">Workspace Overview</p>
-						<h2 className="mt-1 text-sm font-semibold">Operator telemetry is unavailable here</h2>
-						<p className="mt-2 text-sm text-muted">
-							Host-level telemetry appears only for privileged users on local runtime environments.
+						<p className="text-xs font-medium text-muted">Infrastructure</p>
+						<p className="mt-1 text-sm font-semibold">Telemetry unavailable</p>
+						<p className="mt-2 text-xs text-muted">
+							Host-level telemetry appears only for privileged users on local runtime
+							environments.
 						</p>
 					</Panel>
 				)}
 
-				<Panel padding="md" className="min-w-0">
-					<div className="flex items-center justify-between gap-3">
-						<div>
-							<p className="text-xs font-medium text-muted">Recent Stacks</p>
-							<h2 className="mt-1 text-sm font-semibold">The stacks you touched most recently</h2>
-						</div>
+				{/* Right: Status & Activity tabs */}
+				<DashboardStatusPanel
+					recentDeployments={serializedDeployments}
+					deploymentStatus={metrics?.deploymentStatus ?? null}
+					environmentStatus={metrics?.environmentStatus ?? null}
+					collectors={targets}
+					activityLink={activityLink}
+				/>
+			</div>
+
+			{/* Row 5: Recent Stacks */}
+			{data.recentStacks.length > 0 ? (
+				<div>
+					<div className="mb-2.5 flex items-center justify-between">
+						<p className="text-xs font-medium text-muted">Recent Stacks</p>
 						<Link
 							href={`/dashboard/stacks?environment=${environment.id}`}
 							className="text-xs font-medium text-accent hover:text-accent/80"
@@ -294,77 +264,42 @@ export default async function DashboardPage({
 							View all
 						</Link>
 					</div>
-					<div className="mt-4 space-y-2">
-						{data.recentStacks.length ? (
-							data.recentStacks.map((stack) => (
-								<Link
-									key={stack.id}
-									href={`/dashboard/stacks/${stack.id}`}
-									className="flex min-w-0 items-start justify-between gap-3 rounded-xl border border-default/10 bg-surface px-3 py-3 transition-colors hover:border-default/18 hover:bg-foreground/[0.02]"
-								>
-									<div className="min-w-0 flex-1">
-										<p className="truncate text-sm font-medium">{stack.name}</p>
-										<p className="mt-1 truncate text-xs text-muted">
-											{stack.description || stack.environment.name}
-										</p>
-									</div>
-									<Badge className="shrink-0">{stack.environment.name}</Badge>
-								</Link>
-							))
-						) : (
-							<EmptyState
-								title="No stacks yet"
-								description="Create a stack to start tracking deployments and runtime health."
-								className="border-default/10 bg-surface-raised p-4"
-							/>
-						)}
+					<div className="flex gap-3 overflow-x-auto pb-1">
+						{data.recentStacks.map((stack) => (
+							<Link
+								key={stack.id}
+								href={`/dashboard/stacks/${stack.id}`}
+								className="flex min-w-0 shrink-0 items-center gap-3 rounded-lg border border-default/10 bg-surface px-3 py-2.5 transition-colors hover:border-default/18 hover:bg-foreground/[0.02]"
+							>
+								<p className="truncate text-sm font-medium">{stack.name}</p>
+								<Badge className="shrink-0">{stack.environment.name}</Badge>
+							</Link>
+						))}
 					</div>
-				</Panel>
-			</div>
-
-			<Panel className="min-w-0">
-				<div className="flex items-center justify-between gap-3 px-3 py-2.5">
-					<h2 className="text-sm font-semibold">Deployment Ledger</h2>
-					<Link
-						href={`/dashboard/activity?environment=${environment.id}`}
-						className="text-xs font-medium text-accent hover:text-accent/80"
-					>
-						View all
-					</Link>
 				</div>
-				<DataTable>
-					<DataTableHeader>
-						<tr>
-							<DataTableHead>Stack</DataTableHead>
-							<DataTableHead>Environment</DataTableHead>
-							<DataTableHead>Version</DataTableHead>
-							<DataTableHead>Status</DataTableHead>
-						</tr>
-					</DataTableHeader>
-					<DataTableBody>
-						{data.recentDeployments.length ? (
-							data.recentDeployments.map((deployment) => (
-								<DataTableRow key={deployment.id}>
-									<DataTableCell className="max-w-[260px] truncate font-medium">
-										{deployment.stack.name}
-									</DataTableCell>
-									<DataTableCell className="max-w-[220px] truncate text-muted">
-										{deployment.environment.name}
-									</DataTableCell>
-									<DataTableCell className="max-w-[200px] truncate font-mono text-xs text-muted">
-										{deployment.version}
-									</DataTableCell>
-									<DataTableCell>
-										<StatusBadge status={deployment.status} />
-									</DataTableCell>
-								</DataTableRow>
-							))
-						) : (
-							<DataTableEmpty colSpan={4}>No deployments yet</DataTableEmpty>
-						)}
-					</DataTableBody>
-				</DataTable>
-			</Panel>
+			) : null}
+		</div>
+	);
+}
+
+function MetricInline({
+	icon,
+	value,
+	label,
+	first,
+}: {
+	icon: React.ReactNode;
+	value: string;
+	label: string;
+	first?: boolean;
+}) {
+	return (
+		<div className={`flex items-center gap-2.5 ${first ? "pr-5" : "px-5"}`}>
+			{icon}
+			<div>
+				<p className="text-xl font-bold tabular-nums tracking-tight leading-none">{value}</p>
+				<p className="mt-0.5 text-[11px] text-muted">{label}</p>
+			</div>
 		</div>
 	);
 }
