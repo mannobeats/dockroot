@@ -6,7 +6,7 @@ type RuntimeSummary = {
 };
 
 const managerComposeProject = process.env.DOCKROOT_MANAGER_COMPOSE_PROJECT || "dockroot";
-const managerServiceNames = new Set(["app", "postgres", "prometheus", "cadvisor", "node-exporter"]);
+const managerServiceNames = new Set(["app", "postgres"]);
 
 function getImageVariants(image: string) {
 	const variants = new Set([image]);

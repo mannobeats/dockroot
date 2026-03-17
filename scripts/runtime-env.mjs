@@ -52,12 +52,10 @@ export function validateRuntimeEnv({
 	const betterAuthUrl = readEnv("BETTER_AUTH_URL") || configuredAppUrl;
 	const appUrl = readEnv("NEXT_PUBLIC_APP_URL") || configuredAppUrl;
 	const tokenPepper = readEnv("DOCKROOT_TOKEN_PEPPER");
-	const metricsToken = readEnv("METRICS_BEARER_TOKEN");
 
 	const requiredPairs = [
 		["BETTER_AUTH_SECRET", betterAuthSecret],
 		["DOCKROOT_TOKEN_PEPPER", tokenPepper],
-		["METRICS_BEARER_TOKEN", metricsToken],
 	];
 
 	if (!compose && !databaseUrl) {
@@ -103,7 +101,6 @@ export function validateRuntimeEnv({
 	for (const [name, value] of [
 		["BETTER_AUTH_SECRET", betterAuthSecret],
 		["DOCKROOT_TOKEN_PEPPER", tokenPepper],
-		["METRICS_BEARER_TOKEN", metricsToken],
 	]) {
 		if (value && value.length < 24) {
 			errors.push(`${name} must be at least 24 characters long.`);
@@ -114,7 +111,6 @@ export function validateRuntimeEnv({
 		for (const [name, value] of [
 			["BETTER_AUTH_SECRET", betterAuthSecret],
 			["DOCKROOT_TOKEN_PEPPER", tokenPepper],
-			["METRICS_BEARER_TOKEN", metricsToken],
 		]) {
 			if (value && looksLikePlaceholder(value)) {
 				errors.push(`${name} still uses a placeholder value.`);

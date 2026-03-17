@@ -3,7 +3,7 @@
 import { CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
-import { DonutStatusCard } from "@/components/prometheus-overview";
+import { DonutStatusCard } from "@/components/infrastructure-charts";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Panel } from "@/components/ui/panel";

@@ -29,7 +29,6 @@ import {
 	listInstallationRepositories,
 } from "@/lib/github-app";
 import { resolveManagerUrl } from "@/lib/manager-url";
-import { incrementDeploymentEvent } from "@/lib/monitoring";
 import {
 	deleteLocalStackResources,
 	deployStackLocally,
@@ -41,6 +40,7 @@ import {
 import { getPlatformDataDir } from "@/lib/platform/fs";
 import { publicEnv } from "@/lib/public-env";
 import { emitRealtime, emitToRoom } from "@/lib/realtime";
+import { persistRuntimeSnapshotMetrics } from "@/lib/runtime-metrics";
 import { isProtectedManagerStack } from "@/lib/runtime-protection";
 
 function now() {
@@ -230,6 +230,8 @@ async function requireOwnedEnvironment(environmentId: string, userId: string) {
 		where: and(eq(environments.id, environmentId), eq(environments.createdByUserId, userId)),
 		columns: {
 			id: true,
+			slug: true,
+			isDefaultLocal: true,
 		},
 	});
 
@@ -284,7 +286,11 @@ export async function ensureDefaultLocalEnvironment(userId: string) {
 	const slug = `local-docker-${userId.slice(0, 8)}`;
 	const loadDefaultEnvironment = () =>
 		db.query.environments.findFirst({
-			where: and(eq(environments.createdByUserId, userId), eq(environments.slug, slug)),
+			where: and(
+				eq(environments.createdByUserId, userId),
+				eq(environments.kind, "local"),
+				eq(environments.isDefaultLocal, true),
+			),
 			with: {
 				agent: true,
 			},
@@ -1033,7 +1039,7 @@ export async function updateEnvironment({
 		.update(environments)
 		.set({
 			name,
-			slug: slugify(name),
+			slug: environment.isDefaultLocal ? environment.slug : slugify(name),
 			description: description || null,
 			updatedAt,
 		})
@@ -1558,7 +1564,6 @@ export async function queueOrRunDeployment({
 		environmentId: stack.environmentId,
 		at: Date.now(),
 	});
-	incrementDeploymentEvent(stack.environment.kind === "local" ? "deploying" : "queued");
 
 	if (stack.environment.kind === "local") {
 		await deployStackLocally({
@@ -1715,7 +1720,10 @@ export async function registerAgent({
 	};
 }
 
-export async function heartbeatAgent(accessToken: string) {
+export async function heartbeatAgent(
+	accessToken: string,
+	snapshot?: Parameters<typeof persistRuntimeSnapshotMetrics>[0]["snapshot"],
+) {
 	const agent = await findAgentByAccessToken(accessToken);
 
 	if (!agent) {
@@ -1743,6 +1751,14 @@ export async function heartbeatAgent(accessToken: string) {
 		.where(eq(environments.id, agent.environmentId));
 
 	emitEnvironmentUpdate(agent.environmentId, "healthy");
+
+	if (snapshot) {
+		await persistRuntimeSnapshotMetrics({
+			environmentId: agent.environmentId,
+			snapshot,
+			source: "agent",
+		});
+	}
 
 	return agent;
 }
@@ -1922,7 +1938,6 @@ export async function completeDeployment({
 		status,
 		at: Date.now(),
 	});
-	incrementDeploymentEvent(status);
 	emitRealtime("deployment:update", {
 		stackId: deployment.stackId,
 		deploymentId,

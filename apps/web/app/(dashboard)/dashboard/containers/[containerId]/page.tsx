@@ -22,8 +22,8 @@ import {
 	resolveRuntimeEnvironment,
 } from "@/lib/environment-runtime";
 import { getGlobalSettings } from "@/lib/platform";
-import { getPrometheusContainerMetrics } from "@/lib/prometheus";
 import { requireAccessibleContainerForUser } from "@/lib/runtime-access";
+import { getContainerRuntimeMetrics } from "@/lib/runtime-metrics";
 import { getProtectedContainerLabel, isProtectedManagerContainer } from "@/lib/runtime-protection";
 
 const sensitiveEnvPattern =
@@ -83,13 +83,11 @@ export default async function ContainerDetailPage({
 		return <div className="text-sm text-muted">Container not found.</div>;
 	}
 
-	const metrics =
-		environment.kind === "local"
-			? await getPrometheusContainerMetrics({
-					containerId: String(inspect.Id || containerId),
-					containerName: String(inspect.Name || "").replace(/^\//, ""),
-				})
-			: null;
+	const metrics = await getContainerRuntimeMetrics({
+		environmentId: environment.id,
+		containerId: String(inspect.Id || containerId),
+		containerName: String(inspect.Name || "").replace(/^\//, ""),
+	});
 
 	const { browser } = await browseContainerPathForEnvironment(
 		auth.userId,

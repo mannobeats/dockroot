@@ -16,12 +16,6 @@ const SECRET_CONFIG = {
 		bytes: 32,
 		description: "internal manager token",
 	},
-	"metrics-token": {
-		stateKey: "metricsBearerToken",
-		envName: "METRICS_BEARER_TOKEN",
-		bytes: 32,
-		description: "metrics bearer token",
-	},
 	"postgres-password": {
 		stateKey: "postgresPassword",
 		envName: "POSTGRES_PASSWORD",
@@ -109,7 +103,7 @@ async function main() {
 			console.log(`- ${secretName}: ${config.description}`);
 		}
 		console.log("");
-		console.log("Defaults to rotating internal-token and metrics-token when no --secret flags are provided.");
+		console.log("Defaults to rotating the internal token when no --secret flags are provided.");
 		return;
 	}
 
@@ -127,13 +121,11 @@ async function main() {
 	const secretStateFile = path.join(bootstrapDir, "runtime-secrets.json");
 	const runtimeEnvFile = path.join(bootstrapDir, "runtime.env");
 	const postgresPasswordFile = path.join(bootstrapDir, "postgres_password");
-	const metricsTokenFile = path.join(bootstrapDir, "metrics_token");
 
 	await applyRuntimeBootstrap({
 		dataDir: resolvedDataDir,
 		writeEnvFile: runtimeEnvFile,
 		writePostgresPasswordFile: postgresPasswordFile,
-		writeMetricsTokenFile: metricsTokenFile,
 	});
 
 	const secretState = await readJson(secretStateFile, {});
@@ -141,7 +133,7 @@ async function main() {
 		? Object.keys(SECRET_CONFIG)
 		: requestedSecrets.size > 0
 			? Array.from(requestedSecrets)
-			: ["internal-token", "metrics-token"];
+			: ["internal-token"];
 
 	const rotated = [];
 	for (const secretName of targets) {
@@ -163,7 +155,6 @@ async function main() {
 		dataDir: resolvedDataDir,
 		writeEnvFile: runtimeEnvFile,
 		writePostgresPasswordFile: postgresPasswordFile,
-		writeMetricsTokenFile: metricsTokenFile,
 	});
 
 	const overriddenSecrets = rotated.filter(({ envName }) => preBootstrapOverrides.has(envName));

@@ -263,6 +263,7 @@ export async function getLocalDockerSnapshot() {
 			cpuPercent,
 			memoryPercent,
 		},
+		containerStats: statsRows,
 	};
 }
 

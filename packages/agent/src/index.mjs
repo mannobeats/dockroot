@@ -414,12 +414,16 @@ async function ensureRegistered(state) {
 	return nextState;
 }
 
-async function heartbeat(state) {
+async function heartbeat(state, snapshot) {
 	await requestText(`${state.managerUrl || managerUrl}/api/agent/heartbeat`, {
 		method: "POST",
 		headers: {
+			"content-type": "application/json",
 			Authorization: `Bearer ${state.agentToken}`,
 		},
+		body: JSON.stringify({
+			snapshot,
+		}),
 	});
 
 	metrics.connected = 1;
@@ -604,30 +608,6 @@ async function reportJobResult(state, jobId, status, log) {
 	}
 }
 
-function renderMetrics() {
-	return [
-		"# HELP dockroot_agent_registered Whether the agent has completed registration.",
-		"# TYPE dockroot_agent_registered gauge",
-		`dockroot_agent_registered ${metrics.registered}`,
-		"# HELP dockroot_agent_connected Whether the last heartbeat succeeded.",
-		"# TYPE dockroot_agent_connected gauge",
-		`dockroot_agent_connected ${metrics.connected}`,
-		"# HELP dockroot_agent_last_heartbeat_timestamp_seconds Unix timestamp of the last successful heartbeat.",
-		"# TYPE dockroot_agent_last_heartbeat_timestamp_seconds gauge",
-		`dockroot_agent_last_heartbeat_timestamp_seconds ${metrics.lastHeartbeatTimestampSeconds}`,
-		"# HELP dockroot_agent_last_job_finished_timestamp_seconds Unix timestamp of the last completed job.",
-		"# TYPE dockroot_agent_last_job_finished_timestamp_seconds gauge",
-		`dockroot_agent_last_job_finished_timestamp_seconds ${metrics.lastJobFinishedTimestampSeconds}`,
-		"# HELP dockroot_agent_last_poll_timestamp_seconds Unix timestamp of the last job poll.",
-		"# TYPE dockroot_agent_last_poll_timestamp_seconds gauge",
-		`dockroot_agent_last_poll_timestamp_seconds ${metrics.lastPollTimestampSeconds}`,
-		"# HELP dockroot_agent_jobs_total Number of jobs completed by result.",
-		"# TYPE dockroot_agent_jobs_total counter",
-		`dockroot_agent_jobs_total{status="succeeded"} ${metrics.jobsSucceeded}`,
-		`dockroot_agent_jobs_total{status="failed"} ${metrics.jobsFailed}`,
-	].join("\n");
-}
-
 async function readHealthSnapshot() {
 	const state = await loadState();
 	return {
@@ -739,6 +719,7 @@ async function getSnapshot() {
 			cpuPercent,
 			memoryPercent,
 		},
+		containerStats: statsRows,
 	};
 }
 
@@ -862,17 +843,6 @@ function startHttpServer() {
 		}
 
 		const authedState = pathName === "/healthz" ? null : await requireAgentAuth(request);
-		if (pathName === "/metrics") {
-			if (!authedState) {
-				response.writeHead(401, { "content-type": "text/plain; charset=utf-8" });
-				response.end("Unauthorized");
-				return;
-			}
-			response.writeHead(200, { "content-type": "text/plain; version=0.0.4; charset=utf-8" });
-			response.end(renderMetrics());
-			return;
-		}
-
 		if (!authedState) {
 			response.writeHead(401, { "content-type": "text/plain; charset=utf-8" });
 			response.end("Unauthorized");
@@ -1457,7 +1427,8 @@ async function loop() {
 	while (true) {
 		try {
 			state = await ensureRegistered(state);
-			await heartbeat(state);
+			const snapshot = await getSnapshot();
+			await heartbeat(state, snapshot);
 
 			// Start docker event stream once registered
 			startDockerEventStream(state);

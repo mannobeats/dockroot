@@ -1,5 +1,6 @@
 import { relations } from "drizzle-orm";
 import {
+	bigint,
 	boolean,
 	index,
 	integer,
@@ -452,11 +453,71 @@ export const volumeBackups = pgTable(
 	],
 );
 
+export const environmentMetricSamples = pgTable(
+	"environment_metric_samples",
+	{
+		id: text("id").primaryKey(),
+		environmentId: text("environment_id")
+			.notNull()
+			.references(() => environments.id, { onDelete: "cascade" }),
+		source: text("source").notNull().default("native"),
+		hostname: text("hostname"),
+		cpuPercentTenths: integer("cpu_percent_tenths"),
+		memoryPercentTenths: integer("memory_percent_tenths"),
+		memoryUsedBytes: bigint("memory_used_bytes", { mode: "number" }),
+		memoryTotalBytes: bigint("memory_total_bytes", { mode: "number" }),
+		containerCount: integer("container_count").notNull().default(0),
+		runningContainerCount: integer("running_container_count").notNull().default(0),
+		imageCount: integer("image_count").notNull().default(0),
+		volumeCount: integer("volume_count").notNull().default(0),
+		networkCount: integer("network_count").notNull().default(0),
+		sampledAt: timestamp("sampled_at").notNull(),
+		createdAt: timestamp("created_at").notNull(),
+	},
+	(table) => [
+		index("environment_metric_samples_environment_idx").on(table.environmentId),
+		index("environment_metric_samples_sampled_idx").on(table.sampledAt),
+	],
+);
+
+export const containerMetricSamples = pgTable(
+	"container_metric_samples",
+	{
+		id: text("id").primaryKey(),
+		environmentId: text("environment_id")
+			.notNull()
+			.references(() => environments.id, { onDelete: "cascade" }),
+		containerId: text("container_id").notNull(),
+		containerName: text("container_name").notNull(),
+		image: text("image"),
+		state: text("state"),
+		cpuPercentTenths: integer("cpu_percent_tenths"),
+		memoryUsageBytes: bigint("memory_usage_bytes", { mode: "number" }),
+		memoryLimitBytes: bigint("memory_limit_bytes", { mode: "number" }),
+		memoryPercentTenths: integer("memory_percent_tenths"),
+		rxBytesTotal: bigint("rx_bytes_total", { mode: "number" }),
+		txBytesTotal: bigint("tx_bytes_total", { mode: "number" }),
+		sampledAt: timestamp("sampled_at").notNull(),
+		createdAt: timestamp("created_at").notNull(),
+	},
+	(table) => [
+		index("container_metric_samples_environment_idx").on(table.environmentId),
+		index("container_metric_samples_container_idx").on(table.environmentId, table.containerId),
+		index("container_metric_samples_container_name_idx").on(
+			table.environmentId,
+			table.containerName,
+		),
+		index("container_metric_samples_sampled_idx").on(table.sampledAt),
+	],
+);
+
 export const environmentRelations = relations(environments, ({ many, one }) => ({
 	agent: many(agents),
 	stacks: many(stacks),
 	deployments: many(deployments),
 	runtimeActions: many(runtimeActionEvents),
+	metricSamples: many(environmentMetricSamples),
+	containerMetricSamples: many(containerMetricSamples),
 	createdBy: one(user, {
 		fields: [environments.createdByUserId],
 		references: [user.id],
@@ -600,5 +661,19 @@ export const volumeBackupRelations = relations(volumeBackups, ({ one }) => ({
 	createdBy: one(user, {
 		fields: [volumeBackups.createdByUserId],
 		references: [user.id],
+	}),
+}));
+
+export const environmentMetricSampleRelations = relations(environmentMetricSamples, ({ one }) => ({
+	environment: one(environments, {
+		fields: [environmentMetricSamples.environmentId],
+		references: [environments.id],
+	}),
+}));
+
+export const containerMetricSampleRelations = relations(containerMetricSamples, ({ one }) => ({
+	environment: one(environments, {
+		fields: [containerMetricSamples.environmentId],
+		references: [environments.id],
 	}),
 }));

@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-eval "$(node /app/scripts/bootstrap-runtime.mjs --format shell --write-env-file /var/lib/dockroot/bootstrap/runtime.env --write-postgres-password-file /var/lib/dockroot/bootstrap/postgres_password --write-metrics-token-file /var/lib/dockroot/bootstrap/metrics_token)"
+eval "$(node /app/scripts/bootstrap-runtime.mjs --format shell --write-env-file /var/lib/dockroot/bootstrap/runtime.env --write-postgres-password-file /var/lib/dockroot/bootstrap/postgres_password)"
 
 node /app/scripts/runtime-env.mjs --production
 

@@ -1,6 +1,6 @@
 # Dockroot
 
-Dockroot is a compose-native Docker deployment and management control plane for self-hosted infrastructure. It combines stack deployment, runtime operations, live logs, shell access, monitoring, GitHub-driven delivery, and tenant-aware access control in a single web application.
+Dockroot is a compose-native Docker deployment and management control plane for self-hosted infrastructure. It combines stack deployment, runtime operations, live logs, shell access, native telemetry, GitHub-driven delivery, and tenant-aware access control in a single web application.
 
 ## Why Dockroot
 
@@ -29,9 +29,9 @@ Core runtime pieces:
 - `Next.js 16` with App Router for the control plane UI
 - `Better Auth` for email/password auth and role-based sessions
 - `PostgreSQL` for users, environments, stacks, and deployments
-- `Socket.IO` for live logs, terminal sessions, and runtime updates
+- `Socket.IO` for live logs, terminal sessions, runtime updates, and telemetry refresh
 - `Docker Engine` access through the host socket
-- `Prometheus`, `cAdvisor`, and `node-exporter` for host and container telemetry
+- `Dockroot native telemetry` for host and container metrics collected directly by the manager or agent
 
 ## Features
 
@@ -41,7 +41,7 @@ Core runtime pieces:
 - Privileged host operations for images, networks, volumes, and settings
 - Live container logs and browser shell access
 - Protected self-management for Dockroot’s own core services
-- Metrics endpoint protection with Prometheus bearer-token scraping
+- Native runtime telemetry for local and remote environments without exporter sidecars
 - GitHub App integration surfaces for repository-backed delivery
 
 ## Open Source License
@@ -79,8 +79,8 @@ make dev-full
 What it does:
 
 - runs the app on the host with `pnpm dev`
-- starts PostgreSQL, Prometheus, cAdvisor, and node-exporter in Docker
-- keeps the full monitoring experience available in the UI
+- starts PostgreSQL in Docker
+- keeps the full runtime management experience available in the UI while the app collects telemetry natively
 
 If you only want PostgreSQL:
 
@@ -105,7 +105,7 @@ curl -fsSL https://raw.githubusercontent.com/mannobeats/dockroot/main/install.sh
 Installer behavior:
 
 - `Quick install` uses recommended defaults
-- `Custom install` lets you choose port, install directory, version, and whether to include monitoring
+- `Custom install` lets you choose port, install directory, and version
 - `NONINTERACTIVE=true` or non-terminal environments fall back to the default mode automatically
 
 Useful installer env overrides:
@@ -114,7 +114,6 @@ Useful installer env overrides:
 - `DOCKROOT_INSTALL_DIR=/srv/dockroot`
 - `DOCKROOT_VERSION=latest`
 - `INSTALL_MODE=custom`
-- `INSTALL_MONITORING=false`
 
 To remove Dockroot and the Docker resources created for that installation:
 
@@ -128,9 +127,9 @@ Use Docker Compose v2 (`docker compose ...`). Avoid legacy `docker-compose` v1, 
 
 What it does:
 
-- runs Dockroot, PostgreSQL, Prometheus, cAdvisor, and node-exporter in Docker
+- runs Dockroot and PostgreSQL in Docker
 - bootstraps internal secrets automatically on first run
-- keeps monitoring built in by default
+- uses Dockroot-native telemetry with no external monitoring stack required
 
 Optional production overrides:
 
@@ -175,7 +174,7 @@ Webhook push deploys are idempotent by delivery id and support per-stack auto-de
 - If you want override files, use `.env.example` as the single template for both local and Docker installs
 - Docker deployments do not require a `.env` file
 - Dockroot generates its internal secrets on first boot and persists them in the data directory or Docker volume
-- Dockroot derives `BETTER_AUTH_URL`, `NEXT_PUBLIC_APP_URL`, cookie security, database credentials, and metrics auth from the bootstrap runtime config
+- Dockroot derives `BETTER_AUTH_URL`, `NEXT_PUBLIC_APP_URL`, cookie security, and database credentials from the bootstrap runtime config
 - `APP_URL` should be the public URL users access (for reverse proxy installs, use your `https://` domain)
 - `BETTER_AUTH_TRUSTED_ORIGINS` is optional but recommended for explicit auth origin control
 - If users access Dockroot from multiple origins (for example both domain and LAN IP), set all origins in `BETTER_AUTH_TRUSTED_ORIGINS` as a comma-separated list

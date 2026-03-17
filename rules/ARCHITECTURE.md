@@ -62,7 +62,7 @@ Dockroot has two explicit runtime modes:
 
 ```bash
 make dev-lite   # Host app + PostgreSQL
-make dev-full   # Host app + PostgreSQL + monitoring stack
+make dev-full   # Host app + PostgreSQL
 make prod-up    # Full Docker deployment
 ```
 
@@ -71,16 +71,16 @@ make prod-up    # Full Docker deployment
 - `.env.local` is only for host development
 - `.env` is only for Docker deployments
 - Dockroot derives `DATABASE_URL` from `POSTGRES_*` settings when it is not set explicitly
-- Docker deployments inject internal `POSTGRES_*`, `PROMETHEUS_URL`, and `DOCKROOT_DATA_DIR` values
+- Docker deployments inject internal `POSTGRES_*` and `DOCKROOT_DATA_DIR` values
 - `scripts/start.sh` validates runtime env, runs Drizzle migrations, then starts the app server
 
 ### Runtime Topology
 
 - **Host development**
-  `pnpm dev` runs on the host and talks to Dockerized PostgreSQL and monitoring services on localhost
+  `pnpm dev` runs on the host and talks to Dockerized PostgreSQL on localhost while collecting local telemetry directly from the Docker socket
 - **Docker deployment**
-  App, PostgreSQL, Prometheus, cAdvisor, and node-exporter run together in Compose
-  The app talks to sibling services over Docker DNS (`postgres`, `prometheus`)
+  App and PostgreSQL run together in Compose
+  The app talks to PostgreSQL over Docker DNS (`postgres`) and collects telemetry natively through the Docker socket
 
 ### Migration Flow
 

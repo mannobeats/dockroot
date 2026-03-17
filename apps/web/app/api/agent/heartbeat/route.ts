@@ -19,7 +19,8 @@ export async function POST(request: Request) {
 	}
 
 	try {
-		await heartbeatAgent(token);
+		const payload = await request.json().catch(() => null);
+		await heartbeatAgent(token, payload?.snapshot || undefined);
 		return NextResponse.json({ ok: true });
 	} catch (error) {
 		const message = error instanceof Error ? error.message : "Heartbeat failed";

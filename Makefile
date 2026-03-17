@@ -8,7 +8,7 @@ LOCAL_ENV_EXAMPLE := .env.example
 LOCAL_RUNTIME_ENV_FILE := .dockroot/runtime.env
 DEV_INFRA_COMPOSE_FILE := compose.dev-infra.yml
 PROD_COMPOSE_FILE := docker-compose.yaml
-LOCAL_INFRA_SERVICES := postgres prometheus cadvisor node-exporter
+LOCAL_INFRA_SERVICES := postgres
 NEXT_DEV_LOCK := apps/web/.next/dev/lock
 
 .PHONY: help install env-local local-bootstrap env-check-local env-check-compose dev-prepare dev-lite dev-full dev build start lint format prod-up prod-down prod-logs docker-up docker-down docker-logs db-push db-generate db-migrate db-studio infra-up infra-down postgres-up postgres-down clean
@@ -20,12 +20,12 @@ help:
 	@printf "  make env-check-local   Validate host development env\n"
 	@printf "  make env-check-compose Validate Docker deployment inputs\n"
 	@printf "  make dev-lite     Run host app with PostgreSQL only\n"
-	@printf "  make dev-full     Run host app with full local infra (DB + monitoring)\n"
+	@printf "  make dev-full     Run host app with full local infra (DB)\n"
 	@printf "  make build        Build the web app\n"
 	@printf "  make start        Start the built web app\n"
 	@printf "  make lint         Run Biome checks\n"
 	@printf "  make format       Format the repo with Biome\n"
-	@printf "  make infra-up     Start local Docker infra (Postgres, Prometheus, exporters)\n"
+	@printf "  make infra-up     Start local Docker infra (Postgres)\n"
 	@printf "  make infra-down   Stop local Docker infra\n"
 	@printf "  make postgres-up  Start only PostgreSQL in Docker\n"
 	@printf "  make postgres-down Stop only PostgreSQL container\n"
@@ -48,8 +48,7 @@ local-bootstrap: env-local
 	node scripts/bootstrap-runtime.mjs \
 		--env-file $(LOCAL_ENV_FILE) \
 		--write-env-file $(LOCAL_RUNTIME_ENV_FILE) \
-		--write-postgres-password-file .dockroot/bootstrap/postgres_password \
-		--write-metrics-token-file .dockroot/bootstrap/metrics_token
+		--write-postgres-password-file .dockroot/bootstrap/postgres_password
 
 env-check-local: local-bootstrap
 	$(DOTENV) -e $(LOCAL_ENV_FILE) -e $(LOCAL_RUNTIME_ENV_FILE) -- node scripts/runtime-env.mjs

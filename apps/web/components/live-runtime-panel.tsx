@@ -18,7 +18,7 @@ interface RuntimePayload {
 		MemPerc?: string;
 	}>;
 	host?: {
-		source?: "prometheus";
+		source?: "native" | "docker";
 		cpuPercent?: number | null;
 		memoryPercent?: number | null;
 	};
@@ -57,7 +57,7 @@ const CustomTooltip = ({ active, payload, label }: ChartTooltipProps) => {
 export function LiveRuntimePanel() {
 	const [mounted, setMounted] = useState(false);
 	const [history, setHistory] = useState<
-		Array<{ time: string; cpu: number; memory: number; source: "prometheus" | "docker" }>
+		Array<{ time: string; cpu: number; memory: number; source: "native" | "docker" }>
 	>([]);
 
 	useEffect(() => {
@@ -75,8 +75,7 @@ export function LiveRuntimePanel() {
 			const hostMemory = payload.host?.memoryPercent;
 			const cpu = Number.isFinite(hostCpu) ? Number(hostCpu) : fallbackCpu;
 			const memory = Number.isFinite(hostMemory) ? Number(hostMemory) : fallbackMemory;
-			const source: "prometheus" | "docker" =
-				payload.host?.source === "prometheus" ? "prometheus" : "docker";
+			const source: "native" | "docker" = payload.host?.source === "native" ? "native" : "docker";
 
 			setHistory((current) => [
 				...current.slice(-11),

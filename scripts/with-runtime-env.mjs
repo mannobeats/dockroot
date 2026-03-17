@@ -37,11 +37,6 @@ async function main() {
 			"bootstrap",
 			"postgres_password",
 		),
-		writeMetricsTokenFile: path.join(
-			process.env.DOCKROOT_DATA_DIR || path.join(process.cwd(), ".dockroot"),
-			"bootstrap",
-			"metrics_token",
-		),
 	});
 
 	const child = spawn(command[0], command.slice(1), {

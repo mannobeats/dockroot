@@ -1,7 +1,7 @@
 import { AlertTriangle, Boxes, Layers3, PlayCircle, Server } from "lucide-react";
 import Link from "next/link";
 import { DashboardStatusPanel } from "@/components/dashboard-status-panel";
-import { InfrastructureCharts } from "@/components/prometheus-overview";
+import { InfrastructureCharts } from "@/components/infrastructure-charts";
 import { RuntimeUnavailablePanel } from "@/components/runtime-unavailable-panel";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
@@ -16,7 +16,7 @@ import {
 	resolveRuntimeEnvironment,
 } from "@/lib/environment-runtime";
 import { getDashboardData } from "@/lib/platform";
-import { getMonitoringCollectorHealth, getPrometheusDashboardMetrics } from "@/lib/prometheus";
+import { getEnvironmentMetricsSeries, getRuntimeCollectorHealth } from "@/lib/runtime-metrics";
 
 export default async function DashboardPage({
 	searchParams,
@@ -39,14 +39,15 @@ export default async function DashboardPage({
 					throw error;
 				})
 			: null,
-		includeRuntime && environment.kind === "local" ? getPrometheusDashboardMetrics() : null,
-		includeRuntime && environment.kind === "local" ? getMonitoringCollectorHealth() : null,
+		includeRuntime ? getEnvironmentMetricsSeries(environment.id) : null,
+		includeRuntime ? getRuntimeCollectorHealth(environment) : null,
 	]);
 	const runtime = runtimeResult;
-	const dashboardMetrics =
-		metrics ||
-		(includeRuntime && runtime
+	const dashboardMetrics = metrics?.available
+		? metrics
+		: includeRuntime && runtime
 			? {
+					available: true,
 					cpuPercent: runtime.snapshot.usage?.cpuPercent ?? null,
 					memoryPercent: runtime.snapshot.usage?.memoryPercent ?? null,
 					cpuSeries: [
@@ -68,46 +69,40 @@ export default async function DashboardPage({
 						},
 					],
 					runningContainers: runtime.snapshot.counts.containers,
-					deploymentStatus: data.recentDeployments
-						.filter(
-							(deployment) =>
-								deployment.environment?.id === environment.id ||
-								deployment.environmentId === environment.id,
-						)
-						.reduce<Array<{ label: string; value: number }>>((acc, deployment) => {
-							const entry = acc.find((item) => item.label === deployment.status);
-							if (entry) {
-								entry.value += 1;
-							} else {
-								acc.push({ label: deployment.status, value: 1 });
-							}
-							return acc;
-						}, []),
-					environmentStatus: [{ label: environment.status, value: 1 }],
+					containerCount: runtime.snapshot.counts.containers,
+					imageCount: runtime.snapshot.counts.images,
+					memoryUsedBytes: null,
+					memoryTotalBytes: null,
 				}
-			: null);
-	const collectorHealth =
-		targets ||
-		(includeRuntime && runtime && !runtimeIssue
-			? [
-					{
-						name: environment.kind === "local" ? "Manager runtime" : "Remote runtime",
-						status: "healthy",
-						lastError: "",
-					},
-				]
-			: null);
+			: null;
+	const collectorHealth = targets || null;
+	const deploymentStatus = data.recentDeployments
+		.filter(
+			(deployment) =>
+				deployment.environment?.id === environment.id ||
+				deployment.environmentId === environment.id,
+		)
+		.reduce<Array<{ label: string; value: number }>>((acc, deployment) => {
+			const entry = acc.find((item) => item.label === deployment.status);
+			if (entry) {
+				entry.value += 1;
+			} else {
+				acc.push({ label: deployment.status, value: 1 });
+			}
+			return acc;
+		}, []);
+	const environmentStatus = [{ label: environment.status, value: 1 }];
 	const hostTotalMemoryGb = includeRuntime && runtime ? runtime.snapshot.host.totalMemoryGb : null;
 	const fallbackUsedMemoryGb =
 		includeRuntime && runtime
 			? runtime.snapshot.host.totalMemoryGb - runtime.snapshot.host.freeMemoryGb
 			: null;
-	const prometheusMemoryPercent = dashboardMetrics?.memoryPercent ?? null;
+	const nativeMemoryPercent = dashboardMetrics?.memoryPercent ?? null;
 	const memoryUsedPercent =
 		hostTotalMemoryGb !== null
 			? Number(
 					(
-						prometheusMemoryPercent ??
+						nativeMemoryPercent ??
 						((fallbackUsedMemoryGb || 0) / Math.max(hostTotalMemoryGb, 1)) * 100
 					).toFixed(1),
 				)
@@ -130,10 +125,9 @@ export default async function DashboardPage({
 	const collectorAlerts = (collectorHealth || []).filter(
 		(collector) => collector.status !== "healthy",
 	);
-	const environmentAlerts =
-		dashboardMetrics?.environmentStatus.filter(
-			(entry) => ["degraded", "offline", "down"].includes(entry.label) && entry.value > 0,
-		) || [];
+	const environmentAlerts = ["degraded", "offline"].includes(environment.status)
+		? [{ label: environment.status, value: 1 }]
+		: [];
 	const attentionItems = [
 		...deploymentAlerts.slice(0, 3).map((deployment) => ({
 			id: deployment.id,
@@ -318,8 +312,8 @@ export default async function DashboardPage({
 				{/* Right: Status & Activity tabs */}
 				<DashboardStatusPanel
 					recentDeployments={serializedDeployments}
-					deploymentStatus={dashboardMetrics?.deploymentStatus ?? null}
-					environmentStatus={dashboardMetrics?.environmentStatus ?? null}
+					deploymentStatus={deploymentStatus}
+					environmentStatus={environmentStatus}
 					collectors={collectorHealth}
 					activityLink={activityLink}
 				/>

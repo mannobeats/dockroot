@@ -100,6 +100,5 @@ BETTER_AUTH_TRUSTED_ORIGINS # Optional comma-separated extra trusted origins
 SESSION_COOKIE_SECURE # Optional override for secure auth cookies
 NEXT_PUBLIC_APP_NAME  # App display name
 NEXT_PUBLIC_APP_URL   # Public app URL
-PROMETHEUS_URL        # Metrics backend URL (injected by Docker deployment)
 DOCKROOT_DATA_DIR     # Dockroot data directory (injected by Docker deployment)
 ```
