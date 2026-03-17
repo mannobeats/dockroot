@@ -47,8 +47,95 @@ function now() {
 	return new Date();
 }
 
+const AGENT_STALE_AFTER_MS = 60_000;
+
 const AGENT_IMAGE = "ghcr.io/mannobeats/dockroot-agent:latest";
 const AGENT_PORT = 9095;
+
+function isAgentStale(lastSeenAt: Date | null | undefined) {
+	if (!lastSeenAt) {
+		return true;
+	}
+
+	return Date.now() - lastSeenAt.getTime() > AGENT_STALE_AFTER_MS;
+}
+
+function deriveRuntimeHealthStatus(
+	status: "provisioning" | "healthy" | "degraded" | "offline",
+	lastSeenAt: Date | null | undefined,
+) {
+	if (status === "provisioning") {
+		return status;
+	}
+
+	return isAgentStale(lastSeenAt) ? "offline" : status;
+}
+
+function applyDerivedEnvironmentState<
+	T extends {
+		status: "provisioning" | "healthy" | "degraded" | "offline";
+		kind: "local" | "agent";
+		agent?: Array<{
+			status: "provisioning" | "healthy" | "degraded" | "offline";
+			lastSeenAt: Date | null;
+		}>;
+	},
+>(environment: T): T {
+	if (environment.kind !== "agent") {
+		return environment;
+	}
+
+	const primaryAgent = environment.agent?.[0];
+	if (!primaryAgent) {
+		return {
+			...environment,
+			status: "offline",
+		};
+	}
+
+	const derivedAgentStatus = deriveRuntimeHealthStatus(
+		primaryAgent.status,
+		primaryAgent.lastSeenAt,
+	);
+	const derivedEnvironmentStatus = deriveRuntimeHealthStatus(
+		environment.status,
+		primaryAgent.lastSeenAt,
+	);
+
+	return {
+		...environment,
+		status: derivedEnvironmentStatus,
+		agent: environment.agent?.map((agent, index) =>
+			index === 0
+				? {
+						...agent,
+						status: derivedAgentStatus,
+					}
+				: agent,
+		),
+	};
+}
+
+async function fetchRemoteContainersWithTimeout(
+	managerUrl: string,
+	accessToken: string,
+): Promise<Array<Record<string, string>>> {
+	try {
+		const response = await fetch(`${managerUrl.replace(/\/$/, "")}/containers`, {
+			headers: {
+				Authorization: `Bearer ${accessToken}`,
+			},
+			signal: AbortSignal.timeout(2500),
+			cache: "no-store",
+		});
+		if (!response.ok) {
+			return [];
+		}
+		return response.json();
+	} catch {
+		return [];
+	}
+}
 
 export function slugify(value: string) {
 	return value
@@ -486,23 +573,11 @@ export async function listStacks(
 		composeProjects = options?.includeUntracked ? await listComposeProjects() : [];
 	} else {
 		const agent = selectedEnvironment.agent?.[0];
-		if (selectedEnvironment.managerUrl && agent?.accessToken) {
-			try {
-				const response = await fetch(
-					`${selectedEnvironment.managerUrl.replace(/\/$/, "")}/containers`,
-					{
-						headers: {
-							Authorization: `Bearer ${agent.accessToken}`,
-						},
-						cache: "no-store",
-					},
-				);
-				if (response.ok) {
-					runtimeContainers = await response.json();
-				}
-			} catch {
-				runtimeContainers = [];
-			}
+		if (selectedEnvironment.managerUrl && agent?.accessToken && !isAgentStale(agent.lastSeenAt)) {
+			runtimeContainers = await fetchRemoteContainersWithTimeout(
+				selectedEnvironment.managerUrl,
+				agent.accessToken,
+			);
 		}
 	}
 
@@ -734,7 +809,7 @@ export async function getGitHubProviderStatus() {
 export async function listEnvironments(userId: string) {
 	await ensureDefaultLocalEnvironment(userId);
 
-	return db.query.environments.findMany({
+	const environmentsList = await db.query.environments.findMany({
 		where: eq(environments.createdByUserId, userId),
 		orderBy: [desc(environments.updatedAt)],
 		with: {
@@ -742,6 +817,8 @@ export async function listEnvironments(userId: string) {
 			stacks: true,
 		},
 	});
+
+	return environmentsList.map((environment) => applyDerivedEnvironmentState(environment));
 }
 
 export async function listDeployments(
@@ -958,7 +1035,7 @@ export async function getStackById({ stackId, userId }: { stackId: string; userI
 }
 
 export async function getEnvironmentById(environmentId: string, userId: string) {
-	return db.query.environments.findFirst({
+	const environment = await db.query.environments.findFirst({
 		where: and(eq(environments.id, environmentId), eq(environments.createdByUserId, userId)),
 		with: {
 			agent: true,
@@ -974,6 +1051,8 @@ export async function getEnvironmentById(environmentId: string, userId: string) 
 			},
 		},
 	});
+
+	return environment ? applyDerivedEnvironmentState(environment) : null;
 }
 
 export async function createEnvironment({
@@ -1587,7 +1666,11 @@ export async function queueOrRunDeployment({
 	revalidatePath(`/dashboard/environments/${stack.environmentId}`);
 }
 
-async function deleteOwnedStackById(stackId: string, userId: string) {
+async function deleteOwnedStackById(
+	stackId: string,
+	userId: string,
+	options?: { destroyRuntime?: boolean },
+) {
 	const stack = await db.query.stacks.findFirst({
 		where: and(eq(stacks.id, stackId), eq(stacks.createdByUserId, userId)),
 		with: {
@@ -1603,9 +1686,9 @@ async function deleteOwnedStackById(stackId: string, userId: string) {
 		throw new Error("Stack not found");
 	}
 
-	if (stack.environment.kind === "local") {
+	if (options?.destroyRuntime !== false && stack.environment.kind === "local") {
 		await deleteLocalStackResources(stack.slug);
-	} else {
+	} else if (options?.destroyRuntime !== false) {
 		const agent = stack.environment.agent?.[0];
 		if (!stack.environment.managerUrl || !agent?.accessToken) {
 			throw new Error("Remote environment is not registered.");
@@ -1647,7 +1730,7 @@ async function deleteOwnedStackById(stackId: string, userId: string) {
 }
 
 export async function deleteStack({ stackId, userId }: { stackId: string; userId: string }) {
-	await deleteOwnedStackById(stackId, userId);
+	await deleteOwnedStackById(stackId, userId, { destroyRuntime: false });
 }
 
 export async function deleteEnvironment({
@@ -1677,7 +1760,7 @@ export async function deleteEnvironment({
 	}
 
 	for (const stack of environment.stacks) {
-		await deleteOwnedStackById(stack.id, userId);
+		await deleteOwnedStackById(stack.id, userId, { destroyRuntime: false });
 	}
 
 	await db.delete(environments).where(eq(environments.id, environment.id));

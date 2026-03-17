@@ -105,14 +105,23 @@ async function fetchAgent(
 		throw new RuntimeConnectionError("agent_not_registered", "Agent is not registered yet.");
 	}
 
-	const response = await fetch(`${environment.managerUrl.replace(/\/$/, "")}${path}`, {
-		...init,
-		headers: {
-			Authorization: `Bearer ${agent.accessToken}`,
-			...(init?.headers || {}),
-		},
-		cache: "no-store",
-	});
+	let response: Response;
+	try {
+		response = await fetch(`${environment.managerUrl.replace(/\/$/, "")}${path}`, {
+			...init,
+			signal: init?.signal ?? AbortSignal.timeout(2500),
+			headers: {
+				Authorization: `Bearer ${agent.accessToken}`,
+				...(init?.headers || {}),
+			},
+			cache: "no-store",
+		});
+	} catch {
+		throw new RuntimeConnectionError(
+			"remote_unavailable",
+			"Remote agent is unreachable right now.",
+		);
+	}
 
 	if (!response.ok) {
 		throw new RuntimeConnectionError(

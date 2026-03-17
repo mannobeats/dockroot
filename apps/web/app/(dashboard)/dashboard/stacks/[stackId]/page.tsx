@@ -9,6 +9,7 @@ import {
 import { DeployLogTrigger } from "@/components/deploy-log-trigger";
 import { DestructiveActionModal } from "@/components/destructive-action-modal";
 import { FormSubmitButton } from "@/components/form-submit-button";
+import { RuntimeUnavailablePanel } from "@/components/runtime-unavailable-panel";
 import { StackConfigEditor } from "@/components/stack-config-editor";
 import { StackServicesAccordion } from "@/components/stack-services-accordion";
 import { StatusBadge } from "@/components/status-badge";
@@ -16,6 +17,8 @@ import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/link-button";
 import {
 	getContainerDetailsForEnvironment,
+	getRuntimeConnectionMessage,
+	isRuntimeConnectionError,
 	listContainersForEnvironment,
 } from "@/lib/environment-runtime";
 import { getGlobalSettings, getStackById } from "@/lib/platform";
@@ -53,10 +56,19 @@ export default async function StackWorkspacePage({
 		stack.environment.kind === "agent"
 			? stack.environment.managerUrl || undefined
 			: settings.managerUrl || stack.environment.managerUrl || undefined;
-	const { containers: environmentContainers } = await listContainersForEnvironment(
+	let runtimeIssue: string | null = null;
+	const environmentContainers = await listContainersForEnvironment(
 		session.user.id,
 		stack.environment.id,
-	);
+	)
+		.then((result) => result.containers)
+		.catch((error) => {
+			if (isRuntimeConnectionError(error)) {
+				runtimeIssue = getRuntimeConnectionMessage(error);
+				return [];
+			}
+			throw error;
+		});
 	const containers = environmentContainers.filter((container: RuntimeContainer) => {
 		const labels = String(container.Labels || "");
 		const composeProject = labels
@@ -178,6 +190,10 @@ export default async function StackWorkspacePage({
 					/>
 				</div>
 			</div>
+
+			{runtimeIssue ? (
+				<RuntimeUnavailablePanel title="Stack services unavailable" message={runtimeIssue} />
+			) : null}
 
 			{/* Editor + Services */}
 			<div className="space-y-4">
