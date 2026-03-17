@@ -203,6 +203,13 @@ export async function deleteEnvironmentAction(formData: FormData) {
 		throw new Error("Environment is required");
 	}
 
+	const { recordAuditEvent } = await import("@/lib/platform");
+	await recordAuditEvent({
+		userId,
+		actionType: "environment.delete",
+		details: { environmentId },
+	});
+
 	await deleteEnvironment({
 		environmentId,
 		userId,
@@ -622,6 +629,15 @@ export async function deleteStackAction(formData: FormData) {
 		throw new Error("Dockroot platform stacks are locked and cannot be deleted from the UI.");
 	}
 
+	const { recordAuditEvent } = await import("@/lib/platform");
+	await recordAuditEvent({
+		environmentId: stack.environment?.id,
+		userId,
+		actionType: "stack.delete",
+		status: "success",
+		details: { stackName: stack.name, stackId },
+	});
+
 	await deleteStack({
 		stackId,
 		userId,
@@ -666,6 +682,15 @@ export async function createContainerAction(formData: FormData) {
 		},
 		environmentId,
 	);
+
+	const { recordAuditEvent } = await import("@/lib/platform");
+	await recordAuditEvent({
+		environmentId,
+		userId: auth.userId,
+		actionType: "container.create",
+		status: result.ok ? "success" : "error",
+		details: { containerName: name, image, output: result.ok ? null : result.output },
+	});
 
 	if (!result.ok) {
 		throw new Error(result.output || "Failed to create container.");
@@ -799,6 +824,13 @@ export async function pullImageAction(formData: FormData) {
 	}
 
 	await pullImageForEnvironment(auth.userId, imageRef, environmentId);
+	const { recordAuditEvent } = await import("@/lib/platform");
+	await recordAuditEvent({
+		environmentId,
+		userId: auth.userId,
+		actionType: "image.pull",
+		details: { imageRef },
+	});
 	revalidatePath("/dashboard/images");
 }
 
@@ -830,6 +862,13 @@ export async function removeImageAction(formData: FormData) {
 
 	try {
 		await removeImageForEnvironment(auth.userId, imageRef, environmentId);
+		const { recordAuditEvent } = await import("@/lib/platform");
+		await recordAuditEvent({
+			environmentId,
+			userId: auth.userId,
+			actionType: "image.remove",
+			details: { imageRef },
+		});
 	} catch (error) {
 		throw normalizeInUseDeleteError("image", imageRef, error);
 	}
@@ -882,6 +921,13 @@ export async function pruneImagesAction(formData: FormData) {
 	const mode = getValue(formData, "mode");
 	const environmentId = getValue(formData, "environmentId") || undefined;
 	await pruneImagesForEnvironment(auth.userId, environmentId, { all: mode === "all" });
+	const { recordAuditEvent } = await import("@/lib/platform");
+	await recordAuditEvent({
+		environmentId,
+		userId: auth.userId,
+		actionType: "image.prune",
+		details: { mode: mode || "dangling" },
+	});
 	revalidatePath("/dashboard/images");
 }
 
@@ -911,6 +957,13 @@ export async function removeVolumeAction(formData: FormData) {
 
 	try {
 		await removeVolumeForEnvironment(auth.userId, name, environmentId);
+		const { recordAuditEvent } = await import("@/lib/platform");
+		await recordAuditEvent({
+			environmentId,
+			userId: auth.userId,
+			actionType: "volume.remove",
+			details: { volumeName: name },
+		});
 	} catch (error) {
 		throw normalizeInUseDeleteError("volume", name, error);
 	}
@@ -941,6 +994,12 @@ export async function pruneVolumesAction(formData: FormData) {
 	const auth = await requirePrivilegedSession();
 	const environmentId = getValue(formData, "environmentId") || undefined;
 	await pruneVolumesForEnvironment(auth.userId, environmentId);
+	const { recordAuditEvent } = await import("@/lib/platform");
+	await recordAuditEvent({
+		environmentId,
+		userId: auth.userId,
+		actionType: "volume.prune",
+	});
 	revalidatePath("/dashboard/volumes");
 }
 
@@ -970,6 +1029,13 @@ export async function removeNetworkAction(formData: FormData) {
 
 	try {
 		await removeNetworkForEnvironment(auth.userId, name, environmentId);
+		const { recordAuditEvent } = await import("@/lib/platform");
+		await recordAuditEvent({
+			environmentId,
+			userId: auth.userId,
+			actionType: "network.remove",
+			details: { networkName: name },
+		});
 	} catch (error) {
 		throw normalizeInUseDeleteError("network", name, error);
 	}
@@ -1000,6 +1066,12 @@ export async function pruneNetworksAction(formData: FormData) {
 	const auth = await requirePrivilegedSession();
 	const environmentId = getValue(formData, "environmentId") || undefined;
 	await pruneNetworksForEnvironment(auth.userId, environmentId);
+	const { recordAuditEvent } = await import("@/lib/platform");
+	await recordAuditEvent({
+		environmentId,
+		userId: auth.userId,
+		actionType: "network.prune",
+	});
 	revalidatePath("/dashboard/networks");
 }
 
@@ -1397,4 +1469,25 @@ export async function updateContainerUpdateScheduleAction(formData: FormData) {
 
 	revalidatePath("/dashboard/schedules");
 	redirect(`/dashboard/schedules?environment=${encodeURIComponent(environmentId)}`);
+}
+
+export async function deleteActivityEventsAction(formData: FormData) {
+	const { userId } = await requireUserSession();
+	const idsRaw = getValue(formData, "eventIds");
+	if (!idsRaw) throw new Error("No events specified.");
+	const eventIds = idsRaw.split(",").map((id) => id.trim()).filter(Boolean);
+	if (!eventIds.length) throw new Error("No events specified.");
+
+	const { deleteActivityEvents } = await import("@/lib/platform");
+	const result = await deleteActivityEvents(userId, eventIds);
+	revalidatePath("/dashboard/activity");
+	return result;
+}
+
+export async function clearAllActivityEventsAction() {
+	const { userId } = await requireUserSession();
+	const { clearAllActivityEvents } = await import("@/lib/platform");
+	const result = await clearAllActivityEvents(userId);
+	revalidatePath("/dashboard/activity");
+	return result;
 }

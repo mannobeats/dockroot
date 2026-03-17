@@ -655,28 +655,34 @@ export async function listEnvironments(userId: string) {
 	});
 }
 
-export async function listDeployments(userId: string) {
+export async function listDeployments(userId: string, limit = 50) {
 	await ensureDefaultLocalEnvironment(userId);
 
 	const ownedStacks = await db.query.stacks.findMany({
 		where: eq(stacks.createdByUserId, userId),
-		columns: {
-			id: true,
-		},
+		columns: { id: true },
 	});
 	const stackIds = ownedStacks.map((stack) => stack.id);
 
-	if (!stackIds.length) {
-		return [];
-	}
+	const ownedEnvironments = await db.query.environments.findMany({
+		where: eq(environments.createdByUserId, userId),
+		columns: { id: true },
+	});
+	const environmentIds = ownedEnvironments.map((e) => e.id);
+
+	const conditions = [];
+	if (stackIds.length) conditions.push(inArray(deployments.stackId, stackIds));
+	if (environmentIds.length) conditions.push(inArray(deployments.environmentId, environmentIds));
+	conditions.push(eq(deployments.initiatedByUserId, userId));
 
 	return db.query.deployments.findMany({
-		where: inArray(deployments.stackId, stackIds),
+		where: or(...conditions),
 		orderBy: [desc(deployments.createdAt)],
-		limit: 25,
+		limit: Math.max(1, Math.min(200, limit)),
 		with: {
 			stack: true,
 			environment: true,
+			initiatedBy: true,
 		},
 	});
 }
@@ -699,6 +705,7 @@ export async function listRuntimeActions(userId: string, limit = 80) {
 				limit: boundedLimit,
 				with: {
 					environment: true,
+					actor: true,
 				},
 			});
 		}
@@ -712,12 +719,112 @@ export async function listRuntimeActions(userId: string, limit = 80) {
 			limit: boundedLimit,
 			with: {
 				environment: true,
+				actor: true,
 			},
 		});
 	} catch (error) {
 		console.error("Failed to list runtime actions", error);
 		return [];
 	}
+}
+
+export async function recordAuditEvent({
+	environmentId,
+	userId,
+	actionType,
+	status = "success",
+	containerId,
+	details,
+}: {
+	environmentId?: string;
+	userId: string;
+	actionType: string;
+	status?: "info" | "success" | "warning" | "error";
+	containerId?: string;
+	details?: Record<string, unknown>;
+}) {
+	try {
+		await db.insert(runtimeActionEvents).values({
+			id: crypto.randomUUID(),
+			environmentId: environmentId || null,
+			actorUserId: userId,
+			actorRole: null,
+			source: "server-action",
+			actionType,
+			status,
+			containerId: containerId || null,
+			sessionId: null,
+			details: details ? JSON.stringify(details) : null,
+			occurredAt: new Date(),
+			createdAt: new Date(),
+		});
+	} catch {
+		// Non-critical: audit persistence failure should not break the action
+	}
+}
+
+export async function deleteActivityEvents(userId: string, eventIds: string[]) {
+	if (!eventIds.length) return { deleted: 0 };
+
+	const ownedEnvironments = await db.query.environments.findMany({
+		where: eq(environments.createdByUserId, userId),
+		columns: { id: true },
+	});
+	const environmentIds = ownedEnvironments.map((e) => e.id);
+
+	// Delete matching runtime action events
+	const ownershipFilter = environmentIds.length
+		? or(
+				eq(runtimeActionEvents.actorUserId, userId),
+				inArray(runtimeActionEvents.environmentId, environmentIds),
+			)
+		: eq(runtimeActionEvents.actorUserId, userId);
+
+	await db
+		.delete(runtimeActionEvents)
+		.where(and(inArray(runtimeActionEvents.id, eventIds), ownershipFilter));
+
+	// Delete matching deployment events
+	const deploymentOwnership = environmentIds.length
+		? or(
+				eq(deployments.initiatedByUserId, userId),
+				inArray(deployments.environmentId, environmentIds),
+			)
+		: eq(deployments.initiatedByUserId, userId);
+
+	await db
+		.delete(deployments)
+		.where(and(inArray(deployments.id, eventIds), deploymentOwnership));
+
+	return { deleted: eventIds.length };
+}
+
+export async function clearAllActivityEvents(userId: string) {
+	const ownedEnvironments = await db.query.environments.findMany({
+		where: eq(environments.createdByUserId, userId),
+		columns: { id: true },
+	});
+	const environmentIds = ownedEnvironments.map((e) => e.id);
+
+	// Clear runtime action events
+	const runtimeFilter = environmentIds.length
+		? or(
+				eq(runtimeActionEvents.actorUserId, userId),
+				inArray(runtimeActionEvents.environmentId, environmentIds),
+			)
+		: eq(runtimeActionEvents.actorUserId, userId);
+	await db.delete(runtimeActionEvents).where(runtimeFilter);
+
+	// Clear deployment events
+	const deploymentFilter = environmentIds.length
+		? or(
+				eq(deployments.initiatedByUserId, userId),
+				inArray(deployments.environmentId, environmentIds),
+			)
+		: eq(deployments.initiatedByUserId, userId);
+	await db.delete(deployments).where(deploymentFilter);
+
+	return { deleted: true };
 }
 
 export async function getStackById({ stackId, userId }: { stackId: string; userId: string }) {
@@ -1279,6 +1386,8 @@ export async function queueOrRunDeployment({
 		id: deploymentId,
 		stackId: stack.id,
 		environmentId: stack.environmentId,
+		stackName: stack.name,
+		environmentName: stack.environment.name,
 		initiatedByUserId: userId,
 		operation,
 		version,
@@ -1513,13 +1622,19 @@ export async function claimNextDeployment(accessToken: string) {
 		})
 		.where(and(eq(deployments.id, queued.id), eq(deployments.status, "queued")));
 
-	await db
-		.update(stacks)
-		.set({
-			status: "deploying",
-			updatedAt,
-		})
-		.where(eq(stacks.id, queued.stackId));
+	if (queued.stackId) {
+		await db
+			.update(stacks)
+			.set({
+				status: "deploying",
+				updatedAt,
+			})
+			.where(eq(stacks.id, queued.stackId));
+	}
+
+	if (!queued.stack) {
+		throw new Error("Deployment references a deleted stack and cannot be claimed.");
+	}
 
 	return {
 		id: queued.id,
@@ -1559,6 +1674,10 @@ export async function getDeploymentSourceArchive({
 
 	if (!deployment) {
 		throw new Error("Deployment not found");
+	}
+
+	if (!deployment.stack) {
+		throw new Error("Deployment references a deleted stack.");
 	}
 
 	if (deployment.stack.sourceType !== "github") {
@@ -1626,19 +1745,21 @@ export async function completeDeployment({
 		})
 		.where(eq(deployments.id, deployment.id));
 
-	await db
-		.update(stacks)
-		.set({
-			status:
-				status === "succeeded"
-					? deployment.operation === "destroy"
-						? "stopped"
-						: "running"
-					: "failed",
-			lastDeployedAt: updatedAt,
-			updatedAt,
-		})
-		.where(eq(stacks.id, deployment.stackId));
+	if (deployment.stackId) {
+		await db
+			.update(stacks)
+			.set({
+				status:
+					status === "succeeded"
+						? deployment.operation === "destroy"
+							? "stopped"
+							: "running"
+						: "failed",
+				lastDeployedAt: updatedAt,
+				updatedAt,
+			})
+			.where(eq(stacks.id, deployment.stackId));
+	}
 
 	emitToRoom(`stack:${deployment.stackId}`, "deployment:complete", {
 		stackId: deployment.stackId,

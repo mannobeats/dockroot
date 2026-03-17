@@ -69,8 +69,8 @@ export default async function DashboardPage({
 	const attentionItems = [
 		...deploymentAlerts.slice(0, 3).map((deployment) => ({
 			id: deployment.id,
-			title: deployment.stack.name,
-			detail: `${deployment.status} · ${deployment.environment.name}`,
+			title: deployment.stackName || deployment.stack?.name || "Unknown stack",
+			detail: `${deployment.status} · ${deployment.environmentName || deployment.environment?.name || "Unknown"}`,
 			status: deployment.status,
 		})),
 		...collectorAlerts.slice(0, 2).map((collector) => ({
@@ -95,8 +95,8 @@ export default async function DashboardPage({
 		status: d.status,
 		version: d.version,
 		createdAt: d.createdAt.toISOString(),
-		stack: { id: d.stack.id, name: d.stack.name },
-		environment: { id: d.environment.id, name: d.environment.name },
+		stack: d.stack ? { id: d.stack.id, name: d.stack.name } : { id: "", name: d.stackName || "Deleted stack" },
+		environment: d.environment ? { id: d.environment.id, name: d.environment.name } : { id: "", name: d.environmentName || "Deleted environment" },
 	}));
 
 	const containerCount = includeRuntime && runtime ? runtime.snapshot.counts.containers : null;

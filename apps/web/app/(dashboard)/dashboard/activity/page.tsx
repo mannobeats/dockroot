@@ -1,105 +1,154 @@
+import {
+	clearAllActivityEventsAction,
+	deleteActivityEventsAction,
+} from "@/app/(dashboard)/actions";
+import { EventLogWorkspace, type UnifiedEvent } from "@/components/event-log-workspace";
 import { PageHeader } from "@/components/page-header";
-import { StatusBadge } from "@/components/status-badge";
-import { EmptyState } from "@/components/ui/empty-state";
-import { LogBlock } from "@/components/ui/log-block";
+import { Input } from "@/components/ui/input";
 import { Panel } from "@/components/ui/panel";
+import { Select } from "@/components/ui/select";
 import { listDeployments, listRuntimeActions } from "@/lib/platform";
 import { getServerSession } from "@/lib/session";
 
-export default async function ActivityPage() {
+function mapDeploymentSeverity(status: string): "info" | "success" | "warning" | "error" {
+	if (status === "succeeded") return "success";
+	if (status === "failed") return "error";
+	if (status === "running" || status === "queued") return "info";
+	return "warning";
+}
+
+export default async function ActivityPage({
+	searchParams,
+}: {
+	searchParams: Promise<{ q?: string; severity?: string }>;
+}) {
 	const session = await getServerSession();
 
 	if (!session?.user.id) {
 		return null;
 	}
 
-	const deployments = await listDeployments(session.user.id);
-	const runtimeActions = await listRuntimeActions(session.user.id, 120);
+	const params = await searchParams;
+	const query = (params.q || "").toLowerCase();
+	const severity = (params.severity || "all").toLowerCase();
+
+	const [deployments, runtimeActions] = await Promise.all([
+		listDeployments(session.user.id, 100),
+		listRuntimeActions(session.user.id, 500),
+	]);
+
+	// Build unified timeline
+	const deploymentEvents: UnifiedEvent[] = deployments.map((d) => ({
+		id: d.id,
+		kind: "deployment",
+		severity: mapDeploymentSeverity(d.status),
+		actionType: `deploy.${d.operation}`,
+		resourceName: d.stackName || d.stack?.name || null,
+		environmentName: d.environmentName || d.environment?.name || null,
+		userName: d.initiatedBy?.name || null,
+		source: null,
+		containerId: null,
+		details: d.summary || null,
+		log: d.log || null,
+		status: d.status,
+		timestamp: d.createdAt.toISOString(),
+		meta: {
+			Operation: d.operation,
+			Version: d.version,
+			...(d.sourceCommitSha ? { Commit: d.sourceCommitSha.slice(0, 8) } : {}),
+		},
+	}));
+
+	const runtimeEvents: UnifiedEvent[] = runtimeActions.map((e) => {
+		let resourceName: string | null = null;
+		try {
+			if (e.details) {
+				const parsed = JSON.parse(e.details);
+				resourceName =
+					parsed.containerName ||
+					parsed.stackName ||
+					parsed.volumeName ||
+					parsed.networkName ||
+					parsed.imageRef ||
+					null;
+			}
+		} catch { /* ignore parse errors */ }
+
+		return {
+		id: e.id,
+		kind: "runtime",
+		severity: e.status as "info" | "success" | "warning" | "error",
+		actionType: e.actionType,
+		resourceName,
+		environmentName: e.environment?.name || null,
+		userName: e.actor?.name || null,
+		source: e.source,
+		containerId: e.containerId,
+		details: e.details,
+		log: null,
+		status: e.status,
+		timestamp: e.occurredAt.toISOString(),
+		meta: {
+			...(e.source ? { Source: e.source } : {}),
+		},
+	};
+	});
+
+	// Merge and sort by time descending
+	const allEvents = [...deploymentEvents, ...runtimeEvents].sort(
+		(a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+	);
+
+	// Apply filters
+	const filtered = allEvents.filter((event) => {
+		const matchesQuery =
+			!query ||
+			event.actionType.toLowerCase().includes(query) ||
+			(event.resourceName || "").toLowerCase().includes(query) ||
+			(event.environmentName || "").toLowerCase().includes(query) ||
+			(event.containerId || "").toLowerCase().includes(query) ||
+			(event.details || "").toLowerCase().includes(query) ||
+			(event.userName || "").toLowerCase().includes(query) ||
+			(event.source || "").toLowerCase().includes(query);
+		const matchesSeverity = severity === "all" || event.severity === severity;
+		return matchesQuery && matchesSeverity;
+	});
+
+	const totalCount = deployments.length + runtimeActions.length;
 
 	return (
 		<div className="animate-in space-y-5">
 			<PageHeader
 				title="Activity"
-				description={`${deployments.length} deployments · ${runtimeActions.length} runtime actions`}
+				description={`${totalCount} events · ${deployments.length} deployments · ${runtimeActions.length} runtime actions`}
 			/>
 
-			<div className="space-y-2">
-				{deployments.length ? (
-					deployments.map((deployment) => (
-						<Panel
-							key={deployment.id}
-							padding="sm"
-							className="transition-colors hover:border-default/20"
-						>
-							<div className="flex items-start justify-between gap-3">
-								<div className="min-w-0">
-									<div className="flex items-center gap-2">
-										<h2 className="text-sm font-semibold">{deployment.stack.name}</h2>
-										<StatusBadge status={deployment.status} />
-									</div>
-									<p className="mt-0.5 text-xs text-muted">
-										{deployment.environment.name} · {deployment.operation} ·{" "}
-										<span className="font-mono">{deployment.version}</span>
-									</p>
-								</div>
-								<p className="shrink-0 text-[11px] text-muted">
-									{deployment.createdAt.toLocaleString()}
-								</p>
-							</div>
-							{deployment.summary ? (
-								<p className="mt-2 text-sm text-muted">{deployment.summary}</p>
-							) : null}
-							{deployment.log ? (
-								<LogBlock className="mt-2 max-h-40 p-3">{deployment.log}</LogBlock>
-							) : null}
-						</Panel>
-					))
-				) : (
-					<EmptyState title="No deployment activity yet" />
-				)}
-			</div>
+			<Panel>
+				<form className="flex items-center gap-2 border-b border-default/8 px-3 py-2">
+					<Input
+						type="search"
+						name="q"
+						defaultValue={params.q || ""}
+						placeholder="Search events..."
+						className="flex-1"
+					/>
+					<Select name="severity" defaultValue={severity} className="w-32 h-7 text-xs">
+						<option value="all">All</option>
+						<option value="info">Info</option>
+						<option value="success">Success</option>
+						<option value="warning">Warning</option>
+						<option value="error">Error</option>
+					</Select>
+					<button type="submit" className="text-xs font-medium text-accent hover:text-accent/80">
+						Filter
+					</button>
+				</form>
 
-			<Panel padding="sm">
-				<div className="mb-3 flex items-center justify-between">
-					<h2 className="text-sm font-semibold">Runtime actions</h2>
-					<p className="text-[11px] text-muted">Latest socket/terminal/log operations</p>
-				</div>
-				{runtimeActions.length ? (
-					<div className="space-y-2">
-						{runtimeActions.map((event) => (
-							<div
-								key={event.id}
-								className="rounded-lg border border-default/10 bg-surface-2 px-3 py-2.5"
-							>
-								<div className="flex items-start justify-between gap-3">
-									<div className="min-w-0">
-										<div className="flex items-center gap-2">
-											<p className="text-xs font-semibold">{event.actionType}</p>
-											<StatusBadge
-												status={
-													event.status === "error"
-														? "failed"
-														: event.status === "warning"
-															? "queued"
-															: "running"
-												}
-											/>
-										</div>
-										<p className="mt-0.5 text-[11px] text-muted">
-											{event.environment?.name || "No environment"} · {event.source}
-											{event.containerId ? ` · ${event.containerId}` : ""}
-										</p>
-									</div>
-									<p className="shrink-0 text-[11px] text-muted">
-										{event.occurredAt.toLocaleString()}
-									</p>
-								</div>
-							</div>
-						))}
-					</div>
-				) : (
-					<EmptyState title="No runtime actions yet" />
-				)}
+				<EventLogWorkspace
+					events={filtered}
+					deleteAction={deleteActivityEventsAction}
+					clearAllAction={clearAllActivityEventsAction}
+				/>
 			</Panel>
 		</div>
 	);

@@ -212,12 +212,12 @@ export const deployments = pgTable(
 	"deployments",
 	{
 		id: text("id").primaryKey(),
-		stackId: text("stack_id")
-			.notNull()
-			.references(() => stacks.id, { onDelete: "cascade" }),
-		environmentId: text("environment_id")
-			.notNull()
-			.references(() => environments.id, { onDelete: "cascade" }),
+		stackId: text("stack_id").references(() => stacks.id, { onDelete: "set null" }),
+		environmentId: text("environment_id").references(() => environments.id, {
+			onDelete: "set null",
+		}),
+		stackName: text("stack_name"),
+		environmentName: text("environment_name"),
 		initiatedByUserId: text("initiated_by_user_id").references(() => user.id, {
 			onDelete: "set null",
 		}),
