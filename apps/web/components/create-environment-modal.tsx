@@ -99,7 +99,10 @@ export function CreateEnvironmentModal({ action }: { action: FormAction }) {
 				<Field>
 					<FieldLabel htmlFor="modal-agent-url">Agent URL</FieldLabel>
 					<Input id="modal-agent-url" name="agentUrl" placeholder="http://agent:9095" />
-					<FieldHint>e.g. http://10.0.10.50:9095 — optional</FieldHint>
+					<FieldHint>
+						Optional. If left empty, Dockroot will try to learn the agent address automatically when
+						it registers.
+					</FieldHint>
 				</Field>
 				{error ? <Alert variant="error">{error}</Alert> : null}
 				<div className="flex justify-end gap-2 pt-2">

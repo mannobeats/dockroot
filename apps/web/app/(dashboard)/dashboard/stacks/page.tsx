@@ -35,7 +35,7 @@ export default async function StacksPage({
 	const params = await searchParams;
 
 	const [stacks, environments, githubInstallations, githubProviders] = await Promise.all([
-		listStacks(userId, { includeUntracked }),
+		listStacks(userId, { includeUntracked, environmentId: params.environment }),
 		listEnvironments(userId),
 		listGitHubInstallations(userId),
 		listGitHubProviders(userId),

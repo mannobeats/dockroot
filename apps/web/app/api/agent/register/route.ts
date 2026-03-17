@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { inferAgentUrlFromHeaders, inferRequestManagerUrl } from "@/lib/manager-url";
 import { registerAgent } from "@/lib/platform";
 
 export const runtime = "nodejs";
@@ -17,6 +18,8 @@ export async function POST(request: Request) {
 			operatingSystem: payload.operatingSystem ? String(payload.operatingSystem) : undefined,
 			architecture: payload.architecture ? String(payload.architecture) : undefined,
 			dockerVersion: payload.dockerVersion ? String(payload.dockerVersion) : undefined,
+			agentUrl: inferAgentUrlFromHeaders(request.headers) || undefined,
+			managerUrl: inferRequestManagerUrl(request.headers) || undefined,
 		});
 
 		return new NextResponse(

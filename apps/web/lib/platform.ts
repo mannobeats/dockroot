@@ -28,6 +28,7 @@ import {
 	listGitHubProviderConfigs,
 	listInstallationRepositories,
 } from "@/lib/github-app";
+import { resolveManagerUrl } from "@/lib/manager-url";
 import { incrementDeploymentEvent } from "@/lib/monitoring";
 import {
 	deleteLocalStackResources,
@@ -424,24 +425,72 @@ export async function getDashboardData(userId: string, options?: { includeRuntim
 	};
 }
 
-export async function listStacks(userId: string, options?: { includeUntracked?: boolean }) {
+export async function listStacks(
+	userId: string,
+	options?: { includeUntracked?: boolean; environmentId?: string },
+) {
 	await ensureDefaultLocalEnvironment(userId);
 
-	const [trackedStacks, runtimeContainers, composeProjects] = await Promise.all([
-		db.query.stacks.findMany({
-			where: eq(stacks.createdByUserId, userId),
-			orderBy: [desc(stacks.updatedAt)],
-			with: {
-				environment: true,
-				deployments: {
-					orderBy: [desc(deployments.createdAt)],
-					limit: 1,
+	const selectedEnvironment = options?.environmentId
+		? await db.query.environments.findFirst({
+				where: and(
+					eq(environments.id, options.environmentId),
+					eq(environments.createdByUserId, userId),
+				),
+				with: {
+					agent: true,
 				},
+			})
+		: null;
+
+	const trackedStacks = await db.query.stacks.findMany({
+		where: options?.environmentId
+			? and(eq(stacks.createdByUserId, userId), eq(stacks.environmentId, options.environmentId))
+			: eq(stacks.createdByUserId, userId),
+		orderBy: [desc(stacks.updatedAt)],
+		with: {
+			environment: true,
+			deployments: {
+				orderBy: [desc(deployments.createdAt)],
+				limit: 1,
 			},
-		}),
-		listContainers(),
-		options?.includeUntracked ? listComposeProjects() : Promise.resolve([]),
-	]);
+		},
+	});
+
+	let runtimeContainers: Array<Record<string, string>> = [];
+	let composeProjects: Array<{
+		name: string;
+		status: string;
+		configFiles: string[];
+		containers: Array<Record<string, string>>;
+		containerCount: number;
+		runningCount: number;
+	}> = [];
+
+	if (!selectedEnvironment || selectedEnvironment.kind === "local") {
+		runtimeContainers = await listContainers();
+		composeProjects = options?.includeUntracked ? await listComposeProjects() : [];
+	} else {
+		const agent = selectedEnvironment.agent?.[0];
+		if (selectedEnvironment.managerUrl && agent?.accessToken) {
+			try {
+				const response = await fetch(
+					`${selectedEnvironment.managerUrl.replace(/\/$/, "")}/containers`,
+					{
+						headers: {
+							Authorization: `Bearer ${agent.accessToken}`,
+						},
+						cache: "no-store",
+					},
+				);
+				if (response.ok) {
+					runtimeContainers = await response.json();
+				}
+			} catch {
+				runtimeContainers = [];
+			}
+		}
+	}
 
 	const runtimeByProject = new Map<string, Array<Record<string, string>>>();
 
@@ -502,7 +551,33 @@ export async function listStacks(userId: string, options?: { includeUntracked?: 
 			isProtected: isProtectedManagerStack(project.name),
 		}));
 
-	return [...tracked, ...untracked].sort((left, right) => left.name.localeCompare(right.name));
+	const inferredRemoteProjects =
+		options?.includeUntracked && selectedEnvironment?.kind === "agent"
+			? Array.from(runtimeByProject.entries())
+					.filter(([projectName]) => !trackedSlugs.has(projectName))
+					.map(([projectName, containers]) => ({
+						type: "untracked" as const,
+						slug: projectName,
+						name: projectName,
+						status: containers.some((container) => container.State === "running")
+							? "running"
+							: "stopped",
+						stackId: null,
+						environmentName: selectedEnvironment.name,
+						sourceType: "external" as const,
+						composeFileName: "compose.yaml",
+						configFiles: [],
+						containerCount: containers.length,
+						runningCount: containers.filter((container) => container.State === "running").length,
+						containers,
+						lastDeployment: null,
+						isProtected: isProtectedManagerStack(projectName),
+					}))
+			: [];
+
+	return [...tracked, ...untracked, ...inferredRemoteProjects].sort((left, right) =>
+		left.name.localeCompare(right.name),
+	);
 }
 
 export async function listGitHubInstallations(_userId: string) {
@@ -1515,12 +1590,16 @@ export async function registerAgent({
 	operatingSystem,
 	architecture,
 	dockerVersion,
+	agentUrl,
+	managerUrl,
 }: {
 	registrationToken: string;
 	hostname?: string;
 	operatingSystem?: string;
 	architecture?: string;
 	dockerVersion?: string;
+	agentUrl?: string;
+	managerUrl?: string;
 }) {
 	const agent = await findAgentByRegistrationToken(registrationToken);
 
@@ -1551,6 +1630,7 @@ export async function registerAgent({
 		.update(environments)
 		.set({
 			status: "healthy",
+			managerUrl: agentUrl || agent.environment.managerUrl,
 			updatedAt,
 		})
 		.where(eq(environments.id, agent.environmentId));
@@ -1559,7 +1639,10 @@ export async function registerAgent({
 		agentId: agent.id,
 		environmentId: agent.environmentId,
 		accessToken,
-		managerUrl: publicEnv.appUrl,
+		managerUrl:
+			resolveManagerUrl({
+				configuredUrl: managerUrl || null,
+			}) || publicEnv.appUrl,
 	};
 }
 
@@ -1783,7 +1866,23 @@ export async function completeDeployment({
 	revalidatePath(`/dashboard/environments/${deployment.environmentId}`);
 }
 
-export async function getInstallCommand(environmentId: string, userId: string) {
+async function getStoredManagerUrl(userId: string) {
+	await ensureDefaultLocalEnvironment(userId);
+	const defaultLocal = await db.query.environments.findFirst({
+		where: and(eq(environments.createdByUserId, userId), eq(environments.isDefaultLocal, true)),
+		columns: {
+			managerUrl: true,
+		},
+	});
+
+	return defaultLocal?.managerUrl || publicEnv.appUrl;
+}
+
+export async function getInstallCommand(
+	environmentId: string,
+	userId: string,
+	options?: { managerUrl?: string | null },
+) {
 	const environment = await db.query.environments.findFirst({
 		where: and(eq(environments.id, environmentId), eq(environments.createdByUserId, userId)),
 		with: { agent: true },
@@ -1794,7 +1893,11 @@ export async function getInstallCommand(environmentId: string, userId: string) {
 	}
 
 	const registrationToken = await issueRegistrationToken(environment.agent[0].id);
-	const managerUrl = publicEnv.appUrl.replace(/\/$/, "");
+	const configuredManagerUrl = await getStoredManagerUrl(userId);
+	const managerUrl = resolveManagerUrl({
+		configuredUrl: configuredManagerUrl,
+		requestManagerUrl: options?.managerUrl || null,
+	});
 	const dataVolumeName = `dockroot_agent_data_${environment.slug.replace(/-/g, "_")}`;
 	const dockerRun = [
 		"docker run -d \\",
@@ -1831,9 +1934,10 @@ export async function getInstallCommand(environmentId: string, userId: string) {
 
 	return {
 		registrationToken,
+		managerUrl,
 		dockerRun,
 		dockerCompose,
-		legacyInstallScript: `${publicEnv.appUrl.replace(/\/$/, "")}/api/agent/install/${environment.id}`,
+		legacyInstallScript: `${managerUrl}/api/agent/install/${environment.id}`,
 	};
 }
 
@@ -1912,6 +2016,8 @@ export async function updateGlobalSettings({
 	revalidatePath("/dashboard/settings");
 	revalidatePath("/dashboard/containers");
 	revalidatePath("/dashboard/stacks");
+	revalidatePath("/dashboard/environments");
+	revalidatePath("/dashboard");
 }
 
 export async function getPendingDeploymentById(id: string) {

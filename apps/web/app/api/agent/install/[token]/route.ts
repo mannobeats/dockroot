@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUserSession } from "@/lib/authorization";
+import { inferRequestManagerUrl } from "@/lib/manager-url";
 import { getEnvironmentById, getInstallCommand } from "@/lib/platform";
 
 export const runtime = "nodejs";
@@ -13,11 +14,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
 		return new NextResponse("Environment not found", { status: 404 });
 	}
 
-	const managerUrl = (process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "").replace(
-		/\/$/,
-		"",
-	);
-	const installCommand = await getInstallCommand(environment.id, auth.userId);
+	const managerUrl = inferRequestManagerUrl(request.headers);
+	const installCommand = await getInstallCommand(environment.id, auth.userId, {
+		managerUrl,
+	});
 
 	const script = `#!/usr/bin/env bash
 set -euo pipefail
@@ -27,7 +27,7 @@ if [ "\${EUID}" -ne 0 ]; then
   exit 1
 fi
 
-MANAGER_URL="${managerUrl}"
+MANAGER_URL="${installCommand.managerUrl}"
 REGISTRATION_TOKEN="${installCommand.registrationToken}"
 INSTALL_ROOT="/opt/dockroot-agent"
 BIN_PATH="/usr/local/bin/dockroot-agent"

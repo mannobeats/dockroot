@@ -1,16 +1,33 @@
+import { headers } from "next/headers";
 import { updateGlobalSettingsAction } from "@/app/(dashboard)/actions";
 import { FormSubmitButton } from "@/components/form-submit-button";
+import { Alert } from "@/components/ui/alert";
 import { Field, FieldHint, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { MetricCard } from "@/components/ui/metric-card";
 import { Panel } from "@/components/ui/panel";
 import { requirePrivilegedPageSession } from "@/lib/authorization";
+import { inferRequestManagerUrl, isLoopbackHostname, resolveManagerUrl } from "@/lib/manager-url";
 import { getGlobalSettings } from "@/lib/platform";
 
 export default async function SettingsPage() {
 	const { userId } = await requirePrivilegedPageSession();
-
+	const requestHeaders = await headers();
 	const settings = await getGlobalSettings(userId);
+	const detectedManagerUrl = inferRequestManagerUrl(requestHeaders);
+	const resolvedManagerUrl = resolveManagerUrl({
+		configuredUrl: settings.managerUrl,
+		requestManagerUrl: detectedManagerUrl,
+	});
+	const usingAutoDetectedAddress = (() => {
+		try {
+			return (
+				isLoopbackHostname(new URL(settings.managerUrl).hostname) && detectedManagerUrl != null
+			);
+		} catch {
+			return false;
+		}
+	})();
 
 	return (
 		<div className="space-y-5">
@@ -24,12 +41,18 @@ export default async function SettingsPage() {
 							id="managerUrl"
 							name="managerUrl"
 							type="url"
-							defaultValue={settings.managerUrl}
+							defaultValue={resolvedManagerUrl}
 							placeholder="https://your-domain.com"
 							required
 						/>
 						<FieldHint>Use an IP or URL reachable by your browser and agents.</FieldHint>
 					</Field>
+					{usingAutoDetectedAddress ? (
+						<Alert variant="info">
+							Local loopback was replaced with the detected server address so agent install commands
+							work outside this machine.
+						</Alert>
+					) : null}
 					<FormSubmitButton label="Save" pendingLabel="Saving..." size="sm" />
 				</form>
 			</Panel>
@@ -43,7 +66,7 @@ export default async function SettingsPage() {
 				/>
 				<MetricCard
 					label="Manager URL"
-					value={settings.managerUrl}
+					value={resolvedManagerUrl}
 					description="Used by remote agents"
 					valueClassName="break-all text-sm"
 				/>

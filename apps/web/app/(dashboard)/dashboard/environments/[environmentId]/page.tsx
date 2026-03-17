@@ -1,4 +1,5 @@
 import { ArrowLeft, Trash2 } from "lucide-react";
+import { headers } from "next/headers";
 import {
 	deleteEnvironmentAction,
 	rotateAgentRegistrationTokenAction,
@@ -11,6 +12,7 @@ import { LinkButton } from "@/components/ui/link-button";
 import { LogBlock } from "@/components/ui/log-block";
 import { MetricCard } from "@/components/ui/metric-card";
 import { Panel, PanelHeader, PanelTitle } from "@/components/ui/panel";
+import { inferRequestManagerUrl } from "@/lib/manager-url";
 import { getEnvironmentById, getInstallCommand } from "@/lib/platform";
 import { getServerSession } from "@/lib/session";
 
@@ -26,14 +28,20 @@ export default async function EnvironmentDetailPage({
 	}
 
 	const { environmentId } = await params;
+	const requestHeaders = await headers();
 	const environment = await getEnvironmentById(environmentId, session.user.id);
 
 	if (!environment) {
 		return <div className="text-sm text-muted">Environment not found.</div>;
 	}
 
+	const detectedManagerUrl = inferRequestManagerUrl(requestHeaders);
 	const installCommands =
-		environment.kind === "agent" ? await getInstallCommand(environment.id, session.user.id) : null;
+		environment.kind === "agent"
+			? await getInstallCommand(environment.id, session.user.id, {
+					managerUrl: detectedManagerUrl,
+				})
+			: null;
 	const agent = environment.agent[0];
 
 	return (
@@ -79,7 +87,7 @@ export default async function EnvironmentDetailPage({
 				<MetricCard label="Kind" value={environment.kind} valueClassName="text-sm capitalize" />
 				<MetricCard
 					label="Agent URL"
-					value={environment.managerUrl || "Not configured"}
+					value={environment.managerUrl || "Will be auto-detected after the agent registers"}
 					valueClassName="break-all text-sm"
 				/>
 				<MetricCard
@@ -109,6 +117,18 @@ export default async function EnvironmentDetailPage({
 							/>
 						</form>
 					</div>
+					<Panel className="px-3 py-2">
+						<p className="text-xs font-medium text-muted">
+							Manager address used in generated commands
+						</p>
+						<p className="mt-1 break-all text-sm font-medium text-foreground">
+							{installCommands.managerUrl}
+						</p>
+						<p className="mt-1 text-[11px] text-muted">
+							Update this from Settings if you want agents to connect through a different IP or
+							domain.
+						</p>
+					</Panel>
 					<div className="grid gap-3 xl:grid-cols-2">
 						<Panel className="bg-console p-3">
 							<div className="flex items-center justify-between gap-3">
