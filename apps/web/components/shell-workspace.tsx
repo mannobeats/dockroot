@@ -2,15 +2,15 @@
 
 import "xterm/css/xterm.css";
 
-import { Activity, Search, TerminalSquare } from "lucide-react";
+import { TerminalSquare } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { StatusBadge } from "@/components/status-badge";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dropdown, DropdownItem, DropdownMenu, DropdownTrigger } from "@/components/ui/dropdown";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
+import { LinkButton } from "@/components/ui/link-button";
 import { Panel } from "@/components/ui/panel";
 import { cn } from "@/lib/cn";
 import { getSocket } from "@/lib/socket-client";
@@ -198,16 +198,33 @@ export function ShellWorkspace({
 				);
 			};
 
+			let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+			let lastCols = terminal.cols;
+			let lastRows = terminal.rows;
+
 			const resizeObserver = new ResizeObserver(() => {
-				fitAddon.fit();
-				if (sessionIdRef.current) {
-					const socket = getSocket();
-					socket.emit("terminal:resize", {
-						sessionId: sessionIdRef.current,
-						cols: terminal.cols,
-						rows: terminal.rows,
-					});
+				if (resizeTimer) {
+					clearTimeout(resizeTimer);
 				}
+
+				resizeTimer = setTimeout(() => {
+					resizeTimer = null;
+					fitAddon.fit();
+					if (terminal.cols === lastCols && terminal.rows === lastRows) {
+						return;
+					}
+
+					lastCols = terminal.cols;
+					lastRows = terminal.rows;
+					if (sessionIdRef.current) {
+						const socket = getSocket();
+						socket.emit("terminal:resize", {
+							sessionId: sessionIdRef.current,
+							cols: terminal.cols,
+							rows: terminal.rows,
+						});
+					}
+				}, 80);
 			});
 			resizeObserver.observe(terminalRef.current);
 
@@ -305,147 +322,126 @@ export function ShellWorkspace({
 	}, [attached, selectedContainerId, customShell, environmentId, shell]);
 
 	return (
-		<div className="grid gap-5 xl:grid-cols-[300px_1fr]">
-			{/* Container sidebar — mirrors LiveLogsWorkspace */}
-			<Panel padding="md">
-				<div className="flex items-center gap-2">
-					<TerminalSquare className="h-4 w-4 text-accent" />
+		<div className="flex gap-5 xl:flex-row flex-col" style={{ height: "calc(100vh - 180px)" }}>
+			{/* Container sidebar */}
+			<div className="flex w-full flex-col xl:w-[300px] xl:shrink-0">
+				<Panel padding="md" className="flex h-full flex-col overflow-hidden">
 					<p className="text-sm font-semibold tracking-tight">Containers</p>
-				</div>
-				<div className="relative mt-3">
-					<Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted" />
 					<Input
+						type="search"
 						value={query}
 						onChange={(event) => setQuery(event.target.value)}
 						placeholder="Search..."
-						withIcon
 						inputSize="sm"
-						className="text-xs"
+						className="mt-3 text-xs"
 						aria-label="Search containers"
 					/>
-				</div>
+					<div className="mt-3 flex-1 space-y-1 overflow-y-auto">
+						{filteredContainers.length ? (
+							filteredContainers.map((container) => {
+								const isSelected = container.id === selectedContainer?.id;
 
-				<div className="mt-3 max-h-[680px] space-y-1 overflow-y-auto">
-					{filteredContainers.length === 0 ? (
-						<EmptyState
-							title="No matching containers"
-							description="Try a different name, image, or container id."
-							className="p-4"
-						/>
-					) : (
-						filteredContainers.map((container) => {
-							const isSelected = container.id === selectedContainer?.id;
-
-							return (
-								<button
-									key={container.id}
-									type="button"
-									onClick={() => selectContainer(container.id)}
-									className={cn(
-										"block w-full rounded-xl px-3.5 py-3 text-left text-xs transition-all duration-200",
-										isSelected
-											? "bg-accent/8 text-foreground shadow-[var(--shadow-xs)]"
-											: "text-muted hover:bg-foreground/[0.03] hover:text-foreground",
-									)}
-								>
-									<div className="flex items-start justify-between gap-2">
-										<div className="min-w-0">
-											<div className="flex items-center gap-1.5">
-												<span
-													className={cn(
-														"size-1.5 rounded-full",
-														container.state.toLowerCase() === "running"
-															? "bg-success"
-															: "bg-muted/50",
-													)}
-												/>
-												<p className="truncate font-medium text-[13px]">{container.name}</p>
+								return (
+									<button
+										key={container.id}
+										type="button"
+										onClick={() => selectContainer(container.id)}
+										className={`block w-full rounded-lg px-3 py-2.5 text-left text-xs transition-all duration-150 ${
+											isSelected
+												? "bg-foreground/[0.06] text-foreground"
+												: "text-muted hover:bg-foreground/[0.03] hover:text-foreground"
+										}`}
+									>
+										<div className="flex items-start justify-between gap-2">
+											<div className="min-w-0">
+												<p className="truncate font-medium">{container.name}</p>
+												<p className="mt-0.5 truncate text-muted">{container.image}</p>
 											</div>
-											<p className="mt-0.5 truncate text-muted pl-3">{container.image}</p>
+											<StatusBadge status={container.state} />
 										</div>
-										<StatusBadge status={container.state} />
-									</div>
-								</button>
-							);
-						})
-					)}
-				</div>
-			</Panel>
+									</button>
+								);
+							})
+						) : (
+							<EmptyState
+								title="No matching containers"
+								description="Try a different name, image, or container id."
+								className="p-4"
+							/>
+						)}
+					</div>
+				</Panel>
+			</div>
 
 			{/* Terminal panel */}
-			<Panel
-				padding="sm"
-				className="overflow-hidden"
-				onMouseDown={() => terminalInstanceRef.current?.focus()}
-			>
-				{/* header bar — mirrors the log viewer header */}
-				<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-					<div className="space-y-1">
-						<div className="flex items-center gap-2">
+			<div className="flex min-h-0 flex-1 flex-col">
+				<Panel
+					padding="md"
+					className="flex h-full min-h-0 flex-col overflow-hidden"
+					onMouseDown={() => terminalInstanceRef.current?.focus()}
+				>
+					<div className="flex items-center justify-between">
+						<div>
 							<p className="text-sm font-semibold tracking-tight">
 								{selectedContainer?.name || "Shell"}
 							</p>
-							<Badge
-								variant={status.startsWith("Connected") ? "success" : "default"}
-								className="px-2 py-1 text-[11px]"
-							>
-								<Activity className="size-3" />
-								{status.startsWith("Connected") ? "Live" : "Pending"}
-							</Badge>
+							<p className="text-xs text-muted">
+								{attached ? status : "Select a container and attach a shell"}
+							</p>
 						</div>
-						<p className="text-xs text-muted">
-							{attached ? status : "Select a container and attach a shell"}
-						</p>
+						<div className="flex flex-wrap items-center gap-1.5">
+							<Dropdown className="w-[90px]">
+								<DropdownTrigger size="sm">{shell === "custom" ? "Custom" : shell}</DropdownTrigger>
+								<DropdownMenu>
+									{shellOptions.map((option) => (
+										<DropdownItem
+											key={option.value}
+											value={option.value}
+											selected={shell === option.value}
+											onSelect={(v) => setShell(v as ShellOption)}
+										>
+											{option.label}
+										</DropdownItem>
+									))}
+								</DropdownMenu>
+							</Dropdown>
+							{shell === "custom" ? (
+								<Input
+									value={customShell}
+									onChange={(event) => setCustomShell(event.target.value)}
+									placeholder="/bin/fish"
+									className="h-7 w-[120px] font-mono text-xs"
+									pattern="[-A-Za-z0-9_./]{1,120}"
+									title="Use only letters, numbers, ., /, _, and -."
+									aria-label="Custom shell path"
+								/>
+							) : null}
+							<Button type="button" onClick={handleAttach} size="xs" disabled={!selectedContainer}>
+								Attach
+							</Button>
+							{selectedContainer ? (
+								<LinkButton
+									href={`/dashboard/logs?container=${selectedContainer.id}${environmentId ? `&environment=${environmentId}` : ""}`}
+									variant="outline"
+									size="xs"
+								>
+									Logs
+								</LinkButton>
+							) : null}
+						</div>
 					</div>
-					<div className="flex flex-wrap items-center gap-2 self-start">
-						<Dropdown className="w-[90px]">
-							<DropdownTrigger size="sm">{shell === "custom" ? "Custom" : shell}</DropdownTrigger>
-							<DropdownMenu>
-								{shellOptions.map((option) => (
-									<DropdownItem
-										key={option.value}
-										value={option.value}
-										selected={shell === option.value}
-										onSelect={(v) => setShell(v as ShellOption)}
-									>
-										{option.label}
-									</DropdownItem>
-								))}
-							</DropdownMenu>
-						</Dropdown>
-						{shell === "custom" ? (
-							<Input
-								value={customShell}
-								onChange={(event) => setCustomShell(event.target.value)}
-								placeholder="/bin/fish"
-								className="h-7 w-[120px] font-mono text-xs"
-								pattern="[-A-Za-z0-9_./]{1,120}"
-								title="Use only letters, numbers, ., /, _, and -."
-								aria-label="Custom shell path"
-							/>
-						) : null}
-						<Button type="button" onClick={handleAttach} size="xs" disabled={!selectedContainer}>
-							Attach
-						</Button>
-					</div>
-				</div>
 
-				{/* terminal body */}
-				{containers.length === 0 ? (
-					<EmptyState
-						title="No accessible containers available"
-						description="Start a running container or deploy a stack before opening a shell."
-						className="mt-4 p-8"
-					/>
-				) : !attached || !selectedContainer ? (
-					<div className="mt-4 overflow-hidden rounded-[20px] border border-default/10 bg-console shadow-[0_0_0_1px_rgba(255,255,255,0.02),0_24px_80px_rgba(0,0,0,0.35)]">
-						<div className="border-b border-default/10 bg-[radial-gradient(circle_at_top_left,rgba(34,197,94,0.12),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.02),transparent)] px-4 py-2">
-							<div className="flex items-center gap-2 text-[11px] text-muted">
-								<span className="size-2 rounded-full bg-muted/40" />
-								<span>Interactive container session</span>
-							</div>
+					{/* terminal body */}
+					{containers.length === 0 ? (
+						<div className="mt-3 flex flex-1 items-center justify-center rounded-lg border border-default/10 bg-console">
+							<EmptyState
+								title="No accessible containers available"
+								description="Start a running container or deploy a stack before opening a shell."
+								className="p-8"
+							/>
 						</div>
-						<div className="flex h-[58vh] min-h-[340px] items-center justify-center p-4 sm:min-h-[420px] lg:min-h-[560px]">
+					) : !attached || !selectedContainer ? (
+						<div className="mt-3 flex flex-1 items-center justify-center rounded-lg border border-default/10 bg-console">
 							<div className="text-center">
 								<TerminalSquare className="mx-auto size-8 text-muted/30" />
 								<p className="mt-3 text-sm font-medium text-muted">
@@ -454,25 +450,13 @@ export function ShellWorkspace({
 								<p className="mt-1 text-xs text-muted/60">to open an interactive shell session</p>
 							</div>
 						</div>
-					</div>
-				) : (
-					<div className="mt-4 overflow-hidden rounded-[20px] border border-default/10 bg-console shadow-[0_0_0_1px_rgba(255,255,255,0.02),0_24px_80px_rgba(0,0,0,0.35)]">
-						<div className="border-b border-default/10 bg-[radial-gradient(circle_at_top_left,rgba(34,197,94,0.12),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.02),transparent)] px-4 py-2">
-							<div className="flex items-center gap-2 text-[11px] text-muted">
-								<span className="size-2 rounded-full bg-success" />
-								<span>Interactive container session</span>
-							</div>
+					) : (
+						<div className="relative mt-3 min-h-0 flex-1 overflow-hidden rounded-lg border border-default/10 bg-console">
+							<div ref={terminalRef} className="absolute inset-0 p-4" />
 						</div>
-						<div
-							ref={terminalRef}
-							className="h-[58vh] min-h-[340px] w-full p-4 sm:min-h-[420px] lg:min-h-[560px]"
-						/>
-					</div>
-				)}
-				<p className="mt-2 text-xs text-muted">
-					Click inside the terminal to focus it, then type commands normally.
-				</p>
-			</Panel>
+					)}
+				</Panel>
+			</div>
 		</div>
 	);
 }

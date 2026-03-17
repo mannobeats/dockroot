@@ -110,16 +110,33 @@ export function TerminalPanel({
 				);
 			};
 
+			let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+			let lastCols = terminal.cols;
+			let lastRows = terminal.rows;
+
 			const resizeObserver = new ResizeObserver(() => {
-				fitAddon.fit();
-				if (sessionIdRef.current) {
-					const socket = getSocket();
-					socket.emit("terminal:resize", {
-						sessionId: sessionIdRef.current,
-						cols: terminal.cols,
-						rows: terminal.rows,
-					});
+				if (resizeTimer) {
+					clearTimeout(resizeTimer);
 				}
+
+				resizeTimer = setTimeout(() => {
+					resizeTimer = null;
+					fitAddon.fit();
+					if (terminal.cols === lastCols && terminal.rows === lastRows) {
+						return;
+					}
+
+					lastCols = terminal.cols;
+					lastRows = terminal.rows;
+					if (sessionIdRef.current) {
+						const socket = getSocket();
+						socket.emit("terminal:resize", {
+							sessionId: sessionIdRef.current,
+							cols: terminal.cols,
+							rows: terminal.rows,
+						});
+					}
+				}, 80);
 			});
 			resizeObserver.observe(terminalRef.current);
 
