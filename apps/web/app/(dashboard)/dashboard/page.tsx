@@ -1,7 +1,7 @@
 import { Boxes, Layers3, PlayCircle, Server } from "lucide-react";
 import Link from "next/link";
 import { LiveRuntimePanel } from "@/components/live-runtime-panel";
-import { MonitoringHealthGrid } from "@/components/monitoring-health-grid";
+import { MonitoringHealthPanel } from "@/components/monitoring-health-panel";
 import { PrometheusOverview } from "@/components/prometheus-overview";
 import { StatCard } from "@/components/stat-card";
 import { StatusBadge } from "@/components/status-badge";
@@ -25,7 +25,7 @@ import {
 	resolveRuntimeEnvironment,
 } from "@/lib/environment-runtime";
 import { getDashboardData } from "@/lib/platform";
-import { getPrometheusDashboardMetrics, getPrometheusTargetHealth } from "@/lib/prometheus";
+import { getMonitoringCollectorHealth, getPrometheusDashboardMetrics } from "@/lib/prometheus";
 
 export default async function DashboardPage({
 	searchParams,
@@ -41,7 +41,7 @@ export default async function DashboardPage({
 		getDashboardData(userId, { includeRuntime }),
 		includeRuntime ? getRuntimeSnapshotForEnvironment(userId, environment.id) : null,
 		includeRuntime && environment.kind === "local" ? getPrometheusDashboardMetrics() : null,
-		includeRuntime && environment.kind === "local" ? getPrometheusTargetHealth() : null,
+		includeRuntime && environment.kind === "local" ? getMonitoringCollectorHealth() : null,
 	]);
 	const hostTotalMemoryGb = includeRuntime && runtime ? runtime.snapshot.host.totalMemoryGb : null;
 	const fallbackUsedMemoryGb =
@@ -191,7 +191,7 @@ export default async function DashboardPage({
 
 			{/* Charts */}
 			{includeRuntime && metrics ? <PrometheusOverview metrics={metrics} /> : null}
-			{includeRuntime && targets ? <MonitoringHealthGrid targets={targets} /> : null}
+			{includeRuntime && targets ? <MonitoringHealthPanel collectors={targets} /> : null}
 			{includeRuntime && environment.kind === "local" ? <LiveRuntimePanel /> : null}
 
 			{/* Latest Activity */}

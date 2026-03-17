@@ -26,6 +26,13 @@ interface PrometheusTargetsResponse {
 	};
 }
 
+const MONITORING_COLLECTOR_LABELS: Record<string, string> = {
+	cadvisor: "Container Metrics",
+	node_exporter: "Host Metrics",
+	prometheus: "Metrics Aggregator",
+	dockroot_app: "Dockroot API",
+};
+
 function getPrometheusUrl() {
 	return process.env.PROMETHEUS_URL || "http://localhost:9090";
 }
@@ -169,15 +176,19 @@ export async function getPrometheusDashboardMetrics() {
 	};
 }
 
-export async function getPrometheusTargetHealth() {
+export async function getMonitoringCollectorHealth() {
 	const response = await queryPrometheusTargets();
 
 	return (
 		response?.data?.activeTargets.map((target) => ({
-			job: target.labels.job || target.labels.service || "unknown",
-			health: target.health,
+			name:
+				MONITORING_COLLECTOR_LABELS[target.labels.job || ""] ||
+				MONITORING_COLLECTOR_LABELS[target.labels.service || ""] ||
+				target.labels.job ||
+				target.labels.service ||
+				"Monitoring Collector",
+			status: target.health === "up" ? "healthy" : target.health,
 			lastError: target.lastError,
-			scrapeUrl: target.scrapeUrl,
 		})) || []
 	);
 }
