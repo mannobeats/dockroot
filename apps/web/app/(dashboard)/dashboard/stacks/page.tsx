@@ -10,11 +10,10 @@ import {
 	deployStackAction,
 	destroyStackAction,
 } from "@/app/(dashboard)/actions";
+import { GitHubAppsPanel } from "@/components/github-apps-panel";
 import { PageHeader } from "@/components/page-header";
 import { StackCreateModal } from "@/components/stack-create-modal";
 import { StacksTableWorkspace } from "@/components/stacks-table-workspace";
-import { Alert } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { isPrivilegedRole, requireUserSession } from "@/lib/authorization";
 import { isGitHubAppConfigured } from "@/lib/github-app";
 import {
@@ -50,14 +49,6 @@ export default async function StacksPage({
 	const runningCount = stacks.filter((stack) => stack.runningCount > 0).length;
 	const githubStatus = params.github || "";
 	const githubError = params.githubError || "";
-	const providerInstallCount = new Map<string, number>();
-	for (const installation of githubInstallations) {
-		const providerId = installation.providerId || "";
-		if (!providerId) {
-			continue;
-		}
-		providerInstallCount.set(providerId, (providerInstallCount.get(providerId) || 0) + 1);
-	}
 
 	return (
 		<div className="animate-in space-y-5">
@@ -80,28 +71,13 @@ export default async function StacksPage({
 				}
 			/>
 
-			{githubStatus ? (
-				<Alert>
-					{githubStatus === "manifest-ready"
-						? "GitHub App created. Next step: install it, then refresh providers."
-						: githubStatus === "connected"
-							? "GitHub installation connected."
-							: `GitHub setup status: ${githubStatus}`}
-					{githubError ? ` (${githubError})` : ""}
-				</Alert>
-			) : null}
-
-			{/* GitHub Apps — compact inline */}
-			{githubProviders.length ? (
-				<div className="flex flex-wrap items-center gap-2 text-xs">
-					<span className="font-medium text-muted">GitHub:</span>
-					{githubProviders.map((provider) => (
-						<Badge key={provider.id}>
-							{provider.name} · {providerInstallCount.get(provider.id) || 0} installs
-						</Badge>
-					))}
-				</div>
-			) : null}
+			<GitHubAppsPanel
+				initialProviders={githubProviders}
+				initialInstallations={githubInstallations}
+				redirectTo="/dashboard/stacks"
+				initialStatus={githubStatus}
+				initialError={githubError}
+			/>
 
 			<StacksTableWorkspace
 				stacks={stacks}

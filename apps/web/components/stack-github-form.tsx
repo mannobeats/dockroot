@@ -1,67 +1,27 @@
 "use client";
 
-import {
-	Check,
-	ChevronDown,
-	ChevronRight,
-	GitBranch,
-	RefreshCw,
-	Search,
-	Sparkles,
-} from "lucide-react";
+import { Check, ChevronDown, ChevronRight, GitBranch, Search, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { CodeEditor } from "@/components/code-editor";
 import { FormSubmitButton } from "@/components/form-submit-button";
+import type { GitHubProviderOption, InstallationOption } from "@/components/github-types";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dropdown, DropdownItem, DropdownMenu, DropdownTrigger } from "@/components/ui/dropdown";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-
-interface InstallationRepository {
-	id: number;
-	name: string;
-	full_name: string;
-	private: boolean;
-	default_branch: string;
-	owner: {
-		login: string;
-	};
-}
-
-export interface InstallationOption {
-	id: string;
-	providerId?: string | null;
-	appSlug?: string | null;
-	accountLogin: string;
-	accountType: string | null;
-	repositories: InstallationRepository[];
-	repositoryError?: string;
-}
-
-export interface GitHubProviderOption {
-	id: string;
-	name: string;
-	appSlug: string;
-	githubAppId: string;
-	createdAt: string | Date;
-	updatedAt: string | Date;
-}
 
 export function StackGitHubForm({
 	environments,
 	installations,
 	providers,
-	redirectTo,
 	appConfigured,
 	action,
 }: {
 	environments: Array<{ id: string; name: string; kind: string }>;
 	installations: InstallationOption[];
 	providers: GitHubProviderOption[];
-	redirectTo: string;
 	appConfigured: boolean;
 	action: (formData: FormData) => void | Promise<void>;
 }) {
@@ -72,11 +32,6 @@ export function StackGitHubForm({
 	>(installations.length ? "ready" : "idle");
 	const [installationStateMessage, setInstallationStateMessage] = useState("");
 	const [providerOptions, setProviderOptions] = useState(providers);
-	const [selectedProviderId, setSelectedProviderId] = useState(providers[0]?.id || "");
-	const [manifestName, setManifestName] = useState("Dockroot GitHub App");
-	const [manifestOwner, setManifestOwner] = useState("");
-	const [manifestError, setManifestError] = useState("");
-	const [providerActionMessage, setProviderActionMessage] = useState("");
 	const [installationId, setInstallationId] = useState(installations[0]?.id || "");
 	const [repositoryQuery, setRepositoryQuery] = useState("");
 	const [repositoryId, setRepositoryId] = useState("");
@@ -99,17 +54,6 @@ export function StackGitHubForm({
 	const activeInstallation = installationOptions.find(
 		(installation) => installation.id === installationId,
 	);
-	const activeProvider =
-		providerOptions.find((provider) => provider.id === selectedProviderId) || null;
-	const visibleInstallations = useMemo(() => {
-		if (!selectedProviderId) {
-			return installationOptions;
-		}
-
-		return installationOptions.filter(
-			(installation) => (installation.providerId || "") === selectedProviderId,
-		);
-	}, [installationOptions, selectedProviderId]);
 	const repositories = activeInstallation?.repositories || [];
 	const filteredRepositories = useMemo(() => {
 		if (!repositoryQuery.trim()) {
@@ -161,13 +105,7 @@ export function StackGitHubForm({
 				if (current && nextInstallations.some((installation) => installation.id === current)) {
 					return current;
 				}
-
-				const providerMatch = selectedProviderId
-					? nextInstallations.find(
-							(installation) => (installation.providerId || "") === selectedProviderId,
-						)
-					: null;
-				return providerMatch?.id || nextInstallations[0]?.id || "";
+				return nextInstallations[0]?.id || "";
 			});
 			setInstallationState("ready");
 			setInstallationStateMessage(
@@ -181,7 +119,7 @@ export function StackGitHubForm({
 				error instanceof Error ? error.message : "Unable to refresh GitHub installations.",
 			);
 		}
-	}, [appConfigured, selectedProviderId]);
+	}, [appConfigured]);
 
 	const refreshProviders = useCallback(async () => {
 		if (!appConfigured) {
@@ -202,52 +140,10 @@ export function StackGitHubForm({
 
 			const nextProviders = payload.providers || [];
 			setProviderOptions(nextProviders);
-			setSelectedProviderId((current) => {
-				if (current && nextProviders.some((provider) => provider.id === current)) {
-					return current;
-				}
-				return nextProviders[0]?.id || "";
-			});
 		} catch {
 			// keep existing provider state on transient failures
 		}
 	}, [appConfigured]);
-
-	const deleteProvider = useCallback(
-		async (providerId: string) => {
-			setProviderActionMessage("");
-			try {
-				const response = await fetch(`/api/github/providers/${encodeURIComponent(providerId)}`, {
-					method: "DELETE",
-				});
-				const payload = (await response.json()) as {
-					error?: string;
-					remoteUninstalled?: number;
-					remoteFailures?: string[];
-				};
-				if (!response.ok) {
-					throw new Error(payload.error || "Unable to delete GitHub App.");
-				}
-
-				await refreshProviders();
-				await refreshInstallations();
-				if ((payload.remoteFailures || []).length) {
-					setProviderActionMessage(
-						`App removed. ${payload.remoteUninstalled || 0} installations uninstalled; some failed.`,
-					);
-				} else {
-					setProviderActionMessage(
-						`App removed. ${payload.remoteUninstalled || 0} installations uninstalled.`,
-					);
-				}
-			} catch (error) {
-				setProviderActionMessage(
-					error instanceof Error ? error.message : "Unable to delete GitHub App.",
-				);
-			}
-		},
-		[refreshInstallations, refreshProviders],
-	);
 
 	async function loadRepositoryFiles(nextComposePath?: string) {
 		if (!selectedRepository || !installationId || !branch || !(nextComposePath || composePath)) {
@@ -305,7 +201,6 @@ export function StackGitHubForm({
 
 	useEffect(() => {
 		setProviderOptions(providers);
-		setSelectedProviderId((current) => current || providers[0]?.id || "");
 	}, [providers]);
 
 	useEffect(() => {
@@ -338,20 +233,6 @@ export function StackGitHubForm({
 			return nextRepositoryId;
 		});
 	}, [repositories]);
-
-	useEffect(() => {
-		if (!visibleInstallations.length) {
-			setInstallationId("");
-			return;
-		}
-
-		setInstallationId((current) => {
-			if (current && visibleInstallations.some((installation) => installation.id === current)) {
-				return current;
-			}
-			return visibleInstallations[0]?.id || "";
-		});
-	}, [visibleInstallations]);
 
 	useEffect(() => {
 		if (!selectedRepository) {
@@ -417,124 +298,23 @@ export function StackGitHubForm({
 		};
 	}, [branch, composePath, installationId, selectedRepository]);
 
-	function startManifestFlow() {
-		const trimmedName = manifestName.trim();
-		if (!trimmedName) {
-			setManifestError("GitHub App name is required.");
-			return;
-		}
-
-		setManifestError("");
-		const params = new URLSearchParams({
-			redirectTo,
-			name: trimmedName,
-		});
-		const trimmedOwner = manifestOwner.trim();
-		if (trimmedOwner) {
-			params.set("owner", trimmedOwner);
-		}
-		window.location.href = `/api/github/app/manifest?${params.toString()}`;
-	}
-
 	/* ── No installations: bootstrap flow ──────────── */
 	if (!installationOptions.length) {
 		return (
-			<div className="space-y-4">
-				<div className="rounded-lg border border-default/8 p-4">
-					<p className="text-xs font-medium text-muted">Connect GitHub</p>
-					<p className="mt-1 text-sm text-muted">
-						Create a GitHub App, install it on your repositories, then return here.
-					</p>
-
-					<div className="mt-4 grid gap-3 sm:grid-cols-2">
-						<Field>
-							<FieldLabel htmlFor="github-manifest-name">App name</FieldLabel>
-							<Input
-								id="github-manifest-name"
-								value={manifestName}
-								onChange={(event) => setManifestName(event.target.value)}
-								placeholder="Dockroot GitHub App"
-							/>
-						</Field>
-						<Field>
-							<FieldLabel htmlFor="github-manifest-owner">Organization (optional)</FieldLabel>
-							<Input
-								id="github-manifest-owner"
-								value={manifestOwner}
-								onChange={(event) => setManifestOwner(event.target.value)}
-								placeholder="my-org"
-							/>
-						</Field>
-					</div>
-					{manifestError ? <p className="mt-2 text-xs text-danger">{manifestError}</p> : null}
-
-					<div className="mt-4 flex items-center gap-2">
-						{activeProvider ? (
-							<>
-								<Button
-									type="button"
-									size="sm"
-									onClick={() => {
-										window.location.href = `/api/github/install?providerId=${encodeURIComponent(activeProvider.id)}&redirectTo=${encodeURIComponent(redirectTo)}`;
-									}}
-								>
-									Install {activeProvider.name}
-								</Button>
-								<Button
-									type="button"
-									variant="ghost"
-									size="xs"
-									onClick={() => void refreshInstallations()}
-								>
-									<RefreshCw className="h-3 w-3" />
-								</Button>
-							</>
-						) : (
-							<Button type="button" size="sm" onClick={startManifestFlow}>
-								Create GitHub App
-							</Button>
-						)}
-					</div>
-				</div>
-
+			<div className="space-y-4 rounded-2xl border border-dashed border-default/15 bg-surface-raised p-6 text-center">
+				<p className="text-sm font-semibold">No GitHub installation is ready yet</p>
+				<p className="mx-auto max-w-[48ch] text-sm text-muted">
+					Set up and install a GitHub App from the GitHub Apps workspace on this page, then come
+					back here to choose a repository and create a tracked stack.
+				</p>
 				{providerOptions.length ? (
-					<div className="rounded-lg border border-default/8 p-4">
-						<p className="text-xs font-medium text-muted">Configured apps</p>
-						<div className="mt-2 space-y-1">
-							{providerOptions.map((provider) => (
-								<div
-									key={provider.id}
-									className={`flex items-center justify-between rounded-md px-2.5 py-2 text-xs ${selectedProviderId === provider.id ? "bg-accent/6 text-foreground" : "text-muted"}`}
-								>
-									<label className="flex items-center gap-2 cursor-pointer">
-										<input
-											type="radio"
-											name="providerId"
-											value={provider.id}
-											checked={selectedProviderId === provider.id}
-											onChange={(event) => setSelectedProviderId(event.target.value)}
-											className="h-3 w-3"
-										/>
-										<span className="font-medium">{provider.name}</span>
-									</label>
-									<button
-										type="button"
-										className="text-[10px] text-danger hover:underline"
-										onClick={(event) => {
-											event.preventDefault();
-											void deleteProvider(provider.id);
-										}}
-									>
-										Remove
-									</button>
-								</div>
-							))}
-						</div>
+					<div className="flex flex-wrap justify-center gap-2">
+						{providerOptions.map((provider) => (
+							<Badge key={provider.id} variant="accent">
+								{provider.name}
+							</Badge>
+						))}
 					</div>
-				) : null}
-
-				{providerActionMessage ? (
-					<p className="text-xs text-muted">{providerActionMessage}</p>
 				) : null}
 				{installationStateMessage ? (
 					<p className="text-xs text-muted">{installationStateMessage}</p>
@@ -563,72 +343,64 @@ export function StackGitHubForm({
 			{/* Repository selection */}
 			<div>
 				<div className="flex items-center justify-between">
-					<p className="text-xs font-medium text-muted">Repository</p>
-					<div className="flex items-center gap-1.5">
-						<Dropdown className="min-w-32">
-							<DropdownTrigger size="sm">{activeProvider?.name || "Provider"}</DropdownTrigger>
-							<DropdownMenu>
-								{providerOptions.map((provider) => (
-									<DropdownItem
-										key={provider.id}
-										value={provider.id}
-										selected={selectedProviderId === provider.id}
-										onSelect={(id) => {
-											setSelectedProviderId(id);
-											setRepositoryQuery("");
-											setRepositoryId("");
-											setIsLoaded(false);
-											setComposePath("");
-											setComposeYaml("");
-											setEnvFileContent("");
-											setHeadSha("");
-											setLoadError("");
-										}}
-									>
-										{provider.name}
-									</DropdownItem>
-								))}
-							</DropdownMenu>
-						</Dropdown>
-						<Dropdown>
-							<DropdownTrigger size="sm">
-								{activeInstallation?.accountLogin || "Account"}
-							</DropdownTrigger>
-							<DropdownMenu>
-								{visibleInstallations.map((installation) => (
-									<DropdownItem
-										key={installation.id}
-										value={installation.id}
-										selected={installationId === installation.id}
-										onSelect={(id) => {
-											setInstallationId(id);
-											setRepositoryQuery("");
-											setRepositoryId("");
-											setIsLoaded(false);
-											setComposePath("");
-											setComposeYaml("");
-											setEnvFileContent("");
-											setHeadSha("");
-											setLoadError("");
-										}}
-									>
-										{installation.accountLogin}
-									</DropdownItem>
-								))}
-							</DropdownMenu>
-						</Dropdown>
-						<button
-							type="button"
-							onClick={() => {
-								void refreshProviders();
-								void refreshInstallations();
-							}}
-							className="rounded-md p-1.5 text-muted transition-colors hover:text-foreground"
-						>
-							<RefreshCw className="h-3 w-3" />
-						</button>
-					</div>
+					<p className="text-xs font-medium text-muted">Installation</p>
+					<p className="text-xs text-muted">Choose where Dockroot can read repositories from.</p>
 				</div>
+
+				<div className="mt-3 grid gap-2 sm:grid-cols-2">
+					{installationOptions.map((installation) => {
+						const providerName =
+							providerOptions.find((provider) => provider.id === installation.providerId)?.name ||
+							installation.appSlug ||
+							"GitHub App";
+						const active = installationId === installation.id;
+
+						return (
+							<button
+								key={installation.id}
+								type="button"
+								onClick={() => {
+									setInstallationId(installation.id);
+									setRepositoryQuery("");
+									setRepositoryId("");
+									setIsLoaded(false);
+									setComposePath("");
+									setComposeYaml("");
+									setEnvFileContent("");
+									setHeadSha("");
+									setLoadError("");
+								}}
+								className={`rounded-xl border px-3 py-3 text-left transition-colors ${
+									active
+										? "border-accent/35 bg-accent/6"
+										: "border-default/10 bg-surface-raised hover:border-default/20 hover:bg-foreground/[0.015]"
+								}`}
+							>
+								<div className="flex items-start justify-between gap-3">
+									<div className="min-w-0">
+										<p className="truncate text-sm font-semibold">{installation.accountLogin}</p>
+										<p className="mt-0.5 text-xs text-muted">
+											{providerName} · {installation.accountType || "GitHub account"}
+										</p>
+									</div>
+									{active ? <Check className="h-4 w-4 shrink-0 text-accent" /> : null}
+								</div>
+								<div className="mt-3 flex flex-wrap items-center gap-2">
+									<Badge variant={installation.repositoryError ? "warning" : "accent"}>
+										{installation.repositories.length} repos
+									</Badge>
+									{installation.repositoryError ? (
+										<Badge variant="warning">Needs sync</Badge>
+									) : (
+										<Badge variant="success">Ready</Badge>
+									)}
+								</div>
+							</button>
+						);
+					})}
+				</div>
+
+				<p className="mt-4 text-xs font-medium text-muted">Repository</p>
 
 				<div className="relative mt-2">
 					<Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
@@ -686,50 +458,6 @@ export function StackGitHubForm({
 
 				{activeInstallation?.repositoryError ? (
 					<Alert className="mt-2 text-xs">{activeInstallation.repositoryError}</Alert>
-				) : null}
-
-				{/* App management row - compact */}
-				<div className="mt-2 flex flex-wrap items-center gap-2">
-					<Input
-						value={manifestName}
-						onChange={(event) => setManifestName(event.target.value)}
-						onKeyDown={(event) => {
-							if (event.key === "Enter") event.preventDefault();
-						}}
-						placeholder="New GitHub App name"
-						inputSize="sm"
-						className="max-w-48 text-xs"
-					/>
-					<Button type="button" size="xs" variant="outline" onClick={startManifestFlow}>
-						New App
-					</Button>
-					<Button
-						type="button"
-						size="xs"
-						onClick={() => {
-							if (!selectedProviderId) return;
-							window.location.href = `/api/github/install?providerId=${encodeURIComponent(selectedProviderId)}&redirectTo=${encodeURIComponent(redirectTo)}`;
-						}}
-						disabled={!selectedProviderId}
-					>
-						Install
-					</Button>
-					<Button
-						type="button"
-						size="xs"
-						variant="ghost"
-						onClick={() => {
-							if (!selectedProviderId) return;
-							void deleteProvider(selectedProviderId);
-						}}
-						disabled={!selectedProviderId}
-					>
-						Remove App
-					</Button>
-				</div>
-				{manifestError ? <p className="mt-1 text-xs text-danger">{manifestError}</p> : null}
-				{providerActionMessage ? (
-					<p className="mt-1 text-xs text-muted">{providerActionMessage}</p>
 				) : null}
 			</div>
 

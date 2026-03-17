@@ -2,8 +2,9 @@
 
 import { Github, Layers3, Plus, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import type { InstallationOption } from "@/components/github-types";
 import { StackComposeForm } from "@/components/stack-compose-form";
-import { type InstallationOption, StackGitHubForm } from "@/components/stack-github-form";
+import { StackGitHubForm } from "@/components/stack-github-form";
 import { Button } from "@/components/ui/button";
 
 type FormAction = (formData: FormData) => void | Promise<void>;
@@ -163,7 +164,6 @@ export function StackCreateModal({
 									environments={environments}
 									installations={installations}
 									providers={providers}
-									redirectTo="/dashboard/stacks"
 									appConfigured={appConfigured}
 									action={createGitHubStackAction}
 								/>
