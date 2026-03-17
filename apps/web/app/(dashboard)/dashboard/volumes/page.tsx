@@ -2,8 +2,10 @@ import {
 	backupVolumeAction,
 	bulkRemoveVolumesAction,
 	createVolumeAction,
+	deleteVolumeBackupAction,
 	pruneVolumesAction,
 	removeVolumeAction,
+	restoreVolumeAction,
 } from "@/app/(dashboard)/actions";
 import { CreateVolumeModal } from "@/components/create-volume-modal";
 import { DestructiveActionModal } from "@/components/destructive-action-modal";
@@ -13,6 +15,7 @@ import { Panel } from "@/components/ui/panel";
 import { VolumesTableWorkspace } from "@/components/volumes-table-workspace";
 import { requirePrivilegedPageSession } from "@/lib/authorization";
 import { listVolumesForEnvironment, resolveRuntimeEnvironment } from "@/lib/environment-runtime";
+import { listVolumeBackupsForUser } from "@/lib/volume-backups";
 
 export default async function VolumesPage({
 	searchParams,
@@ -29,6 +32,11 @@ export default async function VolumesPage({
 			? true
 			: `${volume.Name} ${volume.Driver} ${volume.Mountpoint || ""}`.toLowerCase().includes(query),
 	);
+	const backupsByVolume = await listVolumeBackupsForUser({
+		userId: session.userId,
+		environmentId: environment.id,
+		volumeNames: filtered.map((volume: Record<string, string>) => volume.Name).filter(Boolean),
+	});
 
 	return (
 		<div className="animate-in space-y-5">
@@ -70,6 +78,9 @@ export default async function VolumesPage({
 					removeVolumeAction={removeVolumeAction}
 					bulkRemoveVolumesAction={bulkRemoveVolumesAction}
 					backupVolumeAction={backupVolumeAction}
+					restoreVolumeAction={restoreVolumeAction}
+					deleteVolumeBackupAction={deleteVolumeBackupAction}
+					backupsByVolume={backupsByVolume}
 				/>
 			</Panel>
 		</div>

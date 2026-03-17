@@ -1,13 +1,20 @@
 import { ArrowLeft } from "lucide-react";
+import {
+	backupVolumeAction,
+	deleteVolumeBackupAction,
+	restoreVolumeAction,
+} from "@/app/(dashboard)/actions";
 import { LinkButton } from "@/components/ui/link-button";
 import { LogBlock } from "@/components/ui/log-block";
 import { MetricCard } from "@/components/ui/metric-card";
 import { Panel, PanelHeader, PanelTitle } from "@/components/ui/panel";
+import { VolumeBackupModal } from "@/components/volume-backup-modal";
 import { requirePrivilegedPageSession } from "@/lib/authorization";
 import {
 	getVolumeDetailsForEnvironment,
 	resolveRuntimeEnvironment,
 } from "@/lib/environment-runtime";
+import { listVolumeBackupsForUser } from "@/lib/volume-backups";
 
 export default async function VolumeDetailPage({
 	params,
@@ -26,6 +33,20 @@ export default async function VolumeDetailPage({
 		decodedName,
 		environment.id,
 	);
+	const backupsByVolume = await listVolumeBackupsForUser({
+		userId: session.userId,
+		environmentId: environment.id,
+		volumeNames: [decodedName],
+	});
+	const backups = backupsByVolume[decodedName] || [];
+	const latestCompletedBackup = backups.find((backup) => backup.status === "completed");
+	const backupState = backups.some((backup) => backup.status === "failed")
+		? "Needs attention"
+		: backups.some((backup) => backup.status === "in_progress")
+			? "In progress"
+			: backups.length
+				? "Healthy"
+				: "Not configured";
 
 	if (!volume) {
 		return <div className="text-sm text-muted">Volume not found.</div>;
@@ -64,6 +85,48 @@ export default async function VolumeDetailPage({
 					valueClassName="text-sm"
 				/>
 			</div>
+
+			<Panel>
+				<PanelHeader>
+					<div>
+						<PanelTitle>Backup History</PanelTitle>
+						<p className="mt-0.5 text-xs text-muted">
+							Create snapshots for this volume, then restore or clean them up later.
+						</p>
+					</div>
+					<VolumeBackupModal
+						volumeName={decodedName}
+						environmentId={environment.id}
+						backups={backups}
+						backupAction={backupVolumeAction}
+						restoreAction={restoreVolumeAction}
+						deleteAction={deleteVolumeBackupAction}
+						triggerLabel="Manage backups"
+						triggerClassName="rounded-lg border border-default/12 bg-surface text-foreground hover:bg-foreground/[0.04]"
+					/>
+				</PanelHeader>
+				<div className="grid gap-3 p-4 sm:grid-cols-3">
+					<MetricCard
+						label="Snapshots"
+						value={backups.length}
+						description={backups.length ? "Stored for this volume" : "No backup history yet"}
+					/>
+					<MetricCard
+						label="Latest backup"
+						value={
+							latestCompletedBackup ? latestCompletedBackup.createdAt.toLocaleString() : "None yet"
+						}
+						valueClassName="text-sm font-semibold"
+						description="Most recent completed archive"
+					/>
+					<MetricCard
+						label="Backup state"
+						value={backupState}
+						valueClassName="text-sm font-semibold"
+						description="Based on the latest backup records"
+					/>
+				</div>
+			</Panel>
 
 			<Panel>
 				<PanelHeader>

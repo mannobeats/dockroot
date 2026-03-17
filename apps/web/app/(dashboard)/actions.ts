@@ -1366,18 +1366,14 @@ export async function deleteVolumeBackupAction(formData: FormData) {
 export async function listVolumeBackupsAction(volumeName: string, environmentId?: string) {
 	const auth = await requireUserSession();
 	const environment = await resolveRuntimeEnvironment(auth.userId, environmentId);
-	const { db: dbClient, volumeBackups } = await import("@dockroot/db");
-	const { and, eq, desc } = await import("drizzle-orm");
-
-	return dbClient.query.volumeBackups.findMany({
-		where: and(
-			eq(volumeBackups.environmentId, environment.id),
-			eq(volumeBackups.volumeName, volumeName),
-			eq(volumeBackups.createdByUserId, auth.userId),
-		),
-		orderBy: [desc(volumeBackups.createdAt)],
-		limit: 50,
+	const { listVolumeBackupsForUser } = await import("@/lib/volume-backups");
+	const grouped = await listVolumeBackupsForUser({
+		userId: auth.userId,
+		environmentId: environment.id,
+		volumeNames: [volumeName],
 	});
+
+	return grouped[volumeName] || [];
 }
 
 export async function updateContainerUpdateScheduleAction(formData: FormData) {
