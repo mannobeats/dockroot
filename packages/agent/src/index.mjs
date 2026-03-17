@@ -495,7 +495,24 @@ async function prepareComposeWorkspace(state, job) {
 				.catch(() => false);
 
 			if (!repoExists) {
-				throw new Error("GitHub destroy requires an existing repository workspace on disk.");
+				const fallbackComposePath = path.join(stackDir, "compose.yaml");
+				const fallbackEnvPath = path.join(stackDir, ".env");
+				await writeFile(
+					fallbackComposePath,
+					Buffer.from(job.COMPOSE_B64 || "", "base64").toString("utf8"),
+					"utf8",
+				);
+				await writeFile(
+					fallbackEnvPath,
+					Buffer.from(job.ENV_B64 || "", "base64").toString("utf8"),
+					"utf8",
+				);
+
+				return {
+					composePath: fallbackComposePath,
+					envPath: fallbackEnvPath,
+					workingDirectory: stackDir,
+				};
 			}
 		}
 
@@ -571,13 +588,32 @@ async function runComposeJob(state, job) {
 						"--remove-orphans",
 					];
 
-		const result = await execFileAsync("docker", args, {
-			maxBuffer: 1024 * 1024 * 16,
+		let output = "";
+		const child = spawn("docker", args, {
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+
+		const publishChunk = (chunk, stream) => {
+			const message = chunk.toString();
+			output += message;
+			job.onChunk?.({
+				stream,
+				message,
+				at: Date.now(),
+			});
+		};
+
+		child.stdout.on("data", (chunk) => publishChunk(chunk, "stdout"));
+		child.stderr.on("data", (chunk) => publishChunk(chunk, "stderr"));
+
+		const exitCode = await new Promise((resolve, reject) => {
+			child.on("error", reject);
+			child.on("close", (code) => resolve(code ?? 1));
 		});
 
 		return {
-			status: "succeeded",
-			log: [result.stdout, result.stderr].filter(Boolean).join("\n"),
+			status: exitCode === 0 ? "succeeded" : "failed",
+			log: output.trim() || `docker compose exited with code ${exitCode}`,
 		};
 	} catch (error) {
 		return {
@@ -585,6 +621,57 @@ async function runComposeJob(state, job) {
 			log: error instanceof Error ? error.message : "Docker command failed",
 		};
 	}
+}
+
+function createJobEventReporter(state, jobId) {
+	const queue = [];
+	let flushTimer = null;
+	let inflight = Promise.resolve();
+
+	const flushBatch = () => {
+		const batch = queue.splice(0);
+		if (!batch.length) {
+			return;
+		}
+
+		inflight = inflight
+			.then(() =>
+				requestText(`${state.managerUrl || managerUrl}/api/agent/jobs/${jobId}/events`, {
+					method: "POST",
+					headers: {
+						Authorization: `Bearer ${state.agentToken}`,
+						"content-type": "application/json",
+					},
+					body: JSON.stringify(batch),
+				}),
+			)
+			.catch((error) => {
+				console.error("[jobs] Failed to push log events:", error.message);
+			});
+	};
+
+	return {
+		push(event) {
+			queue.push(event);
+			if (flushTimer) {
+				return;
+			}
+
+			flushTimer = setTimeout(() => {
+				flushTimer = null;
+				flushBatch();
+			}, 150);
+			flushTimer.unref?.();
+		},
+		async flush() {
+			if (flushTimer) {
+				clearTimeout(flushTimer);
+				flushTimer = null;
+			}
+			flushBatch();
+			await inflight;
+		},
+	};
 }
 
 async function reportJobResult(state, jobId, status, log) {
@@ -856,6 +943,28 @@ function startHttpServer() {
 
 		if (request.method === "GET" && pathName === "/containers") {
 			sendJson(response, 200, (await getSnapshot()).containers);
+			return;
+		}
+
+		const stackActionsMatch = pathName.match(/^\/stacks\/([^/]+)\/actions$/);
+		if (request.method === "POST" && stackActionsMatch) {
+			const stackSlug = decodeURIComponent(stackActionsMatch[1]);
+			const input = await readRequestJson(request);
+			const result = await runComposeJob(authedState, {
+				JOB_ID: `adhoc-${Date.now()}`,
+				STACK_SLUG: stackSlug,
+				SOURCE_TYPE: input.sourceType === "github" ? "github" : "manual",
+				OPERATION: input.operation === "destroy" ? "destroy" : "deploy",
+				COMPOSE_B64: Buffer.from(String(input.composeYaml || ""), "utf8").toString("base64"),
+				ENV_B64: Buffer.from(String(input.envFileContent || ""), "utf8").toString("base64"),
+				COMPOSE_PATH: String(input.composePath || ""),
+				ENV_PATH: String(input.envPath || ""),
+			});
+			sendJson(response, result.status === "succeeded" ? 200 : 400, {
+				ok: result.status === "succeeded",
+				status: result.status,
+				log: result.log,
+			});
 			return;
 		}
 
@@ -1436,7 +1545,12 @@ async function loop() {
 			const job = await pollJob(state);
 
 			if (job.JOB_ID) {
-				const result = await runComposeJob(state, job);
+				const reporter = createJobEventReporter(state, job.JOB_ID);
+				const result = await runComposeJob(state, {
+					...job,
+					onChunk: (event) => reporter.push(event),
+				});
+				await reporter.flush();
 				await reportJobResult(state, job.JOB_ID, result.status, result.log);
 			}
 		} catch (error) {

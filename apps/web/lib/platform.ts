@@ -1591,7 +1591,11 @@ async function deleteOwnedStackById(stackId: string, userId: string) {
 	const stack = await db.query.stacks.findFirst({
 		where: and(eq(stacks.id, stackId), eq(stacks.createdByUserId, userId)),
 		with: {
-			environment: true,
+			environment: {
+				with: {
+					agent: true,
+				},
+			},
 		},
 	});
 
@@ -1601,6 +1605,36 @@ async function deleteOwnedStackById(stackId: string, userId: string) {
 
 	if (stack.environment.kind === "local") {
 		await deleteLocalStackResources(stack.slug);
+	} else {
+		const agent = stack.environment.agent?.[0];
+		if (!stack.environment.managerUrl || !agent?.accessToken) {
+			throw new Error("Remote environment is not registered.");
+		}
+
+		const response = await fetch(
+			`${stack.environment.managerUrl.replace(/\/$/, "")}/stacks/${encodeURIComponent(stack.slug)}/actions`,
+			{
+				method: "POST",
+				headers: {
+					Authorization: `Bearer ${agent.accessToken}`,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					operation: "destroy",
+					sourceType: stack.sourceType,
+					composeYaml: stack.composeYaml,
+					envFileContent: stack.envFileContent || "",
+					composePath: stack.githubPath || "",
+					envPath: stack.githubEnvPath || "",
+				}),
+				cache: "no-store",
+			},
+		);
+
+		if (!response.ok) {
+			const message = await response.text();
+			throw new Error(message || "Unable to destroy the remote stack before deleting it.");
+		}
 	}
 
 	await db.delete(stacks).where(eq(stacks.id, stack.id));
@@ -1803,6 +1837,14 @@ export async function claimNextDeployment(accessToken: string) {
 			.where(eq(stacks.id, queued.stackId));
 	}
 
+	emitRealtime("deployment:update", {
+		stackId: queued.stackId,
+		deploymentId: queued.id,
+		status: "running",
+		environmentId: agent.environmentId,
+		at: Date.now(),
+	});
+
 	if (!queued.stack) {
 		throw new Error("Deployment references a deleted stack and cannot be claimed.");
 	}
@@ -1951,6 +1993,70 @@ export async function completeDeployment({
 	revalidatePath(`/dashboard/stacks/${deployment.stackId}`);
 	revalidatePath("/dashboard/environments");
 	revalidatePath(`/dashboard/environments/${deployment.environmentId}`);
+}
+
+export async function appendDeploymentLogEvents({
+	deploymentId,
+	accessToken,
+	events,
+}: {
+	deploymentId: string;
+	accessToken: string;
+	events: Array<{
+		stream?: "stdout" | "stderr";
+		message?: string;
+		at?: number;
+	}>;
+}) {
+	if (!events.length) {
+		return;
+	}
+
+	const agent = await heartbeatAgent(accessToken);
+	const deployment = await db.query.deployments.findFirst({
+		where: and(
+			eq(deployments.id, deploymentId),
+			eq(deployments.environmentId, agent.environmentId),
+		),
+		with: {
+			stack: {
+				columns: {
+					id: true,
+				},
+			},
+		},
+	});
+
+	if (!deployment) {
+		throw new Error("Deployment not found");
+	}
+
+	const combinedLog = events
+		.map((event) => String(event.message || ""))
+		.filter(Boolean)
+		.join("");
+	if (!combinedLog) {
+		return;
+	}
+
+	const updatedAt = now();
+	await db
+		.update(deployments)
+		.set({
+			log: sql`coalesce(${deployments.log}, '') || ${combinedLog}`,
+			updatedAt,
+		})
+		.where(eq(deployments.id, deployment.id));
+
+	for (const event of events) {
+		emitToRoom(`stack:${deployment.stackId}`, "stack:log", {
+			stackId: deployment.stackId,
+			deploymentId,
+			stream: event.stream === "stderr" ? "stderr" : "stdout",
+			message: String(event.message || ""),
+			at: Number(event.at || Date.now()),
+		});
+	}
 }
 
 async function getStoredManagerUrl(userId: string) {
