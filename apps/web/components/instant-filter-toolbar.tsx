@@ -95,9 +95,7 @@ export function InstantFilterToolbar({
 							Showing {resultCount} of {totalCount}
 						</span>
 					) : (
-						<span className="shrink-0 text-[11px] text-muted">
-							{totalCount} total
-						</span>
+						<span className="shrink-0 text-[11px] text-muted">{totalCount} total</span>
 					)}
 
 					{/* Spacer pushes filters to the right */}

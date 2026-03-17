@@ -164,7 +164,9 @@ export default async function EnvironmentDetailPage({
 							{environment.deployments.map((deployment) => (
 								<div key={deployment.id} className="px-3 py-2.5">
 									<div className="flex items-center justify-between gap-3">
-										<p className="text-sm font-medium">{deployment.stackName || deployment.stack?.name || "Deleted stack"}</p>
+										<p className="text-sm font-medium">
+											{deployment.stackName || deployment.stack?.name || "Deleted stack"}
+										</p>
 										<StatusBadge status={deployment.status} />
 									</div>
 									<p className="mt-0.5 font-mono text-[11px] text-muted">{deployment.version}</p>

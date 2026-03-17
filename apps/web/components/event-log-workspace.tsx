@@ -2,7 +2,7 @@
 
 import { Trash2 } from "lucide-react";
 import { useCallback, useMemo, useState, useTransition } from "react";
-import { EventDetailDrawer, type EventDetail } from "@/components/event-detail-drawer";
+import { type EventDetail, EventDetailDrawer } from "@/components/event-detail-drawer";
 import { Badge } from "@/components/ui/badge";
 import {
 	DataTable,
@@ -223,9 +223,7 @@ export function EventLogWorkspace({
 								<DataTableCell>
 									<div className="min-w-0">
 										{event.resourceName ? (
-											<p className="truncate text-xs font-medium">
-												{event.resourceName}
-											</p>
+											<p className="truncate text-xs font-medium">{event.resourceName}</p>
 										) : event.containerId ? (
 											<p className="truncate text-xs text-muted font-mono">
 												{event.containerId.slice(0, 12)}
@@ -243,9 +241,7 @@ export function EventLogWorkspace({
 									)}
 								</DataTableCell>
 								<DataTableCell>
-									<span className="text-xs text-muted">
-										{event.userName || "System"}
-									</span>
+									<span className="text-xs text-muted">{event.userName || "System"}</span>
 								</DataTableCell>
 								<DataTableCell className="text-right">
 									<span className="text-xs text-muted whitespace-nowrap">

@@ -116,7 +116,9 @@ function getInitialColumns(): Set<ColumnId> {
 					return set;
 				}
 			}
-		} catch { /* ignore */ }
+		} catch {
+			/* ignore */
+		}
 	}
 	return new Set(ALL_COLUMNS.filter((c) => c.defaultVisible).map((c) => c.id));
 }
@@ -168,7 +170,10 @@ function formatCpu(value: number): string {
 	return `${value.toFixed(1)}%`;
 }
 
-function formatMemory(memUsage: string | undefined, memPerc: string | undefined): { usage: string; percent: number } {
+function formatMemory(
+	memUsage: string | undefined,
+	memPerc: string | undefined,
+): { usage: string; percent: number } {
 	const percent = parsePercent(memPerc);
 	if (memUsage) {
 		const parts = memUsage.split("/");
@@ -178,8 +183,7 @@ function formatMemory(memUsage: string | undefined, memPerc: string | undefined)
 }
 
 function CpuBar({ percent }: { percent: number }) {
-	const color =
-		percent > 80 ? "bg-danger" : percent > 50 ? "bg-warning" : "bg-accent";
+	const color = percent > 80 ? "bg-danger" : percent > 50 ? "bg-warning" : "bg-accent";
 	return (
 		<div className="flex items-center gap-1.5 min-w-[80px]">
 			<span className="font-mono text-[11px] tabular-nums w-[38px] text-right">
@@ -196,8 +200,7 @@ function CpuBar({ percent }: { percent: number }) {
 }
 
 function MemoryBar({ usage, percent }: { usage: string; percent: number }) {
-	const color =
-		percent > 85 ? "bg-danger" : percent > 60 ? "bg-warning" : "bg-success";
+	const color = percent > 85 ? "bg-danger" : percent > 60 ? "bg-warning" : "bg-success";
 	return (
 		<div className="min-w-[90px]">
 			<div className="flex items-center gap-1.5">
@@ -296,25 +299,24 @@ export function ContainersTableWorkspace({
 		selectableIds.length > 0 && selectableIds.every((containerId) => selectedIds[containerId]);
 
 	// Column toggle persistence
-	const toggleColumn = useCallback(
-		(columnId: ColumnId) => {
-			const col = ALL_COLUMNS.find((c) => c.id === columnId);
-			if (col?.alwaysVisible) return;
-			setVisibleColumns((prev) => {
-				const next = new Set(prev);
-				if (next.has(columnId)) {
-					next.delete(columnId);
-				} else {
-					next.add(columnId);
-				}
-				try {
-					localStorage.setItem(STORAGE_KEY, JSON.stringify([...next]));
-				} catch { /* ignore */ }
-				return next;
-			});
-		},
-		[],
-	);
+	const toggleColumn = useCallback((columnId: ColumnId) => {
+		const col = ALL_COLUMNS.find((c) => c.id === columnId);
+		if (col?.alwaysVisible) return;
+		setVisibleColumns((prev) => {
+			const next = new Set(prev);
+			if (next.has(columnId)) {
+				next.delete(columnId);
+			} else {
+				next.add(columnId);
+			}
+			try {
+				localStorage.setItem(STORAGE_KEY, JSON.stringify([...next]));
+			} catch {
+				/* ignore */
+			}
+			return next;
+		});
+	}, []);
 
 	// Close column menu on outside click
 	useEffect(() => {
@@ -378,12 +380,14 @@ export function ContainersTableWorkspace({
 						? `${selectedContainers.length} selected`
 						: "Select one or more containers"}
 				</p>
-				<form
-					action={bulkCheckContainerUpdatesAction}
-					onSubmit={() => setSelectedIds({})}
-				>
+				<form action={bulkCheckContainerUpdatesAction} onSubmit={() => setSelectedIds({})}>
 					{selectedContainers.map((container) => (
-						<input key={`check-${container.ID}`} type="hidden" name="containerIds" value={container.ID} />
+						<input
+							key={`check-${container.ID}`}
+							type="hidden"
+							name="containerIds"
+							value={container.ID}
+						/>
 					))}
 					<input type="hidden" name="environmentId" value={environmentId} />
 					<FormSubmitButton
@@ -394,12 +398,14 @@ export function ContainersTableWorkspace({
 						disabled={!selectedContainers.length}
 					/>
 				</form>
-				<form
-					action={bulkApplyContainerUpdatesAction}
-					onSubmit={() => setSelectedIds({})}
-				>
+				<form action={bulkApplyContainerUpdatesAction} onSubmit={() => setSelectedIds({})}>
 					{selectedContainers.map((container) => (
-						<input key={`apply-${container.ID}`} type="hidden" name="containerIds" value={container.ID} />
+						<input
+							key={`apply-${container.ID}`}
+							type="hidden"
+							name="containerIds"
+							value={container.ID}
+						/>
 					))}
 					<input type="hidden" name="environmentId" value={environmentId} />
 					<input type="hidden" name="updateOnlyRunning" value="true" />
@@ -413,7 +419,12 @@ export function ContainersTableWorkspace({
 				</form>
 				<form action={bulkControlContainerAction} onSubmit={() => setSelectedIds({})}>
 					{selectedStopped.map((container) => (
-						<input key={`start-${container.ID}`} type="hidden" name="containerIds" value={container.ID} />
+						<input
+							key={`start-${container.ID}`}
+							type="hidden"
+							name="containerIds"
+							value={container.ID}
+						/>
 					))}
 					<input type="hidden" name="action" value="start" />
 					<input type="hidden" name="environmentId" value={environmentId} />
@@ -427,7 +438,12 @@ export function ContainersTableWorkspace({
 				</form>
 				<form action={bulkControlContainerAction} onSubmit={() => setSelectedIds({})}>
 					{selectedRunning.map((container) => (
-						<input key={`stop-${container.ID}`} type="hidden" name="containerIds" value={container.ID} />
+						<input
+							key={`stop-${container.ID}`}
+							type="hidden"
+							name="containerIds"
+							value={container.ID}
+						/>
 					))}
 					<input type="hidden" name="action" value="stop" />
 					<input type="hidden" name="environmentId" value={environmentId} />
@@ -441,7 +457,12 @@ export function ContainersTableWorkspace({
 				</form>
 				<form action={bulkControlContainerAction} onSubmit={() => setSelectedIds({})}>
 					{selectedRunning.map((container) => (
-						<input key={`restart-${container.ID}`} type="hidden" name="containerIds" value={container.ID} />
+						<input
+							key={`restart-${container.ID}`}
+							type="hidden"
+							name="containerIds"
+							value={container.ID}
+						/>
 					))}
 					<input type="hidden" name="action" value="restart" />
 					<input type="hidden" name="environmentId" value={environmentId} />
@@ -703,11 +724,7 @@ export function ContainersTableWorkspace({
 									{/* PORTS */}
 									{isVisible("ports") ? (
 										<DataTableCell>
-											<RuntimePortLinks
-												ports={container.Ports}
-												compact
-												managerUrl={managerUrl}
-											/>
+											<RuntimePortLinks ports={container.Ports} compact managerUrl={managerUrl} />
 										</DataTableCell>
 									) : null}
 
@@ -790,9 +807,7 @@ export function ContainersTableWorkspace({
 															}
 														>
 															<div className="space-y-2 text-[11px]">
-																<p className="font-medium text-warning">
-																	Major upgrade available
-																</p>
+																<p className="font-medium text-warning">Major upgrade available</p>
 																<p className="text-muted">
 																	Current:{" "}
 																	<span className="font-mono text-foreground">
@@ -856,17 +871,9 @@ export function ContainersTableWorkspace({
 												{isRunning ? (
 													<>
 														<form action={controlContainerAction}>
-															<input
-																type="hidden"
-																name="containerId"
-																value={container.ID}
-															/>
+															<input type="hidden" name="containerId" value={container.ID} />
 															<input type="hidden" name="action" value="stop" />
-															<input
-																type="hidden"
-																name="environmentId"
-																value={environmentId}
-															/>
+															<input type="hidden" name="environmentId" value={environmentId} />
 															<FormSubmitButton
 																label=""
 																pendingLabel=""
@@ -880,17 +887,9 @@ export function ContainersTableWorkspace({
 															</FormSubmitButton>
 														</form>
 														<form action={controlContainerAction}>
-															<input
-																type="hidden"
-																name="containerId"
-																value={container.ID}
-															/>
+															<input type="hidden" name="containerId" value={container.ID} />
 															<input type="hidden" name="action" value="restart" />
-															<input
-																type="hidden"
-																name="environmentId"
-																value={environmentId}
-															/>
+															<input type="hidden" name="environmentId" value={environmentId} />
 															<FormSubmitButton
 																label=""
 																pendingLabel=""
@@ -907,17 +906,9 @@ export function ContainersTableWorkspace({
 												) : (
 													<>
 														<form action={controlContainerAction}>
-															<input
-																type="hidden"
-																name="containerId"
-																value={container.ID}
-															/>
+															<input type="hidden" name="containerId" value={container.ID} />
 															<input type="hidden" name="action" value="start" />
-															<input
-																type="hidden"
-																name="environmentId"
-																value={environmentId}
-															/>
+															<input type="hidden" name="environmentId" value={environmentId} />
 															<FormSubmitButton
 																label=""
 																pendingLabel=""
@@ -951,8 +942,7 @@ export function ContainersTableWorkspace({
 																{
 																	name: "removeVolumes",
 																	label: "Remove anonymous volumes",
-																	description:
-																		"Data in attached anonymous volumes will be lost.",
+																	description: "Data in attached anonymous volumes will be lost.",
 																},
 															]}
 														/>
