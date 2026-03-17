@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { LogBlock } from "@/components/ui/log-block";
 import { getSocket } from "@/lib/socket-client";
 
@@ -22,6 +22,7 @@ export function LiveStackFeed({
 	height?: string;
 }) {
 	const [events, setEvents] = useState<StackEvent[]>([]);
+	const logRef = useRef<HTMLPreElement>(null);
 
 	useEffect(() => {
 		const client = getSocket();
@@ -61,6 +62,22 @@ export function LiveStackFeed({
 		return `${initialLog || ""}${live}`.trim();
 	}, [events, initialLog]);
 
+	useEffect(() => {
+		if (!feed) {
+			return;
+		}
+		if (!logRef.current) {
+			return;
+		}
+
+		requestAnimationFrame(() => {
+			if (!logRef.current) {
+				return;
+			}
+			logRef.current.scrollTop = logRef.current.scrollHeight;
+		});
+	}, [feed]);
+
 	return (
 		<div className="rounded-xl border border-default/10 bg-console">
 			{/* Terminal header */}
@@ -83,7 +100,10 @@ export function LiveStackFeed({
 			</div>
 			{/* Terminal body */}
 			<div className="min-h-[320px]" style={{ height, maxHeight: height }}>
-				<LogBlock className="h-full border-0 bg-transparent p-3 text-[12px] text-console-foreground/85">
+				<LogBlock
+					ref={logRef}
+					className="h-full overflow-y-auto border-0 bg-transparent p-3 text-[12px] text-console-foreground/85"
+				>
 					{feed || "Waiting for deployment output..."}
 				</LogBlock>
 			</div>

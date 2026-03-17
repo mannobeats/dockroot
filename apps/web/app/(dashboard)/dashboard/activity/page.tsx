@@ -17,6 +17,31 @@ function mapDeploymentSeverity(status: string): "info" | "success" | "warning" |
 	return "warning";
 }
 
+function summarizeResourceName(details: Record<string, unknown>) {
+	const direct =
+		details.containerName ||
+		details.stackName ||
+		details.projectName ||
+		details.volumeName ||
+		details.networkName ||
+		details.imageRef ||
+		details.environmentName ||
+		details.environmentId ||
+		details.repository;
+	if (typeof direct === "string" && direct.trim()) {
+		return direct.trim();
+	}
+
+	const listValue =
+		details.volumeNames || details.networkNames || details.imageRefs || details.configFiles;
+	if (Array.isArray(listValue) && listValue.length) {
+		const first = String(listValue[0] || "").trim();
+		return listValue.length > 1 ? `${first} +${listValue.length - 1} more` : first;
+	}
+
+	return null;
+}
+
 export default async function ActivityPage({
 	searchParams,
 }: {
@@ -64,34 +89,30 @@ export default async function ActivityPage({
 		try {
 			if (e.details) {
 				const parsed = JSON.parse(e.details);
-				resourceName =
-					parsed.containerName ||
-					parsed.stackName ||
-					parsed.volumeName ||
-					parsed.networkName ||
-					parsed.imageRef ||
-					null;
+				resourceName = summarizeResourceName(parsed);
 			}
-		} catch { /* ignore parse errors */ }
+		} catch {
+			/* ignore parse errors */
+		}
 
 		return {
-		id: e.id,
-		kind: "runtime",
-		severity: e.status as "info" | "success" | "warning" | "error",
-		actionType: e.actionType,
-		resourceName,
-		environmentName: e.environment?.name || null,
-		userName: e.actor?.name || null,
-		source: e.source,
-		containerId: e.containerId,
-		details: e.details,
-		log: null,
-		status: e.status,
-		timestamp: e.occurredAt.toISOString(),
-		meta: {
-			...(e.source ? { Source: e.source } : {}),
-		},
-	};
+			id: e.id,
+			kind: "runtime",
+			severity: e.status as "info" | "success" | "warning" | "error",
+			actionType: e.actionType,
+			resourceName,
+			environmentName: e.environment?.name || null,
+			userName: e.actor?.name || null,
+			source: e.source,
+			containerId: e.containerId,
+			details: e.details,
+			log: null,
+			status: e.status,
+			timestamp: e.occurredAt.toISOString(),
+			meta: {
+				...(e.source ? { Source: e.source } : {}),
+			},
+		};
 	});
 
 	// Merge and sort by time descending

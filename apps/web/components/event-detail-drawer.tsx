@@ -37,10 +37,24 @@ const detailLabelMap: Record<string, string> = {
 	imageRef: "Image",
 	stackName: "Stack Name",
 	stackId: "Stack ID",
+	projectName: "Compose Project",
 	environmentId: "Environment ID",
+	environmentName: "Environment",
 	mode: "Mode",
 	backupId: "Backup ID",
 	fileName: "File Name",
+	volumeNames: "Volume Names",
+	networkNames: "Network Names",
+	imageRefs: "Image References",
+	configFiles: "Config Files",
+	driver: "Driver",
+	sourceType: "Source Type",
+	repository: "Repository",
+	branch: "Branch",
+	composePath: "Compose Path",
+	agentUrl: "Agent URL",
+	description: "Description",
+	sizeBytes: "Size (bytes)",
 };
 
 function parseDetails(raw: string | null): Array<{ label: string; value: string }> {
@@ -53,7 +67,9 @@ function parseDetails(raw: string | null): Array<{ label: string; value: string 
 		return Object.entries(parsed)
 			.filter(([, v]) => v != null && v !== "" && v !== false)
 			.map(([key, value]) => ({
-				label: detailLabelMap[key] || key.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase()),
+				label:
+					detailLabelMap[key] ||
+					key.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase()),
 				value: typeof value === "object" ? JSON.stringify(value) : String(value),
 			}));
 	} catch {
@@ -94,7 +110,7 @@ export function EventDetailDrawer({
 				}
 			});
 		}
-	}, [open, event?.log]);
+	}, [open]);
 
 	if (!open || !event) return null;
 
@@ -118,9 +134,7 @@ export function EventDetailDrawer({
 						</p>
 						<div className="mt-1 flex items-center gap-2">
 							<p className="truncate text-sm font-medium">{event.title}</p>
-							<Badge variant={severityVariant[event.severity] || "default"}>
-								{event.severity}
-							</Badge>
+							<Badge variant={severityVariant[event.severity] || "default"}>{event.severity}</Badge>
 						</div>
 					</div>
 					<button
@@ -142,9 +156,7 @@ export function EventDetailDrawer({
 							value={event.kind === "deployment" ? "Deployment" : "Runtime Action"}
 						/>
 						<PropertyItem label="Status">
-							<Badge variant={severityVariant[event.severity] || "default"}>
-								{event.status}
-							</Badge>
+							<Badge variant={severityVariant[event.severity] || "default"}>{event.status}</Badge>
 						</PropertyItem>
 						<PropertyItem label="Time" value={new Date(event.timestamp).toLocaleString()} />
 						<PropertyItem label="Environment" value={event.environment || "-"} />
@@ -170,9 +182,7 @@ export function EventDetailDrawer({
 										<span className="shrink-0 text-[11px] font-medium text-muted min-w-[120px]">
 											{label}
 										</span>
-										<span className="text-xs text-foreground break-all font-mono">
-											{value}
-										</span>
+										<span className="text-xs text-foreground break-all font-mono">{value}</span>
 									</div>
 								))}
 							</div>

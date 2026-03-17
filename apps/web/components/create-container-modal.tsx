@@ -4,6 +4,7 @@ import { Box, Minus, Plus } from "lucide-react";
 import { useCallback, useState } from "react";
 import { ActionModal } from "@/components/action-modal";
 import { FormSubmitButton } from "@/components/form-submit-button";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -80,11 +81,13 @@ export function CreateContainerModal({
 	environmentId: string;
 }) {
 	const [open, setOpen] = useState(false);
+	const [error, setError] = useState("");
 	const [ports, setPorts] = useState<PortMapping[]>([]);
 	const [volumes, setVolumes] = useState<VolumeMapping[]>([]);
 	const [envVars, setEnvVars] = useState<EnvVar[]>([]);
 
 	const resetForm = useCallback(() => {
+		setError("");
 		setPorts([]);
 		setVolumes([]);
 		setEnvVars([]);
@@ -107,12 +110,21 @@ export function CreateContainerModal({
 		>
 			<form
 				action={(formData) => {
-					formData.set("ports", JSON.stringify(ports.filter((p) => p.host && p.container)));
-					formData.set("volumes", JSON.stringify(volumes.filter((v) => v.host && v.container)));
-					formData.set("envVars", JSON.stringify(envVars.filter((e) => e.key)));
-					action(formData);
-					setOpen(false);
-					resetForm();
+					return (async () => {
+						setError("");
+						formData.set("ports", JSON.stringify(ports.filter((p) => p.host && p.container)));
+						formData.set("volumes", JSON.stringify(volumes.filter((v) => v.host && v.container)));
+						formData.set("envVars", JSON.stringify(envVars.filter((e) => e.key)));
+						try {
+							await action(formData);
+							setOpen(false);
+							resetForm();
+						} catch (submitError) {
+							setError(
+								submitError instanceof Error ? submitError.message : "Unable to create container.",
+							);
+						}
+					})();
 				}}
 				className="space-y-4"
 			>
@@ -195,6 +207,7 @@ export function CreateContainerModal({
 						placeholder="Optional override command"
 					/>
 				</Field>
+				{error ? <Alert variant="error">{error}</Alert> : null}
 
 				<div className="flex justify-end gap-2 pt-2">
 					<Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>

@@ -174,6 +174,16 @@ export async function createEnvironmentAction(formData: FormData) {
 		description,
 		agentUrl,
 	});
+	const { recordAuditEvent } = await import("@/lib/platform");
+	await recordAuditEvent({
+		userId,
+		actionType: "environment.create",
+		details: {
+			environmentName: name,
+			description: description || null,
+			agentUrl: agentUrl || null,
+		},
+	});
 
 	redirect("/dashboard/environments");
 }
@@ -203,16 +213,15 @@ export async function deleteEnvironmentAction(formData: FormData) {
 		throw new Error("Environment is required");
 	}
 
+	await deleteEnvironment({
+		environmentId,
+		userId,
+	});
 	const { recordAuditEvent } = await import("@/lib/platform");
 	await recordAuditEvent({
 		userId,
 		actionType: "environment.delete",
 		details: { environmentId },
-	});
-
-	await deleteEnvironment({
-		environmentId,
-		userId,
 	});
 
 	redirect("/dashboard/environments");
@@ -237,6 +246,13 @@ export async function createStackAction(formData: FormData) {
 		description,
 		composeYaml,
 		envFileContent,
+	});
+	const { recordAuditEvent } = await import("@/lib/platform");
+	await recordAuditEvent({
+		environmentId,
+		userId,
+		actionType: "stack.create",
+		details: { stackName: name, sourceType: "manual" },
 	});
 
 	redirect("/dashboard/stacks");
@@ -279,6 +295,19 @@ export async function createGitHubStackAction(formData: FormData) {
 		description,
 		autoDeployEnabled,
 		autoDeployPaths: autoDeployPaths || undefined,
+	});
+	const { recordAuditEvent } = await import("@/lib/platform");
+	await recordAuditEvent({
+		environmentId,
+		userId,
+		actionType: "stack.create",
+		details: {
+			stackName: name,
+			sourceType: "github",
+			repository: `${owner}/${repository}`,
+			branch,
+			composePath,
+		},
 	});
 
 	redirect("/dashboard/stacks");
@@ -595,6 +624,13 @@ export async function bulkRemoveStacksAction(formData: FormData) {
 			stackId,
 			userId: auth.userId,
 		});
+		const { recordAuditEvent } = await import("@/lib/platform");
+		await recordAuditEvent({
+			environmentId: stack.environment?.id,
+			userId: auth.userId,
+			actionType: "stack.delete",
+			details: { stackName: stack.name, stackId },
+		});
 	}
 
 	for (const project of projects) {
@@ -607,6 +643,17 @@ export async function bulkRemoveStacksAction(formData: FormData) {
 			"destroy",
 			{ removeVolumes: true, removeImages: true },
 		);
+		const { recordAuditEvent } = await import("@/lib/platform");
+		await recordAuditEvent({
+			userId: auth.userId,
+			actionType: "compose.destroy",
+			details: {
+				projectName: project.projectName,
+				configFiles: project.configFiles?.filter(Boolean) || [],
+				removeVolumes: true,
+				removeImages: true,
+			},
+		});
 	}
 
 	revalidatePath("/dashboard/stacks");
@@ -629,6 +676,10 @@ export async function deleteStackAction(formData: FormData) {
 		throw new Error("Dockroot platform stacks are locked and cannot be deleted from the UI.");
 	}
 
+	await deleteStack({
+		stackId,
+		userId,
+	});
 	const { recordAuditEvent } = await import("@/lib/platform");
 	await recordAuditEvent({
 		environmentId: stack.environment?.id,
@@ -636,11 +687,6 @@ export async function deleteStackAction(formData: FormData) {
 		actionType: "stack.delete",
 		status: "success",
 		details: { stackName: stack.name, stackId },
-	});
-
-	await deleteStack({
-		stackId,
-		userId,
 	});
 
 	redirect("/dashboard/stacks");
@@ -785,7 +831,7 @@ export async function bulkControlContainerAction(formData: FormData) {
 }
 
 export async function controlComposeProjectAction(formData: FormData) {
-	await requirePrivilegedSession();
+	const auth = await requirePrivilegedSession();
 	const projectName = getValue(formData, "projectName");
 	const action = getValue(formData, "action");
 	const removeVolumes = getBoolValue(formData, "removeVolumes");
@@ -811,6 +857,17 @@ export async function controlComposeProjectAction(formData: FormData) {
 		action as "start" | "stop" | "restart" | "destroy",
 		{ removeVolumes, removeImages },
 	);
+	const { recordAuditEvent } = await import("@/lib/platform");
+	await recordAuditEvent({
+		userId: auth.userId,
+		actionType: `compose.${action}`,
+		details: {
+			projectName,
+			configFiles,
+			removeVolumes,
+			removeImages,
+		},
+	});
 	revalidatePath("/dashboard/stacks");
 }
 
@@ -912,6 +969,13 @@ export async function bulkRemoveImagesAction(formData: FormData) {
 			`Some images cannot be deleted because they are in use: ${inUseErrors.slice(0, 5).join("; ")}${inUseErrors.length > 5 ? "; ..." : ""}.`,
 		);
 	}
+	const { recordAuditEvent } = await import("@/lib/platform");
+	await recordAuditEvent({
+		environmentId,
+		userId: auth.userId,
+		actionType: "image.remove.bulk",
+		details: { imageRefs: Array.from(new Set(imageRefs)) },
+	});
 	revalidatePath("/dashboard/images");
 }
 
@@ -942,6 +1006,13 @@ export async function createVolumeAction(formData: FormData) {
 	}
 
 	await createVolumeForEnvironment(auth.userId, name, driver, environmentId);
+	const { recordAuditEvent } = await import("@/lib/platform");
+	await recordAuditEvent({
+		environmentId,
+		userId: auth.userId,
+		actionType: "volume.create",
+		details: { volumeName: name, driver },
+	});
 	revalidatePath("/dashboard/volumes");
 }
 
@@ -986,6 +1057,13 @@ export async function bulkRemoveVolumesAction(formData: FormData) {
 			throw normalizeInUseDeleteError("volume", name, error);
 		}
 	}
+	const { recordAuditEvent } = await import("@/lib/platform");
+	await recordAuditEvent({
+		environmentId,
+		userId: auth.userId,
+		actionType: "volume.remove.bulk",
+		details: { volumeNames: Array.from(new Set(names)) },
+	});
 	revalidatePath("/dashboard/volumes");
 }
 
@@ -1014,6 +1092,13 @@ export async function createNetworkAction(formData: FormData) {
 	}
 
 	await createNetworkForEnvironment(auth.userId, name, driver, environmentId);
+	const { recordAuditEvent } = await import("@/lib/platform");
+	await recordAuditEvent({
+		environmentId,
+		userId: auth.userId,
+		actionType: "network.create",
+		details: { networkName: name, driver },
+	});
 	revalidatePath("/dashboard/networks");
 }
 
@@ -1058,6 +1143,13 @@ export async function bulkRemoveNetworksAction(formData: FormData) {
 			throw normalizeInUseDeleteError("network", name, error);
 		}
 	}
+	const { recordAuditEvent } = await import("@/lib/platform");
+	await recordAuditEvent({
+		environmentId,
+		userId: auth.userId,
+		actionType: "network.remove.bulk",
+		details: { networkNames: Array.from(new Set(names)) },
+	});
 	revalidatePath("/dashboard/networks");
 }
 
@@ -1374,6 +1466,18 @@ export async function backupVolumeAction(formData: FormData) {
 			.update(volumeBackups)
 			.set({ status: "completed", sizeBytes: sizeBytes ?? undefined, completedAt: new Date() })
 			.where(eq(volumeBackups.id, backupId));
+		const { recordAuditEvent } = await import("@/lib/platform");
+		await recordAuditEvent({
+			environmentId: environment.id,
+			userId: auth.userId,
+			actionType: "volume.backup.create",
+			details: {
+				volumeName,
+				backupId,
+				fileName: result.fileName,
+				sizeBytes: sizeBytes ?? null,
+			},
+		});
 	} catch (error) {
 		const { eq } = await import("drizzle-orm");
 		await dbClient
@@ -1411,6 +1515,13 @@ export async function restoreVolumeAction(formData: FormData) {
 	if (!result.ok) {
 		throw new Error(`Restore failed: ${result.output}`);
 	}
+	const { recordAuditEvent } = await import("@/lib/platform");
+	await recordAuditEvent({
+		environmentId,
+		userId: auth.userId,
+		actionType: "volume.backup.restore",
+		details: { volumeName, backupId },
+	});
 
 	revalidatePath("/dashboard/volumes");
 }
@@ -1431,6 +1542,13 @@ export async function deleteVolumeBackupAction(formData: FormData) {
 	const { db: dbClient, volumeBackups } = await import("@dockroot/db");
 	const { eq } = await import("drizzle-orm");
 	await dbClient.delete(volumeBackups).where(eq(volumeBackups.id, backupId));
+	const { recordAuditEvent } = await import("@/lib/platform");
+	await recordAuditEvent({
+		environmentId,
+		userId: auth.userId,
+		actionType: "volume.backup.delete",
+		details: { backupId },
+	});
 
 	revalidatePath("/dashboard/volumes");
 }
@@ -1475,7 +1593,10 @@ export async function deleteActivityEventsAction(formData: FormData) {
 	const { userId } = await requireUserSession();
 	const idsRaw = getValue(formData, "eventIds");
 	if (!idsRaw) throw new Error("No events specified.");
-	const eventIds = idsRaw.split(",").map((id) => id.trim()).filter(Boolean);
+	const eventIds = idsRaw
+		.split(",")
+		.map((id) => id.trim())
+		.filter(Boolean);
 	if (!eventIds.length) throw new Error("No events specified.");
 
 	const { deleteActivityEvents } = await import("@/lib/platform");
