@@ -14,10 +14,15 @@ import { StackServicesAccordion } from "@/components/stack-services-accordion";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/link-button";
+import {
+	getContainerDetailsForEnvironment,
+	listContainersForEnvironment,
+} from "@/lib/environment-runtime";
 import { getGlobalSettings, getStackById } from "@/lib/platform";
-import { getContainerDetails, listStackContainers } from "@/lib/platform/docker";
 import { getProtectedStackLabel, isProtectedManagerStack } from "@/lib/runtime-protection";
 import { getServerSession } from "@/lib/session";
+
+type RuntimeContainer = Record<string, string>;
 
 export default async function StackWorkspacePage({
 	params,
@@ -44,14 +49,35 @@ export default async function StackWorkspacePage({
 		return <div className="text-sm text-muted">Stack not found.</div>;
 	}
 
-	const containers = await listStackContainers(stack.slug);
+	const runtimeUrl =
+		stack.environment.kind === "agent"
+			? stack.environment.managerUrl || undefined
+			: settings.managerUrl || stack.environment.managerUrl || undefined;
+	const { containers: environmentContainers } = await listContainersForEnvironment(
+		session.user.id,
+		stack.environment.id,
+	);
+	const containers = environmentContainers.filter((container: RuntimeContainer) => {
+		const labels = String(container.Labels || "");
+		const composeProject = labels
+			.split(",")
+			.find((label) => label.startsWith("com.docker.compose.project="))
+			?.split("=")
+			.slice(1)
+			.join("=");
+		return composeProject === stack.slug;
+	});
 	const containerDetailsMap: Record<string, { inspect: Record<string, unknown>; logs: string }> =
 		{};
 	for (const container of containers) {
 		try {
-			const details = await getContainerDetails(container.ID);
-			if (details) {
-				containerDetailsMap[container.ID] = details;
+			const details = await getContainerDetailsForEnvironment(
+				session.user.id,
+				container.ID,
+				stack.environment.id,
+			);
+			if (details.details) {
+				containerDetailsMap[container.ID] = details.details;
 			}
 		} catch {
 			// skip containers that can't be inspected
@@ -60,7 +86,9 @@ export default async function StackWorkspacePage({
 	const latestDeployment = stack.deployments[0];
 	const isProtected = isProtectedManagerStack(stack.slug);
 	const protectedLabel = getProtectedStackLabel(stack.slug);
-	const hasRunningContainers = containers.some((container) => container.State === "running");
+	const hasRunningContainers = containers.some(
+		(container: RuntimeContainer) => container.State === "running",
+	);
 	const shouldRedeploy =
 		hasRunningContainers ||
 		String(stack.status || "")
@@ -170,7 +198,7 @@ export default async function StackWorkspacePage({
 					containerDetailsMap={containerDetailsMap}
 					controlContainerAction={controlContainerAction}
 					environmentId={stack.environment.id}
-					managerUrl={settings.managerUrl}
+					managerUrl={runtimeUrl}
 				/>
 			</div>
 		</div>

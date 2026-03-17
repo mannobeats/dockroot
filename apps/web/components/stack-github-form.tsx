@@ -37,12 +37,14 @@ type WizardStep = "source" | "configure";
 
 export function StackGitHubForm({
 	environments,
+	defaultEnvironmentId,
 	installations,
 	providers,
 	appConfigured,
 	action,
 }: {
 	environments: Array<{ id: string; name: string; kind: string }>;
+	defaultEnvironmentId?: string;
 	installations: InstallationOption[];
 	providers: GitHubProviderOption[];
 	appConfigured: boolean;
@@ -613,7 +615,12 @@ export function StackGitHubForm({
 				</Field>
 				<Field>
 					<FieldLabel htmlFor="github-environment-id">Environment</FieldLabel>
-					<Select id="github-environment-id" name="environmentId" required>
+					<Select
+						id="github-environment-id"
+						name="environmentId"
+						required
+						defaultValue={defaultEnvironmentId || environments[0]?.id}
+					>
 						{environments.map((environment) => (
 							<option key={environment.id} value={environment.id}>
 								{environment.name} ({environment.kind})

@@ -43,12 +43,66 @@ export default async function DashboardPage({
 		includeRuntime && environment.kind === "local" ? getMonitoringCollectorHealth() : null,
 	]);
 	const runtime = runtimeResult;
+	const dashboardMetrics =
+		metrics ||
+		(includeRuntime && runtime
+			? {
+					cpuPercent: runtime.snapshot.usage?.cpuPercent ?? null,
+					memoryPercent: runtime.snapshot.usage?.memoryPercent ?? null,
+					cpuSeries: [
+						{
+							time: new Date().toLocaleTimeString([], {
+								hour: "numeric",
+								minute: "2-digit",
+							}),
+							value: runtime.snapshot.usage?.cpuPercent ?? 0,
+						},
+					],
+					memorySeries: [
+						{
+							time: new Date().toLocaleTimeString([], {
+								hour: "numeric",
+								minute: "2-digit",
+							}),
+							value: runtime.snapshot.usage?.memoryPercent ?? 0,
+						},
+					],
+					runningContainers: runtime.snapshot.counts.containers,
+					deploymentStatus: data.recentDeployments
+						.filter(
+							(deployment) =>
+								deployment.environment?.id === environment.id ||
+								deployment.environmentId === environment.id,
+						)
+						.reduce<Array<{ label: string; value: number }>>((acc, deployment) => {
+							const entry = acc.find((item) => item.label === deployment.status);
+							if (entry) {
+								entry.value += 1;
+							} else {
+								acc.push({ label: deployment.status, value: 1 });
+							}
+							return acc;
+						}, []),
+					environmentStatus: [{ label: environment.status, value: 1 }],
+				}
+			: null);
+	const collectorHealth =
+		targets ||
+		(includeRuntime && runtime && !runtimeIssue
+			? [
+					{
+						name: environment.kind === "local" ? "Manager runtime" : "Remote runtime",
+						status: "healthy",
+						lastError: "",
+					},
+				]
+			: null);
 	const hostTotalMemoryGb = includeRuntime && runtime ? runtime.snapshot.host.totalMemoryGb : null;
 	const fallbackUsedMemoryGb =
 		includeRuntime && runtime
 			? runtime.snapshot.host.totalMemoryGb - runtime.snapshot.host.freeMemoryGb
 			: null;
-	const prometheusMemoryPercent = metrics?.memoryPercent ?? null;
+	const prometheusMemoryPercent = dashboardMetrics?.memoryPercent ?? null;
 	const memoryUsedPercent =
 		hostTotalMemoryGb !== null
 			? Number(
@@ -73,9 +127,11 @@ export default async function DashboardPage({
 	const deploymentAlerts = data.recentDeployments.filter((deployment) =>
 		["failed", "queued", "deploying"].includes(deployment.status),
 	);
-	const collectorAlerts = (targets || []).filter((collector) => collector.status !== "healthy");
+	const collectorAlerts = (collectorHealth || []).filter(
+		(collector) => collector.status !== "healthy",
+	);
 	const environmentAlerts =
-		metrics?.environmentStatus.filter(
+		dashboardMetrics?.environmentStatus.filter(
 			(entry) => ["degraded", "offline", "down"].includes(entry.label) && entry.value > 0,
 		) || [];
 	const attentionItems = [
@@ -196,7 +252,7 @@ export default async function DashboardPage({
 			{/* Row 4: Two-column main content */}
 			<div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.9fr)]">
 				{/* Left: Infrastructure */}
-				{includeRuntime && metrics ? (
+				{includeRuntime && dashboardMetrics ? (
 					<Panel className="min-w-0">
 						<PanelHeader>
 							<div className="min-w-0">
@@ -205,19 +261,19 @@ export default async function DashboardPage({
 									<span className="text-xs text-muted">
 										CPU{" "}
 										<span className="font-mono text-sm font-semibold text-foreground">
-											{metrics.cpuPercent?.toFixed(1) ?? "—"}%
+											{dashboardMetrics.cpuPercent?.toFixed(1) ?? "—"}%
 										</span>
 									</span>
 									<span className="text-xs text-muted">
 										Memory{" "}
 										<span className="font-mono text-sm font-semibold text-foreground">
-											{metrics.memoryPercent?.toFixed(1) ?? "—"}%
+											{dashboardMetrics.memoryPercent?.toFixed(1) ?? "—"}%
 										</span>
 									</span>
 									<span className="text-xs text-muted">
 										Containers{" "}
 										<span className="font-mono text-sm font-semibold text-foreground">
-											{metrics.runningContainers ?? 0}
+											{dashboardMetrics.runningContainers ?? 0}
 										</span>
 									</span>
 								</div>
@@ -233,7 +289,7 @@ export default async function DashboardPage({
 							) : null}
 						</PanelHeader>
 						<PanelContent>
-							<InfrastructureCharts metrics={metrics} />
+							<InfrastructureCharts metrics={dashboardMetrics} />
 
 							{runtime && hostTotalMemoryGb !== null ? (
 								<div className="mt-4 flex flex-col gap-3 border-t border-default/8 pt-4 sm:flex-row sm:items-end sm:justify-between">
@@ -262,9 +318,9 @@ export default async function DashboardPage({
 				{/* Right: Status & Activity tabs */}
 				<DashboardStatusPanel
 					recentDeployments={serializedDeployments}
-					deploymentStatus={metrics?.deploymentStatus ?? null}
-					environmentStatus={metrics?.environmentStatus ?? null}
-					collectors={targets}
+					deploymentStatus={dashboardMetrics?.deploymentStatus ?? null}
+					environmentStatus={dashboardMetrics?.environmentStatus ?? null}
+					collectors={collectorHealth}
 					activityLink={activityLink}
 				/>
 			</div>

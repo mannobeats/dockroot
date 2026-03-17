@@ -65,6 +65,10 @@ export default async function ContainerDetailPage({
 	const query = await searchParams;
 	const settings = await getGlobalSettings(auth.userId);
 	const environment = await resolveRuntimeEnvironment(auth.userId, query.environment);
+	const runtimeUrl =
+		environment.kind === "agent"
+			? environment.managerUrl || undefined
+			: settings.managerUrl || environment.managerUrl || undefined;
 	await requireAccessibleContainerForUser({
 		containerId,
 		userId: auth.userId,
@@ -276,7 +280,7 @@ export default async function ContainerDetailPage({
 				labels={labels}
 				networkEntries={networkEntries}
 				publishedPortSummary={publishedPortSummary}
-				managerUrl={settings.managerUrl}
+				managerUrl={runtimeUrl}
 				canOpenRuntimeTopology={canOpenRuntimeTopology}
 				browser={
 					browser.kind === "directory"

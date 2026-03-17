@@ -3,16 +3,20 @@ import { headers } from "next/headers";
 import {
 	deleteEnvironmentAction,
 	rotateAgentRegistrationTokenAction,
+	updateEnvironmentAction,
 } from "@/app/(dashboard)/actions";
 import { CopyButton } from "@/components/copy-button";
 import { DestructiveActionModal } from "@/components/destructive-action-modal";
 import { EnvironmentLiveRefresh } from "@/components/environment-live-refresh";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { StatusBadge } from "@/components/status-badge";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import { LinkButton } from "@/components/ui/link-button";
 import { LogBlock } from "@/components/ui/log-block";
 import { MetricCard } from "@/components/ui/metric-card";
 import { Panel, PanelHeader, PanelTitle } from "@/components/ui/panel";
+import { getRuntimeSnapshotForEnvironment } from "@/lib/environment-runtime";
 import { inferRequestManagerUrl } from "@/lib/manager-url";
 import { getEnvironmentById, getInstallCommand } from "@/lib/platform";
 import { getServerSession } from "@/lib/session";
@@ -37,6 +41,10 @@ export default async function EnvironmentDetailPage({
 	}
 
 	const detectedManagerUrl = inferRequestManagerUrl(requestHeaders);
+	const runtime =
+		environment.kind === "local"
+			? await getRuntimeSnapshotForEnvironment(session.user.id, environment.id).catch(() => null)
+			: null;
 	const installCommands =
 		environment.kind === "agent"
 			? await getInstallCommand(environment.id, session.user.id, {
@@ -44,6 +52,18 @@ export default async function EnvironmentDetailPage({
 				})
 			: null;
 	const agent = environment.agent[0];
+	const hostname =
+		environment.kind === "local"
+			? runtime?.snapshot.host.hostname || agent?.hostname || "Unavailable"
+			: agent?.hostname || "Pending install";
+	const dockerVersion =
+		environment.kind === "local"
+			? runtime?.snapshot.host.dockerVersion || agent?.dockerVersion || "Unavailable"
+			: agent?.dockerVersion || "Pending install";
+	const runtimeEndpoint =
+		environment.kind === "local"
+			? detectedManagerUrl || environment.managerUrl || "Not configured"
+			: environment.managerUrl || "Will be auto-detected after the agent registers";
 
 	return (
 		<div className="animate-in space-y-5">
@@ -88,21 +108,44 @@ export default async function EnvironmentDetailPage({
 			<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
 				<MetricCard label="Kind" value={environment.kind} valueClassName="text-sm capitalize" />
 				<MetricCard
-					label="Agent URL"
-					value={environment.managerUrl || "Will be auto-detected after the agent registers"}
+					label={environment.kind === "local" ? "Runtime URL" : "Agent URL"}
+					value={runtimeEndpoint}
 					valueClassName="break-all text-sm"
 				/>
-				<MetricCard
-					label="Hostname"
-					value={agent?.hostname || "Pending install"}
-					valueClassName="text-sm"
-				/>
-				<MetricCard
-					label="Docker version"
-					value={agent?.dockerVersion || "Pending install"}
-					valueClassName="text-sm"
-				/>
+				<MetricCard label="Hostname" value={hostname} valueClassName="text-sm" />
+				<MetricCard label="Docker version" value={dockerVersion} valueClassName="text-sm" />
 			</div>
+
+			<Panel className="space-y-3 p-4">
+				<div>
+					<p className="text-sm font-semibold">Environment details</p>
+					<p className="mt-1 text-xs text-muted">
+						Rename this environment to keep your sidebar and workspace organized.
+					</p>
+				</div>
+				<form
+					action={updateEnvironmentAction}
+					className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_auto]"
+				>
+					<input type="hidden" name="environmentId" value={environment.id} />
+					<Field>
+						<FieldLabel htmlFor="environment-name">Name</FieldLabel>
+						<Input id="environment-name" name="name" required defaultValue={environment.name} />
+					</Field>
+					<Field>
+						<FieldLabel htmlFor="environment-description">Description</FieldLabel>
+						<Input
+							id="environment-description"
+							name="description"
+							defaultValue={environment.description || ""}
+							placeholder="Short description for this environment"
+						/>
+					</Field>
+					<div className="flex items-end">
+						<FormSubmitButton label="Save changes" pendingLabel="Saving..." size="sm" />
+					</div>
+				</form>
+			</Panel>
 
 			{/* Install commands */}
 			{installCommands ? (

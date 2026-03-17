@@ -37,6 +37,10 @@ export default async function ContainersPage({
 	const params = await searchParams;
 	const environment = await resolveRuntimeEnvironment(userId, params.environment);
 	const settings = await getGlobalSettings(userId);
+	const runtimeUrl =
+		environment.kind === "agent"
+			? environment.managerUrl || undefined
+			: settings.managerUrl || environment.managerUrl || undefined;
 	const watchStackId = (params.watchStackId || "").trim();
 	let runtimeIssue: string | null = null;
 	const containers = await listAccessibleContainersForUser(userId, role, environment.id).catch(
@@ -119,7 +123,7 @@ export default async function ContainersPage({
 			<ContainersPageWorkspace
 				containers={containers as Array<Record<string, string>>}
 				environmentId={environment.id}
-				managerUrl={settings.managerUrl || undefined}
+				managerUrl={runtimeUrl}
 				controlContainerAction={controlContainerAction}
 				bulkControlContainerAction={bulkControlContainerAction}
 				checkContainerUpdatesAction={checkContainerUpdatesAction}

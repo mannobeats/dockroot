@@ -16,6 +16,7 @@ import {
 	Upload,
 	X,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { DestructiveActionModal } from "@/components/destructive-action-modal";
 import { FormSubmitButton } from "@/components/form-submit-button";
@@ -122,6 +123,7 @@ export function StacksTableWorkspace({
 	bulkDestroyStacksAction: FormAction;
 	bulkRemoveStacksAction: FormAction;
 }) {
+	const router = useRouter();
 	const [search, setSearch] = useState("");
 	const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
 	const [selectedRowKeys, setSelectedRowKeys] = useState<Record<string, boolean>>({});
@@ -138,13 +140,14 @@ export function StacksTableWorkspace({
 				setWatchedStackId(event.stackId);
 				setLogDockOpen(true);
 			}
+			router.refresh();
 		};
 
 		client.on("deployment:update", onDeploymentUpdate);
 		return () => {
 			client.off("deployment:update", onDeploymentUpdate);
 		};
-	}, []);
+	}, [router]);
 
 	const filteredStacks = useMemo(() => {
 		return stacks.filter((stack) =>

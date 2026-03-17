@@ -12,6 +12,7 @@ type CreateTab = "manual" | "github";
 
 export function StackCreateModal({
 	environments,
+	defaultEnvironmentId,
 	installations,
 	providers,
 	appConfigured,
@@ -19,6 +20,7 @@ export function StackCreateModal({
 	createGitHubStackAction,
 }: {
 	environments: Array<{ id: string; name: string; kind: string }>;
+	defaultEnvironmentId?: string;
 	installations: InstallationOption[];
 	providers: Array<{
 		id: string;
@@ -159,10 +161,15 @@ export function StackCreateModal({
 						{/* Body */}
 						<div className="min-h-0 flex-1 overflow-y-auto p-5">
 							{tab === "manual" ? (
-								<StackComposeForm environments={environments} action={createStackAction} />
+								<StackComposeForm
+									environments={environments}
+									defaultEnvironmentId={defaultEnvironmentId}
+									action={createStackAction}
+								/>
 							) : (
 								<StackGitHubForm
 									environments={environments}
+									defaultEnvironmentId={defaultEnvironmentId}
 									installations={installations}
 									providers={providers}
 									appConfigured={appConfigured}

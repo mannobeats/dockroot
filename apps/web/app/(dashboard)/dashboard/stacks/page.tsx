@@ -59,6 +59,7 @@ export default async function StacksPage({
 							name: environment.name,
 							kind: environment.kind,
 						}))}
+						defaultEnvironmentId={environment.id}
 						installations={githubInstallations}
 						providers={githubProviders}
 						appConfigured={appConfigured}

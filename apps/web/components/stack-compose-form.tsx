@@ -9,9 +9,11 @@ import { Select } from "@/components/ui/select";
 
 export function StackComposeForm({
 	environments,
+	defaultEnvironmentId,
 	action,
 }: {
 	environments: Array<{ id: string; name: string; kind: string }>;
+	defaultEnvironmentId?: string;
 	action: (formData: FormData) => void | Promise<void>;
 }) {
 	const editorHeight = "min(70vh, 800px)";
@@ -44,7 +46,12 @@ export function StackComposeForm({
 				</Field>
 				<Field>
 					<FieldLabel htmlFor="environmentId">Environment</FieldLabel>
-					<Select id="environmentId" name="environmentId" required>
+					<Select
+						id="environmentId"
+						name="environmentId"
+						required
+						defaultValue={defaultEnvironmentId || environments[0]?.id}
+					>
 						{environments.map((environment) => (
 							<option key={environment.id} value={environment.id}>
 								{environment.name} ({environment.kind})

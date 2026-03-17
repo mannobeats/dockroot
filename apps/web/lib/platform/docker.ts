@@ -197,17 +197,34 @@ function assertAllowedContainerMutationPath(targetPath: string, options?: { dire
 }
 
 export async function getLocalDockerSnapshot() {
-	const [ps, images, volumes, networks] = await Promise.all([
+	const [ps, images, volumes, networks, version, stats] = await Promise.all([
 		runDockerCommand(["ps", "-a", "--size", "--format", "{{json .}}"]),
 		runDockerCommand(["images", "--digests", "--format", "{{json .}}"]),
 		runDockerCommand(["volume", "ls", "--format", "{{json .}}"]),
 		runDockerCommand(["network", "ls", "--format", "{{json .}}"]),
+		runDockerCommand(["version", "--format", "{{.Server.Version}}"]),
+		runDockerCommand(["stats", "--no-stream", "--format", "{{json .}}"], "container.stats"),
 	]);
 
 	const containers = parseJsonLines<Record<string, string>>(ps.stdout);
 	const imageRows = parseJsonLines<Record<string, string>>(images.stdout);
 	const volumeRows = parseJsonLines<Record<string, string>>(volumes.stdout);
 	const networkRows = parseJsonLines<Record<string, string>>(networks.stdout);
+	const statsRows = parseJsonLines<Record<string, string>>(stats.stdout);
+	const cpuPercent = Number(
+		statsRows
+			.reduce((sum, row) => {
+				return sum + (Number.parseFloat((row.CPUPerc || "0").replace("%", "")) || 0);
+			}, 0)
+			.toFixed(1),
+	);
+	const memoryPercent = Number(
+		statsRows
+			.reduce((sum, row) => {
+				return sum + (Number.parseFloat((row.MemPerc || "0").replace("%", "")) || 0);
+			}, 0)
+			.toFixed(1),
+	);
 
 	// Extract health status from docker ps Status field (e.g. "Up 2 hours (healthy)")
 	const enrichedContainers = containers.map((row) => {
@@ -226,6 +243,7 @@ export async function getLocalDockerSnapshot() {
 			hostname: os.hostname(),
 			platform: `${os.platform()} ${os.release()}`,
 			architecture: os.arch(),
+			dockerVersion: version.stdout.trim() || "unknown",
 			cpus: os.cpus().length,
 			totalMemoryGb: Number((os.totalmem() / 1024 / 1024 / 1024).toFixed(1)),
 			freeMemoryGb: Number((os.freemem() / 1024 / 1024 / 1024).toFixed(1)),
@@ -240,6 +258,10 @@ export async function getLocalDockerSnapshot() {
 			images: imageRows.length,
 			volumes: volumeRows.length,
 			networks: networkRows.length,
+		},
+		usage: {
+			cpuPercent,
+			memoryPercent,
 		},
 	};
 }

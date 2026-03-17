@@ -5,6 +5,7 @@ import {
 import { ActivityPageWorkspace } from "@/components/activity-page-workspace";
 import type { UnifiedEvent } from "@/components/event-log-workspace";
 import { PageHeader } from "@/components/page-header";
+import { resolveRuntimeEnvironment } from "@/lib/environment-runtime";
 import { listDeployments, listRuntimeActions } from "@/lib/platform";
 import { getServerSession } from "@/lib/session";
 
@@ -43,7 +44,7 @@ function summarizeResourceName(details: Record<string, unknown>) {
 export default async function ActivityPage({
 	searchParams,
 }: {
-	searchParams: Promise<{ q?: string; severity?: string }>;
+	searchParams: Promise<{ q?: string; severity?: string; environment?: string }>;
 }) {
 	const session = await getServerSession();
 
@@ -52,10 +53,11 @@ export default async function ActivityPage({
 	}
 
 	const params = await searchParams;
+	const environment = await resolveRuntimeEnvironment(session.user.id, params.environment);
 
 	const [deployments, runtimeActions] = await Promise.all([
-		listDeployments(session.user.id, 100),
-		listRuntimeActions(session.user.id, 500),
+		listDeployments(session.user.id, 100, { environmentId: environment.id }),
+		listRuntimeActions(session.user.id, 500, { environmentId: environment.id }),
 	]);
 
 	// Build unified timeline
@@ -122,7 +124,7 @@ export default async function ActivityPage({
 		<div className="animate-in space-y-5">
 			<PageHeader
 				title="Activity"
-				description={`${totalCount} events · ${deployments.length} deployments · ${runtimeActions.length} runtime actions`}
+				description={`${environment.name} · ${totalCount} events · ${deployments.length} deployments · ${runtimeActions.length} runtime actions`}
 			/>
 
 			<ActivityPageWorkspace

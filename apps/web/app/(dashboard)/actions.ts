@@ -39,6 +39,7 @@ import {
 	getStackById,
 	queueOrRunDeployment,
 	rotateAgentRegistrationToken,
+	updateEnvironment,
 	updateGlobalSettings,
 	updateStackConfig,
 } from "@/lib/platform";
@@ -227,6 +228,34 @@ export async function deleteEnvironmentAction(formData: FormData) {
 	redirect("/dashboard/environments");
 }
 
+export async function updateEnvironmentAction(formData: FormData) {
+	const { userId } = await requireUserSession();
+	const environmentId = getValue(formData, "environmentId");
+	const name = getValue(formData, "name");
+	const description = getValue(formData, "description");
+
+	if (!environmentId || !name) {
+		throw new Error("Environment and name are required");
+	}
+
+	await updateEnvironment({
+		environmentId,
+		userId,
+		name,
+		description,
+	});
+
+	const { recordAuditEvent } = await import("@/lib/platform");
+	await recordAuditEvent({
+		environmentId,
+		userId,
+		actionType: "environment.update",
+		details: { environmentId, environmentName: name, description: description || null },
+	});
+
+	redirect(`/dashboard/environments/${environmentId}`);
+}
+
 export async function createStackAction(formData: FormData) {
 	const { userId } = await requireUserSession();
 	const environmentId = getValue(formData, "environmentId");
@@ -255,7 +284,7 @@ export async function createStackAction(formData: FormData) {
 		details: { stackName: name, sourceType: "manual" },
 	});
 
-	redirect("/dashboard/stacks");
+	redirect(`/dashboard/stacks?environment=${encodeURIComponent(environmentId)}`);
 }
 
 export async function createGitHubStackAction(formData: FormData) {

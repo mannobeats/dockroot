@@ -1,3 +1,4 @@
+import { db, runtimeActionEvents } from "@dockroot/db";
 import { NextResponse } from "next/server";
 import { heartbeatAgent } from "@/lib/platform";
 import { emitRealtime } from "@/lib/realtime";
@@ -33,6 +34,20 @@ export async function POST(request: Request) {
 			if (!containerId || !action) {
 				continue;
 			}
+
+			await db.insert(runtimeActionEvents).values({
+				id: crypto.randomUUID(),
+				environmentId: agent.environmentId,
+				actorUserId: null,
+				actorRole: "agent",
+				source: "agent",
+				actionType: `container.${String(action)}`,
+				status: "info",
+				containerId: String(containerId),
+				details: JSON.stringify(event),
+				occurredAt: new Date(),
+				createdAt: new Date(),
+			});
 
 			emitRealtime("container:state", {
 				containerId,

@@ -738,7 +738,11 @@ export async function listEnvironments(userId: string) {
 	});
 }
 
-export async function listDeployments(userId: string, limit = 50) {
+export async function listDeployments(
+	userId: string,
+	limit = 50,
+	options?: { environmentId?: string },
+) {
 	await ensureDefaultLocalEnvironment(userId);
 
 	const ownedStacks = await db.query.stacks.findMany({
@@ -755,7 +759,11 @@ export async function listDeployments(userId: string, limit = 50) {
 
 	const conditions = [];
 	if (stackIds.length) conditions.push(inArray(deployments.stackId, stackIds));
-	if (environmentIds.length) conditions.push(inArray(deployments.environmentId, environmentIds));
+	if (options?.environmentId) {
+		conditions.push(eq(deployments.environmentId, options.environmentId));
+	} else if (environmentIds.length) {
+		conditions.push(inArray(deployments.environmentId, environmentIds));
+	}
 	conditions.push(eq(deployments.initiatedByUserId, userId));
 
 	return db.query.deployments.findMany({
@@ -770,7 +778,11 @@ export async function listDeployments(userId: string, limit = 50) {
 	});
 }
 
-export async function listRuntimeActions(userId: string, limit = 80) {
+export async function listRuntimeActions(
+	userId: string,
+	limit = 80,
+	options?: { environmentId?: string },
+) {
 	await ensureDefaultLocalEnvironment(userId);
 
 	const ownedEnvironments = await db.query.environments.findMany({
@@ -781,6 +793,24 @@ export async function listRuntimeActions(userId: string, limit = 80) {
 	const boundedLimit = Math.max(1, Math.min(500, Math.floor(limit)));
 
 	try {
+		if (options?.environmentId) {
+			return db.query.runtimeActionEvents.findMany({
+				where: and(
+					eq(runtimeActionEvents.environmentId, options.environmentId),
+					or(
+						eq(runtimeActionEvents.actorUserId, userId),
+						eq(runtimeActionEvents.environmentId, options.environmentId),
+					),
+				),
+				orderBy: [desc(runtimeActionEvents.occurredAt)],
+				limit: boundedLimit,
+				with: {
+					environment: true,
+					actor: true,
+				},
+			});
+		}
+
 		if (!environmentIds.length) {
 			return db.query.runtimeActionEvents.findMany({
 				where: eq(runtimeActionEvents.actorUserId, userId),
@@ -983,6 +1013,35 @@ export async function createEnvironment({
 	revalidatePath("/dashboard/environments");
 
 	return environmentId;
+}
+
+export async function updateEnvironment({
+	environmentId,
+	userId,
+	name,
+	description,
+}: {
+	environmentId: string;
+	userId: string;
+	name: string;
+	description?: string;
+}) {
+	const environment = await requireOwnedEnvironment(environmentId, userId);
+	const updatedAt = now();
+
+	await db
+		.update(environments)
+		.set({
+			name,
+			slug: slugify(name),
+			description: description || null,
+			updatedAt,
+		})
+		.where(eq(environments.id, environment.id));
+
+	revalidatePath("/dashboard");
+	revalidatePath("/dashboard/environments");
+	revalidatePath(`/dashboard/environments/${environment.id}`);
 }
 
 export async function createStack({
