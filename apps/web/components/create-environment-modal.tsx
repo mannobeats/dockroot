@@ -99,10 +99,7 @@ export function CreateEnvironmentModal({ action }: { action: FormAction }) {
 				<Field>
 					<FieldLabel htmlFor="modal-agent-url">Agent URL</FieldLabel>
 					<Input id="modal-agent-url" name="agentUrl" placeholder="http://agent:9095" />
-					<FieldHint>
-						Use a full base URL like `http://agent-host:9095`. Leave it blank if you are only
-						creating the environment record for now.
-					</FieldHint>
+					<FieldHint>e.g. http://10.0.10.50:9095 — optional</FieldHint>
 				</Field>
 				{error ? <Alert variant="error">{error}</Alert> : null}
 				<div className="flex justify-end gap-2 pt-2">
