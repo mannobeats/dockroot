@@ -4,6 +4,8 @@ import {
 	AlertCircle,
 	ArrowUpRight,
 	CheckCircle2,
+	ChevronDown,
+	ChevronRight,
 	Github,
 	Loader2,
 	Plus,
@@ -17,6 +19,7 @@ import type { GitHubProviderOption, InstallationOption } from "@/components/gith
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Input } from "@/components/ui/input";
 import {
 	Panel,
 	PanelContent,
@@ -109,6 +112,7 @@ export function GitHubAppsPanel({
 	const [message, setMessage] = useState("");
 	const [isRefreshing, setIsRefreshing] = useState(false);
 	const [pendingProviderId, setPendingProviderId] = useState("");
+	const [showCreateForm, setShowCreateForm] = useState(false);
 	const [pollState, setPollState] = useState<"idle" | "waiting">(
 		initialStatus === "manifest-ready" || initialStatus === "connected" ? "waiting" : "idle",
 	);
@@ -308,21 +312,73 @@ export function GitHubAppsPanel({
 
 	const statusSummary = statusCopy(initialStatus, initialError);
 
+	/* ── Status banner (shown when there's an active status) ── */
+	const statusBanner = statusSummary ? (
+		<div className="flex items-start gap-3 rounded-lg border border-default/10 bg-surface-raised px-4 py-3">
+			<div className="mt-0.5">
+				{statusSummary.tone === "danger" ? (
+					<AlertCircle className="h-4 w-4 text-danger" />
+				) : statusSummary.tone === "warning" ? (
+					<Shield className="h-4 w-4 text-warning" />
+				) : (
+					<CheckCircle2 className="h-4 w-4 text-success" />
+				)}
+			</div>
+			<div>
+				<p className="text-sm font-semibold">{statusSummary.title}</p>
+				<p className="mt-0.5 text-xs text-muted">{message || statusSummary.detail}</p>
+			</div>
+		</div>
+	) : message ? (
+		<div className="flex items-start gap-3 rounded-lg border border-default/10 bg-surface-raised px-4 py-3">
+			<CheckCircle2 className="mt-0.5 h-4 w-4 text-success" />
+			<p className="text-xs text-muted">{message}</p>
+		</div>
+	) : null;
+
+	/* ── Create app form (inline) ── */
+	const createAppForm = (
+		<div className="space-y-3">
+			<div className="grid gap-3 sm:grid-cols-2">
+				<label className="grid gap-1">
+					<span className="text-xs font-medium">App name</span>
+					<Input
+						value={manifestName}
+						onChange={(event) => setManifestName(event.target.value)}
+						placeholder="Dockroot GitHub App"
+						inputSize="sm"
+					/>
+				</label>
+				<label className="grid gap-1">
+					<span className="text-xs font-medium">Organization (optional)</span>
+					<Input
+						value={manifestOwner}
+						onChange={(event) => setManifestOwner(event.target.value)}
+						placeholder="my-org"
+						inputSize="sm"
+					/>
+				</label>
+			</div>
+			{manifestError ? <p className="text-xs text-danger">{manifestError}</p> : null}
+			<Button size="sm" onClick={startManifestFlow}>
+				<Plus className="h-3.5 w-3.5" />
+				Create GitHub App
+			</Button>
+		</div>
+	);
+
 	return (
 		<Panel tone="subtle" className="overflow-hidden">
-			<PanelHeader className="border-b border-default/10 bg-[linear-gradient(135deg,color-mix(in_oklab,var(--accent)_6%,transparent),transparent_55%)]">
-				<div className="space-y-1">
-					<div className="flex items-center gap-2">
-						<div className="rounded-lg border border-default/12 bg-surface-raised p-2">
-							<Github className="h-4 w-4" />
-						</div>
-						<div>
-							<PanelTitle>GitHub Apps</PanelTitle>
-							<PanelDescription>
-								Create apps, see every installation clearly, and keep GitHub access healthy before
-								you create tracked stacks.
-							</PanelDescription>
-						</div>
+			<PanelHeader className="border-b border-default/10">
+				<div className="flex items-center gap-2">
+					<div className="rounded-lg border border-default/12 bg-surface-raised p-2">
+						<Github className="h-4 w-4" />
+					</div>
+					<div>
+						<PanelTitle>GitHub Apps</PanelTitle>
+						<PanelDescription>
+							Manage GitHub App integrations for tracked stack deployments.
+						</PanelDescription>
 					</div>
 				</div>
 				<div className="flex items-center gap-2">
@@ -331,6 +387,16 @@ export function GitHubAppsPanel({
 							<Loader2 className="h-3 w-3 animate-spin" />
 							Waiting for GitHub
 						</div>
+					) : null}
+					{groupedProviders.length ? (
+						<Button
+							variant="ghost"
+							size="xs"
+							onClick={() => setShowCreateForm(!showCreateForm)}
+							title="Register a new GitHub App"
+						>
+							<Plus className="h-3.5 w-3.5" />
+						</Button>
 					) : null}
 					<Button
 						variant="outline"
@@ -344,209 +410,127 @@ export function GitHubAppsPanel({
 				</div>
 			</PanelHeader>
 
-			<PanelContent className="space-y-5">
-				<div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(280px,340px)]">
-					<div className="rounded-2xl border border-default/10 bg-surface-raised px-4 py-3">
-						<div className="flex items-start gap-3">
-							<div className="mt-0.5">
-								{statusSummary?.tone === "danger" ? (
-									<AlertCircle className="h-4 w-4 text-danger" />
-								) : statusSummary?.tone === "warning" ? (
-									<Shield className="h-4 w-4 text-warning" />
-								) : (
-									<CheckCircle2 className="h-4 w-4 text-success" />
-								)}
-							</div>
-							<div>
-								<p className="text-sm font-semibold">
-									{statusSummary?.title || "GitHub access workspace"}
-								</p>
-								<p className="mt-1 text-xs text-muted">
-									{message ||
-										"Create apps, install them on GitHub, and keep every account-level installation visible in one place."}
-								</p>
-							</div>
-						</div>
+			<PanelContent className="space-y-4">
+				{statusBanner}
+
+				{/* Inline create form (shown via + button when providers exist) */}
+				{showCreateForm && groupedProviders.length ? (
+					<div className="rounded-lg border border-default/10 bg-surface-raised p-4">
+						<p className="mb-3 text-xs font-semibold">Register a new GitHub App</p>
+						{createAppForm}
 					</div>
-					<div className="rounded-2xl border border-default/10 bg-surface-raised p-4">
-						<p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
-							Create a New App
-						</p>
-						<div className="mt-3 grid gap-3">
-							<label className="grid gap-1">
-								<span className="text-xs font-medium">App name</span>
-								<input
-									className="h-9 rounded-lg border border-default/12 bg-surface px-3 text-sm outline-none transition focus:border-accent/40"
-									value={manifestName}
-									onChange={(event) => setManifestName(event.target.value)}
-									placeholder="Dockroot GitHub App"
-								/>
-							</label>
-							<label className="grid gap-1">
-								<span className="text-xs font-medium">Organization (optional)</span>
-								<input
-									className="h-9 rounded-lg border border-default/12 bg-surface px-3 text-sm outline-none transition focus:border-accent/40"
-									value={manifestOwner}
-									onChange={(event) => setManifestOwner(event.target.value)}
-									placeholder="my-org"
-								/>
-							</label>
-							{manifestError ? <p className="text-xs text-danger">{manifestError}</p> : null}
-							<Button size="sm" onClick={startManifestFlow}>
-								<Plus className="h-3.5 w-3.5" />
-								Create GitHub App
-							</Button>
-						</div>
-					</div>
-				</div>
+				) : null}
 
 				{groupedProviders.length ? (
-					<div className="grid gap-4">
+					<div className="divide-y divide-default/8 overflow-hidden rounded-lg border border-default/10">
 						{groupedProviders.map(
 							({ provider, installations: providerInstallations, repositoryCount, hasErrors }) => {
 								const installCount = providerInstallations.length;
 								const removing = pendingProviderId === provider.id;
 								return (
-									<div
-										key={provider.id}
-										className="rounded-2xl border border-default/12 bg-[linear-gradient(180deg,color-mix(in_oklab,var(--background)_82%,var(--accent)_2%),var(--surface-raised))]"
-									>
-										<div className="flex flex-col gap-4 border-b border-default/8 px-4 py-4 lg:flex-row lg:items-start lg:justify-between">
-											<div className="space-y-2">
-												<div className="flex flex-wrap items-center gap-2">
-													<p className="text-base font-semibold tracking-tight">{provider.name}</p>
-													<Badge
-														variant={installCount ? (hasErrors ? "warning" : "success") : "default"}
-													>
-														{installCount
-															? `${installCount} install${installCount === 1 ? "" : "s"}`
-															: "Not installed"}
-													</Badge>
-													<Badge variant="accent">{repositoryCount} repos</Badge>
-												</div>
-												<div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
-													<span>Slug: {provider.appSlug}</span>
-													<span>App ID: {provider.githubAppId}</span>
-													<span>Updated {formatUpdatedAt(provider.updatedAt)}</span>
+									<div key={provider.id} className="bg-surface-raised">
+										{/* Provider row */}
+										<div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+											<div className="flex items-center gap-3 min-w-0">
+												<div>
+													<div className="flex items-center gap-2">
+														<p className="text-sm font-semibold">{provider.name}</p>
+														<Badge
+															variant={installCount ? (hasErrors ? "warning" : "success") : "default"}
+														>
+															{installCount
+																? `${installCount} install${installCount === 1 ? "" : "s"}`
+																: "Not installed"}
+														</Badge>
+														<Badge variant="accent">{repositoryCount} repos</Badge>
+													</div>
+													<p className="mt-0.5 text-xs text-muted">
+														Updated {formatUpdatedAt(provider.updatedAt)}
+													</p>
 												</div>
 											</div>
-											<div className="flex flex-wrap items-center gap-2">
+											<div className="flex items-center gap-1.5">
 												<Button
-													size="sm"
-													variant={installCount ? "secondary" : "primary"}
+													size="xs"
+													variant={installCount ? "outline" : "primary"}
 													onClick={() => beginInstall(provider.id)}
 													disabled={Boolean(pendingProviderId)}
 												>
-													<ArrowUpRight className="h-3.5 w-3.5" />
-													{installCount ? "Add installation" : "Install on GitHub"}
+													<ArrowUpRight className="h-3 w-3" />
+													{installCount ? "Add" : "Install"}
 												</Button>
 												<Button
-													size="sm"
-													variant="outline"
+													size="xs"
+													variant="ghost"
 													onClick={() => void refreshData()}
 													disabled={isRefreshing || Boolean(pendingProviderId)}
+													title="Sync installations"
 												>
 													<RefreshCw
-														className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`}
+														className={`h-3 w-3 ${isRefreshing ? "animate-spin" : ""}`}
 													/>
-													Sync
 												</Button>
 												<Button
-													size="sm"
-													variant="quietDanger"
+													size="xs"
+													variant="ghost"
 													onClick={() => void deleteProvider(provider.id)}
 													disabled={Boolean(pendingProviderId)}
+													title="Remove app"
+													className="text-muted hover:text-danger"
 												>
 													{removing ? (
-														<Loader2 className="h-3.5 w-3.5 animate-spin" />
+														<Loader2 className="h-3 w-3 animate-spin" />
 													) : (
-														<Trash2 className="h-3.5 w-3.5" />
+														<Trash2 className="h-3 w-3" />
 													)}
-													Remove
 												</Button>
 											</div>
 										</div>
 
-										<div className="p-4">
-											{providerInstallations.length ? (
-												<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+										{/* Installations (compact) */}
+										{providerInstallations.length ? (
+											<div className="border-t border-default/6 bg-surface px-4 py-2.5">
+												<div className="flex flex-wrap items-center gap-3">
 													{providerInstallations.map((installation) => (
 														<div
 															key={installation.id}
-															className="rounded-xl border border-default/10 bg-surface px-3 py-3"
+															className="flex items-center gap-2 text-xs"
 														>
-															<div className="flex items-start justify-between gap-3">
-																<div>
-																	<p className="text-sm font-semibold">
-																		{installation.accountLogin}
-																	</p>
-																	<p className="mt-0.5 text-xs text-muted">
-																		{installation.accountType || "GitHub account"}
-																	</p>
-																</div>
-																<Badge
-																	variant={installation.repositoryError ? "warning" : "success"}
-																>
-																	{installation.repositoryError ? "Needs sync" : "Healthy"}
-																</Badge>
-															</div>
-															<div className="mt-4 flex flex-wrap items-center gap-2">
-																<Badge>{installation.repositories.length} repositories</Badge>
-																{installation.appSlug ? (
-																	<Badge variant="accent">{installation.appSlug}</Badge>
-																) : null}
-															</div>
-															{installation.repositories.length ? (
-																<p className="mt-3 text-xs text-muted">
-																	Includes{" "}
-																	{installation.repositories
-																		.slice(0, 3)
-																		.map((repo) => repo.full_name)
-																		.join(", ")}
-																	{installation.repositories.length > 3
-																		? ` +${installation.repositories.length - 3} more`
-																		: ""}
-																</p>
-															) : null}
-															{installation.repositoryError ? (
-																<p className="mt-3 text-xs text-warning">
-																	{installation.repositoryError}
-																</p>
-															) : null}
+															<span className="font-medium">
+																{installation.accountLogin}
+															</span>
+															<Badge
+																variant={
+																	installation.repositoryError ? "warning" : "success"
+																}
+															>
+																{installation.repositoryError ? "Needs sync" : "Healthy"}
+															</Badge>
+															<span className="text-muted">
+																{installation.repositories.length} repos
+															</span>
 														</div>
 													))}
 												</div>
-											) : (
-												<EmptyState
-													title="No installations yet"
-													description="This app exists, but it has not been installed on any GitHub account or organization."
-													actions={
-														<Button size="sm" onClick={() => beginInstall(provider.id)}>
-															<ArrowUpRight className="h-3.5 w-3.5" />
-															Install on GitHub
-														</Button>
-													}
-													className="border-default/10 bg-surface-raised"
-												/>
-											)}
-										</div>
+											</div>
+										) : null}
 									</div>
 								);
 							},
 						)}
 					</div>
 				) : (
-					<EmptyState
-						title="No GitHub Apps configured"
-						description="Create your first GitHub App here. Once it is installed, every installation will appear in this workspace automatically."
-						actions={
-							<Button size="sm" onClick={startManifestFlow}>
-								<Plus className="h-3.5 w-3.5" />
-								Create GitHub App
-							</Button>
-						}
-						className="border-default/10 bg-surface-raised"
-					/>
+					<div className="space-y-5">
+						<EmptyState
+							title="No GitHub Apps configured"
+							description="Register a GitHub App to enable repository-based deployments with automatic sync."
+							className="border-default/10 bg-surface-raised"
+						/>
+						<div className="rounded-lg border border-default/10 bg-surface-raised p-4">
+							<p className="mb-3 text-xs font-semibold">Create your first GitHub App</p>
+							{createAppForm}
+						</div>
+					</div>
 				)}
 			</PanelContent>
 		</Panel>

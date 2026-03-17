@@ -1,6 +1,18 @@
 "use client";
 
-import { Check, ChevronDown, ChevronRight, GitBranch, Search, Sparkles } from "lucide-react";
+import {
+	ArrowLeft,
+	ArrowRight,
+	ArrowUpRight,
+	Check,
+	ChevronDown,
+	ChevronRight,
+	Github,
+	GitBranch,
+	Search,
+	Settings,
+	Sparkles,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { CodeEditor } from "@/components/code-editor";
 import { FormSubmitButton } from "@/components/form-submit-button";
@@ -8,9 +20,20 @@ import type { GitHubProviderOption, InstallationOption } from "@/components/gith
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+	Dropdown,
+	DropdownItem,
+	DropdownLabel,
+	DropdownMenu,
+	DropdownTrigger,
+} from "@/components/ui/dropdown";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { LinkButton } from "@/components/ui/link-button";
 import { Select } from "@/components/ui/select";
+
+type WizardStep = "source" | "configure";
 
 export function StackGitHubForm({
 	environments,
@@ -25,7 +48,8 @@ export function StackGitHubForm({
 	appConfigured: boolean;
 	action: (formData: FormData) => void | Promise<void>;
 }) {
-	const editorHeight = "min(50vh, 480px)";
+	const editorHeight = "min(55vh, 560px)";
+	const [step, setStep] = useState<WizardStep>("source");
 	const [installationOptions, setInstallationOptions] = useState(installations);
 	const [_installationState, setInstallationState] = useState<
 		"idle" | "refreshing" | "ready" | "error"
@@ -49,7 +73,7 @@ export function StackGitHubForm({
 	const [headSha, setHeadSha] = useState("");
 	const [isLoaded, setIsLoaded] = useState(false);
 	const [isPending, startTransition] = useTransition();
-	const [showEditor, setShowEditor] = useState(false);
+	const [showEditor, setShowEditor] = useState(true);
 
 	const activeInstallation = installationOptions.find(
 		(installation) => installation.id === installationId,
@@ -70,6 +94,7 @@ export function StackGitHubForm({
 	const selectedRepository = repositories.find(
 		(repository) => String(repository.id) === repositoryId,
 	);
+	const canContinue = Boolean(installationId && selectedRepository);
 	const canCreateStack = Boolean(
 		installationId &&
 			selectedRepository?.owner.login &&
@@ -298,17 +323,55 @@ export function StackGitHubForm({
 		};
 	}, [branch, composePath, installationId, selectedRepository]);
 
-	/* ── No installations: bootstrap flow ──────────── */
+	/* ── No installations: guided setup flow ────────── */
 	if (!installationOptions.length) {
+		if (!appConfigured) {
+			return (
+				<EmptyState
+					title="Connect GitHub to get started"
+					description="Create a GitHub App in Settings to enable repository-based stack deployments."
+					actions={
+						<LinkButton href="/dashboard/settings/github" size="sm">
+							<Settings className="h-3.5 w-3.5" />
+							Set up GitHub
+						</LinkButton>
+					}
+					className="bg-surface-raised"
+				>
+					<div className="mx-auto mt-3 flex items-center justify-center gap-2 text-muted">
+						<Github className="h-4 w-4" />
+						<span className="text-xs">No GitHub App configured</span>
+					</div>
+				</EmptyState>
+			);
+		}
+
 		return (
-			<div className="space-y-4 rounded-2xl border border-dashed border-default/15 bg-surface-raised p-6 text-center">
-				<p className="text-sm font-semibold">No GitHub installation is ready yet</p>
-				<p className="mx-auto max-w-[48ch] text-sm text-muted">
-					Set up and install a GitHub App from the GitHub Apps workspace on this page, then come
-					back here to choose a repository and create a tracked stack.
-				</p>
+			<EmptyState
+				title="Install your GitHub App"
+				description="Your GitHub App is ready but needs to be installed on a GitHub account or organization."
+				actions={
+					<>
+						{providerOptions[0] ? (
+							<Button
+								size="sm"
+								onClick={() => {
+									window.location.href = `/api/github/install?providerId=${encodeURIComponent(providerOptions[0].id)}&redirectTo=${encodeURIComponent("/dashboard/settings/github")}`;
+								}}
+							>
+								<ArrowUpRight className="h-3.5 w-3.5" />
+								Install on GitHub
+							</Button>
+						) : null}
+						<LinkButton href="/dashboard/settings/github" size="sm" variant="outline">
+							Manage GitHub Apps
+						</LinkButton>
+					</>
+				}
+				className="bg-surface-raised"
+			>
 				{providerOptions.length ? (
-					<div className="flex flex-wrap justify-center gap-2">
+					<div className="mt-3 flex flex-wrap justify-center gap-2">
 						{providerOptions.map((provider) => (
 							<Badge key={provider.id} variant="accent">
 								{provider.name}
@@ -317,15 +380,200 @@ export function StackGitHubForm({
 					</div>
 				) : null}
 				{installationStateMessage ? (
-					<p className="text-xs text-muted">{installationStateMessage}</p>
+					<p className="mt-2 text-xs text-muted">{installationStateMessage}</p>
 				) : null}
+			</EmptyState>
+		);
+	}
+
+	/* ── Step indicator ────────────────────────────── */
+	const stepIndicator = (
+		<div className="mb-4 flex items-center gap-2 text-xs text-muted">
+			<button
+				type="button"
+				onClick={() => setStep("source")}
+				className={`flex items-center gap-1.5 rounded-md px-2 py-1 transition-colors ${
+					step === "source"
+						? "bg-foreground font-medium text-background shadow-sm"
+						: "hover:text-foreground"
+				}`}
+			>
+				<span className="flex h-4 w-4 items-center justify-center rounded-full border border-current text-[10px]">
+					{step === "configure" ? <Check className="h-2.5 w-2.5" /> : "1"}
+				</span>
+				Source
+			</button>
+			<ChevronRight className="h-3 w-3" />
+			<button
+				type="button"
+				onClick={() => (canContinue ? setStep("configure") : undefined)}
+				disabled={!canContinue}
+				className={`flex items-center gap-1.5 rounded-md px-2 py-1 transition-colors ${
+					step === "configure"
+						? "bg-foreground font-medium text-background shadow-sm"
+						: canContinue
+							? "hover:text-foreground"
+							: "opacity-40"
+				}`}
+			>
+				<span className="flex h-4 w-4 items-center justify-center rounded-full border border-current text-[10px]">
+					2
+				</span>
+				Configure
+			</button>
+		</div>
+	);
+
+	/* ── Step 1: Select source ────────────────────── */
+	if (step === "source") {
+		return (
+			<div className="space-y-4">
+				{stepIndicator}
+
+				{/* Installation dropdown */}
+				<div>
+					<p className="mb-2 text-xs font-medium text-muted">Installation</p>
+					<Dropdown>
+						<DropdownTrigger size="md">
+							{activeInstallation ? (
+								<span className="flex items-center gap-2">
+									<span className="font-medium">{activeInstallation.accountLogin}</span>
+									<Badge variant="accent" className="text-[10px]">
+										{activeInstallation.repositories.length} repos
+									</Badge>
+									{activeInstallation.repositoryError ? (
+										<Badge variant="warning" className="text-[10px]">
+											Needs sync
+										</Badge>
+									) : null}
+								</span>
+							) : undefined}
+						</DropdownTrigger>
+						<DropdownMenu>
+							<DropdownLabel>GitHub Accounts</DropdownLabel>
+							{installationOptions.map((installation) => {
+								const providerName =
+									providerOptions.find((p) => p.id === installation.providerId)?.name ||
+									installation.appSlug ||
+									"GitHub App";
+								return (
+									<DropdownItem
+										key={installation.id}
+										value={installation.id}
+										selected={installationId === installation.id}
+										onSelect={(value) => {
+											setInstallationId(value);
+											setRepositoryQuery("");
+											setRepositoryId("");
+											setIsLoaded(false);
+											setComposePath("");
+											setComposeYaml("");
+											setEnvFileContent("");
+											setHeadSha("");
+											setLoadError("");
+										}}
+									>
+										<div className="flex w-full items-center justify-between gap-2">
+											<div className="min-w-0">
+												<span className="font-medium">{installation.accountLogin}</span>
+												<span className="ml-1.5 text-muted">{providerName}</span>
+											</div>
+											<Badge variant="accent" className="shrink-0 text-[10px]">
+												{installation.repositories.length} repos
+											</Badge>
+										</div>
+									</DropdownItem>
+								);
+							})}
+						</DropdownMenu>
+					</Dropdown>
+				</div>
+
+				{/* Repository selection */}
+				<div>
+					<p className="mb-2 text-xs font-medium text-muted">Repository</p>
+					<div className="relative">
+						<Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
+						<Input
+							value={repositoryQuery}
+							onChange={(event) => setRepositoryQuery(event.target.value)}
+							onKeyDown={(event) => {
+								if (event.key === "Enter") event.preventDefault();
+							}}
+							placeholder="Filter repositories..."
+							withIcon
+							inputSize="sm"
+							className="text-xs"
+						/>
+					</div>
+
+					<div className="mt-1.5 max-h-72 overflow-auto rounded-lg border border-default/8">
+						{filteredRepositories.length ? (
+							filteredRepositories.map((repository) => {
+								const active = String(repository.id) === repositoryId;
+								return (
+									<button
+										key={repository.id}
+										type="button"
+										onClick={() => {
+											setRepositoryId(String(repository.id));
+											setStackName(repository.name);
+											setBranch(repository.default_branch || "main");
+											setComposePath("");
+											setComposeYaml("");
+											setEnvFileContent("");
+											setHeadSha("");
+											setLoadError("");
+											setIsLoaded(false);
+										}}
+										className={`flex w-full items-center justify-between border-b border-default/5 px-3 py-2 text-left text-xs last:border-b-0 transition-colors ${active ? "bg-accent/6 text-foreground" : "text-muted hover:bg-foreground/[0.02] hover:text-foreground"}`}
+									>
+										<div className="flex min-w-0 items-center gap-2">
+											{active ? (
+												<Check className="h-3 w-3 shrink-0 text-accent" />
+											) : null}
+											<span className="truncate font-medium">
+												{repository.full_name}
+											</span>
+										</div>
+										<Badge
+											variant={repository.private ? "warning" : "success"}
+											className="text-[10px]"
+										>
+											{repository.private ? "private" : "public"}
+										</Badge>
+									</button>
+								);
+							})
+						) : (
+							<p className="px-3 py-4 text-center text-xs text-muted">
+								No repositories match.
+							</p>
+						)}
+					</div>
+
+					{activeInstallation?.repositoryError ? (
+						<Alert className="mt-2 text-xs">{activeInstallation.repositoryError}</Alert>
+					) : null}
+				</div>
+
+				{/* Continue */}
+				<div className="flex items-center justify-between border-t border-default/8 pt-4">
+					<p className="text-xs text-muted">
+						{selectedRepository?.full_name || "Select a repository to continue"}
+					</p>
+					<Button size="sm" disabled={!canContinue} onClick={() => setStep("configure")}>
+						Continue
+						<ArrowRight className="h-3 w-3" />
+					</Button>
+				</div>
 			</div>
 		);
 	}
 
-	/* ── Main form ─────────────────────────────────── */
+	/* ── Step 2: Configure & deploy ───────────────── */
 	return (
-		<form action={action} className="space-y-5">
+		<form action={action} className="space-y-4">
 			<input type="hidden" name="installationId" value={installationId} />
 			<input type="hidden" name="repositoryId" value={repositoryId} />
 			<input type="hidden" name="owner" value={selectedRepository?.owner.login || ""} />
@@ -340,265 +588,155 @@ export function StackGitHubForm({
 			<input type="hidden" name="autoDeployEnabled" value={autoDeployEnabled ? "true" : "false"} />
 			<input type="hidden" name="autoDeployPaths" value={autoDeployPaths} />
 
-			{/* Repository selection */}
-			<div>
-				<div className="flex items-center justify-between">
-					<p className="text-xs font-medium text-muted">Installation</p>
-					<p className="text-xs text-muted">Choose where Dockroot can read repositories from.</p>
-				</div>
+			{stepIndicator}
 
-				<div className="mt-3 grid gap-2 sm:grid-cols-2">
-					{installationOptions.map((installation) => {
-						const providerName =
-							providerOptions.find((provider) => provider.id === installation.providerId)?.name ||
-							installation.appSlug ||
-							"GitHub App";
-						const active = installationId === installation.id;
-
-						return (
-							<button
-								key={installation.id}
-								type="button"
-								onClick={() => {
-									setInstallationId(installation.id);
-									setRepositoryQuery("");
-									setRepositoryId("");
-									setIsLoaded(false);
-									setComposePath("");
-									setComposeYaml("");
-									setEnvFileContent("");
-									setHeadSha("");
-									setLoadError("");
-								}}
-								className={`rounded-xl border px-3 py-3 text-left transition-colors ${
-									active
-										? "border-accent/35 bg-accent/6"
-										: "border-default/10 bg-surface-raised hover:border-default/20 hover:bg-foreground/[0.015]"
-								}`}
-							>
-								<div className="flex items-start justify-between gap-3">
-									<div className="min-w-0">
-										<p className="truncate text-sm font-semibold">{installation.accountLogin}</p>
-										<p className="mt-0.5 text-xs text-muted">
-											{providerName} · {installation.accountType || "GitHub account"}
-										</p>
-									</div>
-									{active ? <Check className="h-4 w-4 shrink-0 text-accent" /> : null}
-								</div>
-								<div className="mt-3 flex flex-wrap items-center gap-2">
-									<Badge variant={installation.repositoryError ? "warning" : "accent"}>
-										{installation.repositories.length} repos
-									</Badge>
-									{installation.repositoryError ? (
-										<Badge variant="warning">Needs sync</Badge>
-									) : (
-										<Badge variant="success">Ready</Badge>
-									)}
-								</div>
-							</button>
-						);
-					})}
-				</div>
-
-				<p className="mt-4 text-xs font-medium text-muted">Repository</p>
-
-				<div className="relative mt-2">
-					<Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
-					<Input
-						value={repositoryQuery}
-						onChange={(event) => setRepositoryQuery(event.target.value)}
-						onKeyDown={(event) => {
-							if (event.key === "Enter") event.preventDefault();
-						}}
-						placeholder="Filter repositories..."
-						withIcon
-						inputSize="sm"
-						className="text-xs"
-					/>
-				</div>
-
-				<div className="mt-1.5 max-h-44 overflow-auto rounded-lg border border-default/8">
-					{filteredRepositories.length ? (
-						filteredRepositories.map((repository) => {
-							const active = String(repository.id) === repositoryId;
-							return (
-								<button
-									key={repository.id}
-									type="button"
-									onClick={() => {
-										setRepositoryId(String(repository.id));
-										setStackName(repository.name);
-										setBranch(repository.default_branch || "main");
-										setComposePath("");
-										setComposeYaml("");
-										setEnvFileContent("");
-										setHeadSha("");
-										setLoadError("");
-										setIsLoaded(false);
-									}}
-									className={`flex w-full items-center justify-between border-b border-default/5 px-3 py-2 text-left text-xs last:border-b-0 transition-colors ${active ? "bg-accent/6 text-foreground" : "text-muted hover:bg-foreground/[0.02] hover:text-foreground"}`}
-								>
-									<div className="flex min-w-0 items-center gap-2">
-										{active ? <Check className="h-3 w-3 shrink-0 text-accent" /> : null}
-										<span className="truncate font-medium">{repository.full_name}</span>
-									</div>
-									<Badge
-										variant={repository.private ? "warning" : "success"}
-										className="text-[10px]"
-									>
-										{repository.private ? "private" : "public"}
-									</Badge>
-								</button>
-							);
-						})
-					) : (
-						<p className="px-3 py-4 text-center text-xs text-muted">No repositories match.</p>
-					)}
-				</div>
-
-				{activeInstallation?.repositoryError ? (
-					<Alert className="mt-2 text-xs">{activeInstallation.repositoryError}</Alert>
+			{/* Selected repo header */}
+			<div className="flex items-center gap-2 rounded-lg border border-default/8 bg-surface-raised px-3 py-2">
+				<Github className="h-3.5 w-3.5 text-muted" />
+				<span className="text-xs font-medium">{selectedRepository?.full_name}</span>
+				<Badge variant="accent" className="text-[10px]">
+					<GitBranch className="mr-0.5 h-2.5 w-2.5" />
+					{branch}
+				</Badge>
+				{isLoaded ? (
+					<span className="inline-flex items-center gap-1 text-[10px] text-success">
+						<Sparkles className="h-2.5 w-2.5" />
+						{headSha?.slice(0, 8)}
+					</span>
 				) : null}
 			</div>
 
 			{/* Configuration */}
-			<div className="border-t border-default/8 pt-5">
-				<p className="text-xs font-medium text-muted">Configuration</p>
-				<div className="mt-3 grid gap-3 sm:grid-cols-2">
-					<Field>
-						<FieldLabel htmlFor="github-stack-name">Stack name</FieldLabel>
-						<Input
-							id="github-stack-name"
-							value={stackName}
-							onChange={(event) => setStackName(event.target.value)}
-							placeholder="my-app"
-						/>
-					</Field>
-					<Field>
-						<FieldLabel htmlFor="github-environment-id">Environment</FieldLabel>
-						<Select id="github-environment-id" name="environmentId" required>
-							{environments.map((environment) => (
-								<option key={environment.id} value={environment.id}>
-									{environment.name} ({environment.kind})
-								</option>
-							))}
-						</Select>
-					</Field>
-				</div>
-				<Field className="mt-3">
-					<FieldLabel htmlFor="github-stack-description">Description</FieldLabel>
+			<div className="grid gap-3 sm:grid-cols-2">
+				<Field>
+					<FieldLabel htmlFor="github-stack-name">Stack name</FieldLabel>
 					<Input
-						id="github-stack-description"
-						value={description}
-						onChange={(event) => setDescription(event.target.value)}
-						placeholder="Frontend + API + worker"
+						id="github-stack-name"
+						value={stackName}
+						onChange={(event) => setStackName(event.target.value)}
+						placeholder="my-app"
 					/>
 				</Field>
-				<div className="mt-3 grid gap-3 sm:grid-cols-3">
-					<Field>
-						<FieldLabel htmlFor="github-stack-branch">
-							<GitBranch className="mr-1 inline h-3 w-3" />
-							Branch
-						</FieldLabel>
-						<Input
-							id="github-stack-branch"
-							value={branch}
-							onChange={(event) => {
-								setBranch(event.target.value);
-								setIsLoaded(false);
-							}}
-						/>
-					</Field>
-					<Field>
-						<FieldLabel htmlFor="github-compose-path">Compose path</FieldLabel>
-						<Input
-							id="github-compose-path"
-							value={composePath}
-							onChange={(event) => {
-								setComposePath(event.target.value);
-								setIsLoaded(false);
-								setLoadError("");
-							}}
-							placeholder="compose.yaml"
-						/>
-					</Field>
-					<Field>
-						<FieldLabel htmlFor="github-env-path">Env path</FieldLabel>
-						<Input
-							id="github-env-path"
-							value={envPath}
-							onChange={(event) => {
-								setEnvPath(event.target.value);
-								setIsLoaded(false);
-								setLoadError("");
-							}}
-							placeholder=".env.production"
-						/>
-					</Field>
-				</div>
-
-				{pathSuggestions.length ? (
-					<div className="mt-2 flex flex-wrap items-center gap-1">
-						<span className="text-[10px] uppercase tracking-wider text-muted">Detected:</span>
-						{pathSuggestions.map((path) => (
-							<button
-								key={path}
-								type="button"
-								onClick={() => {
-									setComposePath(path);
-									setIsLoaded(false);
-									void loadRepositoryFiles(path);
-								}}
-								className={`rounded-md px-2 py-0.5 text-[11px] transition-colors ${composePath === path ? "bg-accent/8 font-medium text-accent" : "text-muted hover:text-foreground"}`}
-							>
-								{path}
-							</button>
+				<Field>
+					<FieldLabel htmlFor="github-environment-id">Environment</FieldLabel>
+					<Select id="github-environment-id" name="environmentId" required>
+						{environments.map((environment) => (
+							<option key={environment.id} value={environment.id}>
+								{environment.name} ({environment.kind})
+							</option>
 						))}
-					</div>
-				) : null}
-
-				<div className="mt-3 flex items-center gap-2">
-					<Button
-						type="button"
-						onClick={() => void loadRepositoryFiles()}
-						disabled={!selectedRepository || isPending}
-						size="sm"
-					>
-						{isPending ? "Loading..." : "Load files"}
-					</Button>
-					{isLoaded ? (
-						<span className="inline-flex items-center gap-1.5 text-xs text-success">
-							<Sparkles className="h-3 w-3" />
-							{headSha?.slice(0, 8)}
-						</span>
-					) : null}
-					{loadError ? <p className="text-xs text-danger">{loadError}</p> : null}
-				</div>
-
-				{/* Auto-deploy */}
-				<div className="mt-3 flex items-center gap-3 rounded-lg border border-default/8 px-3 py-2.5">
-					<label className="flex items-center gap-2 text-xs">
-						<input
-							type="checkbox"
-							checked={autoDeployEnabled}
-							onChange={(event) => setAutoDeployEnabled(event.target.checked)}
-						/>
-						<span className="font-medium">Auto-deploy on push</span>
-					</label>
-					{autoDeployEnabled ? (
-						<Input
-							value={autoDeployPaths}
-							onChange={(event) => setAutoDeployPaths(event.target.value)}
-							placeholder="Path filters (optional)"
-							inputSize="sm"
-							className="flex-1 text-xs"
-						/>
-					) : null}
-				</div>
+					</Select>
+				</Field>
 			</div>
 
-			{/* Source review */}
-			<div className="border-t border-default/8 pt-5">
+			<Field>
+				<FieldLabel htmlFor="github-stack-description">Description</FieldLabel>
+				<Input
+					id="github-stack-description"
+					value={description}
+					onChange={(event) => setDescription(event.target.value)}
+					placeholder="Frontend + API + worker"
+				/>
+			</Field>
+
+			<div className="grid gap-3 sm:grid-cols-3">
+				<Field>
+					<FieldLabel htmlFor="github-stack-branch">
+						<GitBranch className="mr-1 inline h-3 w-3" />
+						Branch
+					</FieldLabel>
+					<Input
+						id="github-stack-branch"
+						value={branch}
+						onChange={(event) => {
+							setBranch(event.target.value);
+							setIsLoaded(false);
+						}}
+					/>
+				</Field>
+				<Field>
+					<FieldLabel htmlFor="github-compose-path">Compose path</FieldLabel>
+					<Input
+						id="github-compose-path"
+						value={composePath}
+						onChange={(event) => {
+							setComposePath(event.target.value);
+							setIsLoaded(false);
+							setLoadError("");
+						}}
+						placeholder="compose.yaml"
+					/>
+				</Field>
+				<Field>
+					<FieldLabel htmlFor="github-env-path">Env path</FieldLabel>
+					<Input
+						id="github-env-path"
+						value={envPath}
+						onChange={(event) => {
+							setEnvPath(event.target.value);
+							setIsLoaded(false);
+							setLoadError("");
+						}}
+						placeholder=".env.production"
+					/>
+				</Field>
+			</div>
+
+			{pathSuggestions.length ? (
+				<div className="flex flex-wrap items-center gap-1">
+					<span className="text-[10px] uppercase tracking-wider text-muted">Detected:</span>
+					{pathSuggestions.map((path) => (
+						<button
+							key={path}
+							type="button"
+							onClick={() => {
+								setComposePath(path);
+								setIsLoaded(false);
+								void loadRepositoryFiles(path);
+							}}
+							className={`rounded-md px-2 py-0.5 text-[11px] transition-colors ${composePath === path ? "bg-accent/8 font-medium text-accent" : "text-muted hover:text-foreground"}`}
+						>
+							{path}
+						</button>
+					))}
+				</div>
+			) : null}
+
+			<div className="flex items-center gap-2">
+				<Button
+					type="button"
+					onClick={() => void loadRepositoryFiles()}
+					disabled={!selectedRepository || isPending}
+					size="sm"
+				>
+					{isPending ? "Loading..." : "Load files"}
+				</Button>
+				{loadError ? <p className="text-xs text-danger">{loadError}</p> : null}
+			</div>
+
+			{/* Auto-deploy */}
+			<div className="flex items-center gap-3 rounded-lg border border-default/8 px-3 py-2.5">
+				<label className="flex items-center gap-2 text-xs">
+					<input
+						type="checkbox"
+						checked={autoDeployEnabled}
+						onChange={(event) => setAutoDeployEnabled(event.target.checked)}
+					/>
+					<span className="font-medium">Auto-deploy on push</span>
+				</label>
+				{autoDeployEnabled ? (
+					<Input
+						value={autoDeployPaths}
+						onChange={(event) => setAutoDeployPaths(event.target.value)}
+						placeholder="Path filters (optional)"
+						inputSize="sm"
+						className="flex-1 text-xs"
+					/>
+				) : null}
+			</div>
+
+			{/* Source preview */}
+			<div>
 				<button
 					type="button"
 					onClick={() => setShowEditor(!showEditor)}
@@ -645,24 +783,21 @@ export function StackGitHubForm({
 						</div>
 					</div>
 				) : null}
+			</div>
 
-				{/* Footer */}
-				<div className="mt-4 flex items-center justify-between">
-					<p className="text-xs text-muted">
-						{selectedRepository?.full_name || "Select a repository"}
-					</p>
-					<FormSubmitButton
-						label="Create stack"
-						pendingLabel="Creating..."
-						size="sm"
-						disabled={!canCreateStack}
-						title={
-							canCreateStack
-								? undefined
-								: "Select a repository and set branch + compose path first."
-						}
-					/>
-				</div>
+			{/* Footer */}
+			<div className="flex items-center justify-between border-t border-default/8 pt-4">
+				<Button type="button" variant="ghost" size="sm" onClick={() => setStep("source")}>
+					<ArrowLeft className="h-3 w-3" />
+					Back
+				</Button>
+				<FormSubmitButton
+					label="Create stack"
+					pendingLabel="Creating..."
+					size="sm"
+					disabled={!canCreateStack}
+					title={canCreateStack ? undefined : "Set branch + compose path first."}
+				/>
 			</div>
 		</form>
 	);

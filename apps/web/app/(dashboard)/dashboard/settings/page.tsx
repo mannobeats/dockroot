@@ -1,6 +1,5 @@
 import { updateGlobalSettingsAction } from "@/app/(dashboard)/actions";
 import { FormSubmitButton } from "@/components/form-submit-button";
-import { PageHeader } from "@/components/page-header";
 import { Field, FieldHint, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { MetricCard } from "@/components/ui/metric-card";
@@ -14,9 +13,7 @@ export default async function SettingsPage() {
 	const settings = await getGlobalSettings(userId);
 
 	return (
-		<div className="animate-in space-y-5">
-			<PageHeader title="Settings" description="Global manager configuration" />
-
+		<div className="space-y-5">
 			<Panel padding="md">
 				<form action={updateGlobalSettingsAction} className="space-y-3">
 					<p className="text-sm font-semibold">Manager URL</p>

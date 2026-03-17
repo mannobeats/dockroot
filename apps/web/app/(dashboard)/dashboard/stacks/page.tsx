@@ -10,7 +10,6 @@ import {
 	deployStackAction,
 	destroyStackAction,
 } from "@/app/(dashboard)/actions";
-import { GitHubAppsPanel } from "@/components/github-apps-panel";
 import { PageHeader } from "@/components/page-header";
 import { StackCreateModal } from "@/components/stack-create-modal";
 import { StacksTableWorkspace } from "@/components/stacks-table-workspace";
@@ -28,8 +27,6 @@ export default async function StacksPage({
 }: {
 	searchParams: Promise<{
 		environment?: string;
-		github?: string;
-		githubError?: string;
 		watchStackId?: string;
 	}>;
 }) {
@@ -47,8 +44,6 @@ export default async function StacksPage({
 
 	const trackedCount = stacks.filter((stack) => stack.type === "tracked").length;
 	const runningCount = stacks.filter((stack) => stack.runningCount > 0).length;
-	const githubStatus = params.github || "";
-	const githubError = params.githubError || "";
 
 	return (
 		<div className="animate-in space-y-5">
@@ -69,14 +64,6 @@ export default async function StacksPage({
 						createGitHubStackAction={createGitHubStackAction}
 					/>
 				}
-			/>
-
-			<GitHubAppsPanel
-				initialProviders={githubProviders}
-				initialInstallations={githubInstallations}
-				redirectTo="/dashboard/stacks"
-				initialStatus={githubStatus}
-				initialError={githubError}
 			/>
 
 			<StacksTableWorkspace

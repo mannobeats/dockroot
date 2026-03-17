@@ -18,7 +18,7 @@ export async function GET(request: Request) {
 		redirectTo?: string | null,
 		errorMessage?: string | null,
 	) => {
-		const targetPath = sanitizeInternalRedirectPath(redirectTo || "/dashboard/stacks");
+		const targetPath = sanitizeInternalRedirectPath(redirectTo || "/dashboard/settings/github");
 		const target = new URL(targetPath, request.url);
 		target.searchParams.set("github", status);
 		if (errorMessage) {

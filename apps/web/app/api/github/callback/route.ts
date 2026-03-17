@@ -30,25 +30,25 @@ export async function GET(request: Request) {
 	const providerIdCookie = cookieStore.get("dockroot_github_provider_id")?.value;
 
 	if (!installationId) {
-		return NextResponse.redirect(new URL("/dashboard/stacks?github=missing", request.url));
+		return NextResponse.redirect(new URL("/dashboard/settings/github?github=missing", request.url));
 	}
 
-	let redirectTo = sanitizeInternalRedirectPath(redirectToCookie || "/dashboard/stacks");
+	let redirectTo = sanitizeInternalRedirectPath(redirectToCookie || "/dashboard/settings/github");
 	let providerId: string | null = (providerIdCookie || "").trim() || null;
 
 	if (state) {
 		const parsedState = verifyGitHubAppState(state);
 		if (parsedState.userId !== session.user.id) {
-			return NextResponse.redirect(new URL("/dashboard/stacks?github=denied", request.url));
+			return NextResponse.redirect(new URL("/dashboard/settings/github?github=denied", request.url));
 		}
 		redirectTo = sanitizeInternalRedirectPath(parsedState.redirectTo);
 		providerId = parsedState.providerId?.trim() || providerId;
 	} else if (userIdCookie && userIdCookie !== session.user.id) {
-		return NextResponse.redirect(new URL("/dashboard/stacks?github=denied", request.url));
+		return NextResponse.redirect(new URL("/dashboard/settings/github?github=denied", request.url));
 	}
 
 	if (providerId && !(await getGitHubProviderConfigById(providerId))) {
-		return NextResponse.redirect(new URL("/dashboard/stacks?github=provider-missing", request.url));
+		return NextResponse.redirect(new URL("/dashboard/settings/github?github=provider-missing", request.url));
 	}
 
 	await syncGitHubInstallation({
