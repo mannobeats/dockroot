@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { execFile, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { createServer } from "node:http";
@@ -60,12 +60,28 @@ const SOCKET_IDLE_TIMEOUT_MS = 10 * 60 * 1000;
 
 /** Maximum in-memory runtime action events retained for diagnostics. */
 const MAX_RUNTIME_ACTION_EVENTS = 200;
+const LOG_SESSION_KILL_TIMEOUT_MS = 1_500;
+const SHUTDOWN_TIMEOUT_MS = 10_000;
+const SOCKET_EVENT_RATE_LIMITS = {
+	"terminal:create": { capacity: 4, refillPerSecond: 0.25 },
+	"terminal:input": { capacity: 160, refillPerSecond: 100 },
+	"terminal:resize": { capacity: 24, refillPerSecond: 12 },
+	"terminal:close": { capacity: 16, refillPerSecond: 8 },
+	"logs:subscribe": { capacity: 6, refillPerSecond: 0.5 },
+	"logs:unsubscribe": { capacity: 12, refillPerSecond: 3 },
+};
 
 const wsRejectionCounters = {
 	origin: 0,
 	unauthorized: 0,
 	connectionLimit: 0,
+	rateLimited: 0,
 };
+
+let runtimeMetricsInterval = null;
+let updateSchedulerInterval = null;
+let shutdownPromise = null;
+let shuttingDown = false;
 
 function getSocketRuntimeMetrics() {
 	let authenticatedConnections = 0;
@@ -132,10 +148,14 @@ function emitRuntimeAction(type, payload = {}) {
 			${new Date(event.at)},
 			${new Date(event.at)}
 		)
-	`.catch(() => {
-		// Avoid breaking runtime operations when audit persistence fails.
+	`.catch((error) => {
+		console.error(
+			"[runtime] Failed to persist runtime action event:",
+			error instanceof Error ? error.message : "unknown error",
+		);
 	});
 }
+
 function resolveExecutable(primaryCandidate, fallbackCandidates) {
 	for (const candidate of [primaryCandidate, ...fallbackCandidates]) {
 		if (!candidate) {
@@ -168,29 +188,33 @@ function getTrustedOrigins() {
 	return undefined;
 }
 
-function getCorsConfig() {
-	const origins = getTrustedOrigins();
+function isTrustedOrigin(requestOrigin) {
+	const origin = String(requestOrigin || "").trim();
+	if (!origin) {
+		return dev;
+	}
 
-	if (origins) {
-		return { origin: origins, credentials: true };
+	const configuredOrigins = getTrustedOrigins();
+	if (configuredOrigins?.length) {
+		return configuredOrigins.includes(origin);
 	}
 
 	if (!dev) {
-		console.warn(
-			"[socket] No trusted origins configured; denying cross-origin socket connections in production.",
-		);
-		return { origin: false, credentials: true };
+		return false;
 	}
 
-	const localDevOrigins = [
-		`http://localhost:${port}`,
-		`http://127.0.0.1:${port}`,
-		"http://localhost:3000",
-		"http://127.0.0.1:3000",
-	];
+	return (
+		origin === `http://localhost:${port}` ||
+		origin === `http://127.0.0.1:${port}` ||
+		origin === "http://localhost:3000" ||
+		origin === "http://127.0.0.1:3000"
+	);
+}
+
+function getCorsConfig() {
 	return {
 		origin: (requestOrigin, callback) => {
-			if (!requestOrigin || localDevOrigins.includes(requestOrigin)) {
+			if (isTrustedOrigin(requestOrigin)) {
 				callback(null, true);
 				return;
 			}
@@ -202,6 +226,24 @@ function getCorsConfig() {
 
 function isPrivilegedRole(role) {
 	return role === "owner" || role === "admin";
+}
+
+function compareInternalToken(candidate) {
+	const expected = String(process.env.DOCKROOT_TOKEN_PEPPER || "");
+	const received = String(candidate || "");
+	if (!expected || !received) {
+		return false;
+	}
+	const expectedBuffer = Buffer.from(expected, "utf8");
+	const receivedBuffer = Buffer.from(received, "utf8");
+	if (expectedBuffer.length !== receivedBuffer.length) {
+		return false;
+	}
+	return timingSafeEqual(expectedBuffer, receivedBuffer);
+}
+
+function isInternalRequestAuthorized(req) {
+	return compareInternalToken(req.headers["x-dockroot-internal-token"]);
 }
 
 function getAppBaseUrl() {
@@ -243,6 +285,22 @@ function sendJson(res, statusCode, body) {
 	res.end(JSON.stringify(body));
 }
 
+function withTimeout(promise, timeoutMs, label) {
+	let timeoutId = null;
+	const timeoutPromise = new Promise((_, reject) => {
+		timeoutId = setTimeout(() => {
+			reject(new Error(`${label} timed out after ${timeoutMs}ms.`));
+		}, timeoutMs);
+		timeoutId.unref?.();
+	});
+
+	return Promise.race([promise, timeoutPromise]).finally(() => {
+		if (timeoutId) {
+			clearTimeout(timeoutId);
+		}
+	});
+}
+
 async function getSessionFromSocket(socket) {
 	const cookie = socket.request.headers.cookie;
 
@@ -273,6 +331,150 @@ async function getSessionFromSocket(socket) {
 				? payload.user.role
 				: "member",
 	};
+}
+
+async function requestTerminalApiWithCookie(authCookie, path, init = {}) {
+	const response = await fetch(`${getAppBaseUrl()}${path}`, {
+		...init,
+		headers: {
+			accept: "application/json",
+			...(authCookie ? { cookie: authCookie } : {}),
+			...(init.headers || {}),
+		},
+		cache: "no-store",
+	});
+	const payload = await response.json().catch(() => ({}));
+	return { ok: response.ok, payload };
+}
+
+async function resolveOwnedEnvironmentId(userId, environmentId) {
+	const normalized =
+		typeof environmentId === "string" && environmentId.trim() ? environmentId.trim() : "";
+	if (!normalized) {
+		return "";
+	}
+
+	const rows = await sql`
+		select id
+		from environments
+		where id = ${normalized}
+		  and created_by_user_id = ${userId}
+		limit 1
+	`;
+
+	return rows[0]?.id ? String(rows[0].id) : null;
+}
+
+function consumeSocketRateLimit(socket, eventName, cost = 1) {
+	const rule = SOCKET_EVENT_RATE_LIMITS[eventName];
+	if (!rule) {
+		return true;
+	}
+
+	const now = Date.now();
+	const key = `rate:${eventName}`;
+	const state = socket.data[key] || {
+		tokens: rule.capacity,
+		updatedAt: now,
+	};
+	const elapsedSeconds = Math.max(0, (now - state.updatedAt) / 1000);
+	const replenished = Math.min(rule.capacity, state.tokens + elapsedSeconds * rule.refillPerSecond);
+	const nextState = {
+		tokens: replenished,
+		updatedAt: now,
+	};
+
+	if (nextState.tokens < cost) {
+		socket.data[key] = nextState;
+		wsRejectionCounters.rateLimited += 1;
+		return false;
+	}
+
+	nextState.tokens -= cost;
+	socket.data[key] = nextState;
+	return true;
+}
+
+async function closeTrackedTerminalSession(sessionId, options = {}) {
+	const { skipBackendClose = false } = options;
+	const session = terminalSessions.get(sessionId);
+	if (!session) {
+		return;
+	}
+
+	terminalSessions.delete(sessionId);
+	if (session.idleTimer) {
+		clearTimeout(session.idleTimer);
+		session.idleTimer = null;
+	}
+	if (session.pollAbort) {
+		session.pollAbort.abort();
+	}
+
+	if (session.kind === "proxy" && !skipBackendClose) {
+		const environmentQuery = session.environmentId
+			? `?environmentId=${encodeURIComponent(session.environmentId)}`
+			: "";
+		try {
+			await requestTerminalApiWithCookie(
+				session.authCookie,
+				`/api/runtime/terminal/${encodeURIComponent(session.backendSessionId)}${environmentQuery}`,
+				{ method: "DELETE" },
+			);
+		} catch {
+			// Local state is already cleaned up; ignore backend close failures.
+		}
+	}
+}
+
+function teardownLogProcess(processEntry, signal = "SIGTERM") {
+	if (!processEntry || processEntry.cleanedUp) {
+		return;
+	}
+
+	processEntry.cleanedUp = true;
+	if (processEntry.forceKillTimer) {
+		clearTimeout(processEntry.forceKillTimer);
+		processEntry.forceKillTimer = null;
+	}
+	processEntry.child.stdout?.off("data", processEntry.onStdout);
+	processEntry.child.stderr?.off("data", processEntry.onStderr);
+	processEntry.child.off("close", processEntry.onClose);
+	processEntry.child.off("error", processEntry.onError);
+
+	if (!processEntry.closed) {
+		try {
+			processEntry.child.kill(signal);
+		} catch {
+			// Child may already be gone.
+		}
+
+		if (signal === "SIGTERM") {
+			processEntry.forceKillTimer = setTimeout(() => {
+				if (processEntry.closed) {
+					return;
+				}
+				try {
+					processEntry.child.kill("SIGKILL");
+				} catch {
+					// Child may already be gone.
+				}
+			}, LOG_SESSION_KILL_TIMEOUT_MS);
+			processEntry.forceKillTimer.unref?.();
+		}
+	}
+}
+
+function closeTrackedLogSession(sessionId) {
+	const session = logSessions.get(sessionId);
+	if (!session) {
+		return;
+	}
+
+	logSessions.delete(sessionId);
+	for (const processEntry of session.processes) {
+		teardownLogProcess(processEntry);
+	}
 }
 
 async function canAccessStackRoom(userId, role, room) {
@@ -450,6 +652,11 @@ async function getDockerRuntimeMetrics() {
 await app.prepare();
 
 const server = createServer(async (req, res) => {
+	if (shuttingDown && req.url !== "/api/health") {
+		sendJson(res, 503, { error: "Server is shutting down." });
+		return;
+	}
+
 	if (req.url) {
 		const url = new URL(req.url, getAppBaseUrl());
 		if (url.pathname === "/api/health") {
@@ -457,7 +664,7 @@ const server = createServer(async (req, res) => {
 			return;
 		}
 		if (url.pathname === "/internal/ws-metrics") {
-			if (req.headers["x-dockroot-internal-token"] !== process.env.DOCKROOT_TOKEN_PEPPER) {
+			if (!isInternalRequestAuthorized(req)) {
 				sendJson(res, 403, { error: "Forbidden" });
 				return;
 			}
@@ -465,7 +672,7 @@ const server = createServer(async (req, res) => {
 			return;
 		}
 		if (url.pathname === "/internal/runtime-actions") {
-			if (req.headers["x-dockroot-internal-token"] !== process.env.DOCKROOT_TOKEN_PEPPER) {
+			if (!isInternalRequestAuthorized(req)) {
 				sendJson(res, 403, { error: "Forbidden" });
 				return;
 			}
@@ -476,7 +683,7 @@ const server = createServer(async (req, res) => {
 			return;
 		}
 		if (url.pathname === "/internal/local-terminal/sessions") {
-			if (req.headers["x-dockroot-internal-token"] !== process.env.DOCKROOT_TOKEN_PEPPER) {
+			if (!isInternalRequestAuthorized(req)) {
 				sendJson(res, 403, { error: "Forbidden" });
 				return;
 			}
@@ -499,7 +706,7 @@ const server = createServer(async (req, res) => {
 
 		const sessionMatch = url.pathname.match(/^\/internal\/local-terminal\/sessions\/([^/]+)$/);
 		if (sessionMatch) {
-			if (req.headers["x-dockroot-internal-token"] !== process.env.DOCKROOT_TOKEN_PEPPER) {
+			if (!isInternalRequestAuthorized(req)) {
 				sendJson(res, 403, { error: "Forbidden" });
 				return;
 			}
@@ -567,13 +774,8 @@ globalThis.__dockroot_get_ws_metrics = getSocketRuntimeMetrics;
 
 io.use(async (socket, nextMiddleware) => {
 	try {
-		const trustedOrigins = getTrustedOrigins();
 		const requestOrigin = String(socket.request.headers.origin || "").trim();
-		if (
-			trustedOrigins &&
-			requestOrigin &&
-			!trustedOrigins.some((origin) => origin === requestOrigin)
-		) {
+		if (requestOrigin && !isTrustedOrigin(requestOrigin)) {
 			wsRejectionCounters.origin += 1;
 			nextMiddleware(new Error("Socket origin denied."));
 			return;
@@ -617,17 +819,7 @@ io.on("connection", (socket) => {
 	});
 
 	async function requestTerminalApi(path, init = {}) {
-		const response = await fetch(`${getAppBaseUrl()}${path}`, {
-			...init,
-			headers: {
-				accept: "application/json",
-				cookie: authCookie,
-				...(init.headers || {}),
-			},
-			cache: "no-store",
-		});
-		const payload = await response.json().catch(() => ({}));
-		return { ok: response.ok, payload };
+		return requestTerminalApiWithCookie(authCookie, path, init);
 	}
 
 	function scheduleTerminalIdleTimeout(sessionId) {
@@ -646,52 +838,9 @@ io.on("connection", (socket) => {
 				sessionId,
 				exitCode: -1,
 			});
-			void closeTerminalSession(sessionId);
+			void closeTrackedTerminalSession(sessionId);
 		}, SOCKET_IDLE_TIMEOUT_MS);
 		session.idleTimer.unref?.();
-	}
-
-	async function closeTerminalSession(sessionId, options = {}) {
-		const { skipBackendClose = false } = options;
-		const session = terminalSessions.get(sessionId);
-		if (!session) {
-			return;
-		}
-
-		terminalSessions.delete(sessionId);
-		if (session.idleTimer) {
-			clearTimeout(session.idleTimer);
-			session.idleTimer = null;
-		}
-		if (session.pollAbort) {
-			session.pollAbort.abort();
-		}
-
-		if (session.kind === "proxy" && !skipBackendClose) {
-			const environmentQuery = session.environmentId
-				? `?environmentId=${encodeURIComponent(session.environmentId)}`
-				: "";
-			try {
-				await requestTerminalApi(
-					`/api/runtime/terminal/${encodeURIComponent(session.backendSessionId)}${environmentQuery}`,
-					{ method: "DELETE" },
-				);
-			} catch {
-				// Session state is already cleaned up locally; ignore backend close failures.
-			}
-		}
-	}
-
-	function closeLogSession(sessionId) {
-		const session = logSessions.get(sessionId);
-		if (!session) {
-			return;
-		}
-
-		for (const process of session.processes) {
-			process.kill("SIGTERM");
-		}
-		logSessions.delete(sessionId);
 	}
 
 	socket.on("room:join", async (room) => {
@@ -712,14 +861,41 @@ io.on("connection", (socket) => {
 
 	socket.on("terminal:create", async (payload, callback) => {
 		try {
+			if (!consumeSocketRateLimit(socket, "terminal:create")) {
+				callback?.({ error: "Too many terminal requests. Please wait a moment." });
+				emitRuntimeAction("terminal.create.failed", {
+					userId: socket.data.userId,
+					socketId: socket.id,
+					reason: "rate_limited",
+					environmentId: payload?.environmentId,
+				});
+				return;
+			}
+
 			if (!payload?.containerId) {
 				callback?.({ error: "containerId is required." });
-					emitRuntimeAction("terminal.create.failed", {
-						userId: socket.data.userId,
-						socketId: socket.id,
-						reason: "missing_container_id",
-						environmentId: payload?.environmentId,
-					});
+				emitRuntimeAction("terminal.create.failed", {
+					userId: socket.data.userId,
+					socketId: socket.id,
+					reason: "missing_container_id",
+					environmentId: payload?.environmentId,
+				});
+				return;
+			}
+
+			const resolvedEnvironmentId = await resolveOwnedEnvironmentId(
+				socket.data.userId,
+				payload?.environmentId,
+			);
+			if (resolvedEnvironmentId === null) {
+				callback?.({ error: "Environment not found." });
+				emitRuntimeAction("terminal.create.failed", {
+					userId: socket.data.userId,
+					socketId: socket.id,
+					containerId: payload.containerId,
+					reason: "invalid_environment",
+					environmentId: payload?.environmentId,
+				});
 				return;
 			}
 
@@ -730,19 +906,19 @@ io.on("connection", (socket) => {
 					userSessionCount += 1;
 				}
 			}
-				if (userSessionCount >= MAX_SOCKET_SESSIONS_PER_USER) {
-					callback?.({
-						error: "Too many active terminal sessions. Close an existing session first.",
-					});
-					emitRuntimeAction("terminal.create.failed", {
-						userId: socket.data.userId,
-						socketId: socket.id,
-						containerId: payload.containerId,
-						reason: "session_limit",
-						environmentId: payload.environmentId,
-					});
-					return;
-				}
+			if (userSessionCount >= MAX_SOCKET_SESSIONS_PER_USER) {
+				callback?.({
+					error: "Too many active terminal sessions. Close an existing session first.",
+				});
+				emitRuntimeAction("terminal.create.failed", {
+					userId: socket.data.userId,
+					socketId: socket.id,
+					containerId: payload.containerId,
+					reason: "session_limit",
+					environmentId: resolvedEnvironmentId || null,
+				});
+				return;
+			}
 
 			const createResult = await requestTerminalApi("/api/runtime/terminal", {
 				method: "POST",
@@ -752,7 +928,7 @@ io.on("connection", (socket) => {
 				body: JSON.stringify({
 					target: "container",
 					containerId: payload.containerId,
-					environmentId: payload.environmentId,
+					environmentId: resolvedEnvironmentId || undefined,
 					shell: payload.shell,
 					customShell: payload.customShell,
 					cols: clampTerminalColumns(payload?.cols),
@@ -761,47 +937,45 @@ io.on("connection", (socket) => {
 			});
 
 			const backendSessionId = String(createResult.payload?.sessionId || "");
-				if (!createResult.ok || !backendSessionId) {
-					callback?.({
-						error:
-							String(createResult.payload?.error || "").trim() ||
-							"Unable to start terminal session.",
-					});
-					emitRuntimeAction("terminal.create.failed", {
-						userId: socket.data.userId,
-						socketId: socket.id,
-						containerId: payload.containerId,
-						reason: "backend_create_failed",
-						environmentId: payload.environmentId,
-					});
-					return;
-				}
+			if (!createResult.ok || !backendSessionId) {
+				callback?.({
+					error:
+						String(createResult.payload?.error || "").trim() ||
+						"Unable to start terminal session.",
+				});
+				emitRuntimeAction("terminal.create.failed", {
+					userId: socket.data.userId,
+					socketId: socket.id,
+					containerId: payload.containerId,
+					reason: "backend_create_failed",
+					environmentId: resolvedEnvironmentId || null,
+				});
+				return;
+			}
 
 			const sessionId = randomUUID();
 			const pollAbort = new AbortController();
 			terminalSessions.set(sessionId, {
 				kind: "proxy",
 				backendSessionId,
-				environmentId:
-					typeof payload?.environmentId === "string" && payload.environmentId.trim()
-						? payload.environmentId.trim()
-						: "",
+				environmentId: resolvedEnvironmentId || "",
 				socketId: socket.id,
 				userId: socket.data.userId,
+				authCookie,
 				idleTimer: null,
 				pollAbort,
 				cursor: 0,
 				writeQueue: Promise.resolve(),
 			});
 
-				callback?.({ sessionId });
-				emitRuntimeAction("terminal.create.succeeded", {
-					userId: socket.data.userId,
-					socketId: socket.id,
-					containerId: payload.containerId,
-					sessionId,
-					environmentId: payload.environmentId,
-				});
+			callback?.({ sessionId });
+			emitRuntimeAction("terminal.create.succeeded", {
+				userId: socket.data.userId,
+				socketId: socket.id,
+				containerId: payload.containerId,
+				sessionId,
+				environmentId: resolvedEnvironmentId || null,
+			});
 
 			const poll = async () => {
 				try {
@@ -829,7 +1003,7 @@ io.on("connection", (socket) => {
 								sessionId,
 								exitCode: -2,
 							});
-							await closeTerminalSession(sessionId);
+							await closeTrackedTerminalSession(sessionId);
 							return;
 						}
 
@@ -849,7 +1023,7 @@ io.on("connection", (socket) => {
 								sessionId,
 								exitCode: Number(readResult.payload?.exitCode ?? 0),
 							});
-							await closeTerminalSession(sessionId, { skipBackendClose: true });
+							await closeTrackedTerminalSession(sessionId, { skipBackendClose: true });
 							return;
 						}
 					}
@@ -861,7 +1035,7 @@ io.on("connection", (socket) => {
 						sessionId,
 						exitCode: -2,
 					});
-					await closeTerminalSession(sessionId);
+					await closeTrackedTerminalSession(sessionId);
 				}
 			};
 
@@ -882,6 +1056,16 @@ io.on("connection", (socket) => {
 	});
 
 	socket.on("terminal:input", (payload) => {
+		if (!consumeSocketRateLimit(socket, "terminal:input")) {
+			emitRuntimeAction("terminal.input.dropped", {
+				userId: socket.data.userId,
+				socketId: socket.id,
+				sessionId: payload?.sessionId,
+				reason: "rate_limited",
+			});
+			return;
+		}
+
 		const session = terminalSessions.get(payload?.sessionId);
 		if (
 			session?.socketId === socket.id &&
@@ -913,6 +1097,10 @@ io.on("connection", (socket) => {
 	});
 
 	socket.on("terminal:resize", (payload) => {
+		if (!consumeSocketRateLimit(socket, "terminal:resize")) {
+			return;
+		}
+
 		const session = terminalSessions.get(payload?.sessionId);
 		if (session?.socketId === socket.id && session.kind === "proxy") {
 			const environmentQuery = session.environmentId
@@ -936,6 +1124,10 @@ io.on("connection", (socket) => {
 	});
 
 	socket.on("terminal:close", (payload) => {
+		if (!consumeSocketRateLimit(socket, "terminal:close")) {
+			return;
+		}
+
 		const session = terminalSessions.get(payload?.sessionId);
 		if (session?.socketId === socket.id) {
 			emitRuntimeAction("terminal.close", {
@@ -944,14 +1136,40 @@ io.on("connection", (socket) => {
 				sessionId: payload.sessionId,
 				environmentId: session.environmentId || null,
 			});
-			void closeTerminalSession(payload.sessionId);
+			void closeTrackedTerminalSession(payload.sessionId);
 		}
 	});
 
 	socket.on("logs:subscribe", async (payload, callback) => {
 		try {
+			if (!consumeSocketRateLimit(socket, "logs:subscribe")) {
+				callback?.({ error: "Too many log stream requests. Please wait a moment." });
+				emitRuntimeAction("logs.subscribe.failed", {
+					userId: socket.data.userId,
+					socketId: socket.id,
+					reason: "rate_limited",
+					environmentId: payload?.environmentId,
+				});
+				return;
+			}
+
+			const resolvedEnvironmentId = await resolveOwnedEnvironmentId(
+				socket.data.userId,
+				payload?.environmentId,
+			);
+			if (resolvedEnvironmentId === null) {
+				callback?.({ error: "Environment not found." });
+				emitRuntimeAction("logs.subscribe.failed", {
+					userId: socket.data.userId,
+					socketId: socket.id,
+					reason: "invalid_environment",
+					environmentId: payload?.environmentId,
+				});
+				return;
+			}
+
 			const sessionId = payload?.sessionId || randomUUID();
-			closeLogSession(sessionId);
+			closeTrackedLogSession(sessionId);
 
 			const requestedContainerIds = Array.isArray(payload?.containerIds)
 				? payload.containerIds.filter((value) => typeof value === "string" && value.length > 0)
@@ -964,18 +1182,18 @@ io.on("connection", (socket) => {
 				}
 			}
 
-				if (!allowedContainerIds.length) {
-					callback?.({
-						error: "No accessible containers selected for log streaming.",
-					});
-					emitRuntimeAction("logs.subscribe.failed", {
-						userId: socket.data.userId,
-						socketId: socket.id,
-						reason: "no_accessible_containers",
-						environmentId: payload?.environmentId,
-					});
-					return;
-				}
+			if (!allowedContainerIds.length) {
+				callback?.({
+					error: "No accessible containers selected for log streaming.",
+				});
+				emitRuntimeAction("logs.subscribe.failed", {
+					userId: socket.data.userId,
+					socketId: socket.id,
+					reason: "no_accessible_containers",
+					environmentId: resolvedEnvironmentId || null,
+				});
+				return;
+			}
 			const processes = allowedContainerIds.map((containerId) => {
 				const child = spawn(
 					dockerBinary,
@@ -985,65 +1203,98 @@ io.on("connection", (socket) => {
 					},
 				);
 
-				const forward = (data) => {
+				const processEntry = {
+					child,
+					forceKillTimer: null,
+					closed: false,
+					cleanedUp: false,
+					onStdout: (data) => {
+						socket.emit("logs:data", {
+							sessionId,
+							containerId,
+							chunk: data.toString(),
+						});
+					},
+					onStderr: (data) => {
+						socket.emit("logs:data", {
+							sessionId,
+							containerId,
+							chunk: data.toString(),
+						});
+					},
+					onClose: (code) => {
+						processEntry.closed = true;
+						if (processEntry.forceKillTimer) {
+							clearTimeout(processEntry.forceKillTimer);
+							processEntry.forceKillTimer = null;
+						}
+						teardownLogProcess(processEntry, "SIGKILL");
+						socket.emit("logs:exit", {
+							sessionId,
+							containerId,
+							code,
+						});
+					},
+				};
+
+				child.stdout.on("data", processEntry.onStdout);
+				child.stderr.on("data", processEntry.onStderr);
+				child.on("close", processEntry.onClose);
+				processEntry.onError = () => {
 					socket.emit("logs:data", {
 						sessionId,
 						containerId,
-						chunk: data.toString(),
+						chunk: "Unable to stream logs.\n",
 					});
 				};
+				child.on("error", processEntry.onError);
 
-				child.stdout.on("data", forward);
-				child.stderr.on("data", forward);
-				child.on("close", (code) => {
-					socket.emit("logs:exit", {
-						sessionId,
-						containerId,
-						code,
-					});
-				});
-
-				return child;
+				return processEntry;
 			});
 
 			logSessions.set(sessionId, {
 				processes,
 				socketId: socket.id,
+				environmentId: resolvedEnvironmentId || "",
 			});
 
-				callback?.({
-					sessionId,
-				});
-				emitRuntimeAction("logs.subscribe.succeeded", {
-					userId: socket.data.userId,
-					socketId: socket.id,
-					sessionId,
-					containerCount: allowedContainerIds.length,
-					environmentId: payload?.environmentId,
-				});
-			} catch (error) {
-				callback?.({
-					error: error instanceof Error ? error.message : "Unable to start log stream.",
-				});
-				emitRuntimeAction("logs.subscribe.failed", {
-					userId: socket.data.userId,
-					socketId: socket.id,
-					reason: "unexpected_error",
-					environmentId: payload?.environmentId,
-				});
-			}
-		});
+			callback?.({
+				sessionId,
+			});
+			emitRuntimeAction("logs.subscribe.succeeded", {
+				userId: socket.data.userId,
+				socketId: socket.id,
+				sessionId,
+				containerCount: allowedContainerIds.length,
+				environmentId: resolvedEnvironmentId || null,
+			});
+		} catch (error) {
+			callback?.({
+				error: error instanceof Error ? error.message : "Unable to start log stream.",
+			});
+			emitRuntimeAction("logs.subscribe.failed", {
+				userId: socket.data.userId,
+				socketId: socket.id,
+				reason: "unexpected_error",
+				environmentId: payload?.environmentId,
+			});
+		}
+	});
 
 	socket.on("logs:unsubscribe", (payload) => {
+		if (!consumeSocketRateLimit(socket, "logs:unsubscribe")) {
+			return;
+		}
+
 		const session = logSessions.get(payload?.sessionId);
 		if (session?.socketId === socket.id) {
 			emitRuntimeAction("logs.unsubscribe", {
 				userId: socket.data.userId,
 				socketId: socket.id,
 				sessionId: payload.sessionId,
-				environmentId: null,
+				environmentId: session.environmentId || null,
 			});
-			closeLogSession(payload.sessionId);
+			closeTrackedLogSession(payload.sessionId);
 		}
 	});
 
@@ -1056,19 +1307,74 @@ io.on("connection", (socket) => {
 		});
 		for (const [sessionId, session] of terminalSessions.entries()) {
 			if (session.socketId === socket.id) {
-				void closeTerminalSession(sessionId);
+				void closeTrackedTerminalSession(sessionId);
 			}
 		}
 
 		for (const [sessionId, session] of logSessions.entries()) {
 			if (session.socketId === socket.id) {
-				closeLogSession(sessionId);
+				closeTrackedLogSession(sessionId);
 			}
 		}
 	});
 });
 
-setInterval(emitRuntimeMetrics(), 5000);
+async function shutdownServer(signal) {
+	if (shutdownPromise) {
+		return shutdownPromise;
+	}
+
+	shuttingDown = true;
+	console.log(`[shutdown] Received ${signal}; draining Dockroot runtime services...`);
+	shutdownPromise = (async () => {
+		if (runtimeMetricsInterval) {
+			clearInterval(runtimeMetricsInterval);
+			runtimeMetricsInterval = null;
+		}
+		if (updateSchedulerInterval) {
+			clearInterval(updateSchedulerInterval);
+			updateSchedulerInterval = null;
+		}
+
+		const terminalClosures = Array.from(terminalSessions.keys(), (sessionId) =>
+			closeTrackedTerminalSession(sessionId),
+		);
+		for (const sessionId of Array.from(logSessions.keys())) {
+			closeTrackedLogSession(sessionId);
+		}
+
+		await Promise.allSettled(terminalClosures);
+
+		await withTimeout(
+			new Promise((resolveClose) => {
+				io.close(() => resolveClose());
+			}),
+			SHUTDOWN_TIMEOUT_MS,
+			"Socket.IO shutdown",
+		);
+		await withTimeout(
+			new Promise((resolveClose) => {
+				server.close(() => resolveClose());
+			}),
+			SHUTDOWN_TIMEOUT_MS,
+			"HTTP server shutdown",
+		);
+		try {
+			await withTimeout(sql.end({ timeout: 5 }), SHUTDOWN_TIMEOUT_MS, "Database shutdown");
+		} catch (error) {
+			console.error(
+				"[shutdown] Failed to close database pool cleanly:",
+				error instanceof Error ? error.message : "unknown error",
+			);
+		}
+		console.log("[shutdown] Dockroot shutdown complete.");
+	})();
+
+	return shutdownPromise;
+}
+
+runtimeMetricsInterval = setInterval(emitRuntimeMetrics(), 5000);
+runtimeMetricsInterval.unref?.();
 
 const updateSchedulerWorkerId = `dockroot-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -1097,9 +1403,26 @@ async function tickContainerUpdateScheduler() {
 	}
 }
 
-setInterval(() => {
+updateSchedulerInterval = setInterval(() => {
 	void tickContainerUpdateScheduler();
-}, 30_000).unref?.();
+}, 30_000);
+updateSchedulerInterval.unref?.();
+
+for (const signal of ["SIGINT", "SIGTERM"]) {
+	process.once(signal, () => {
+		void shutdownServer(signal)
+			.then(() => {
+				process.exit(0);
+			})
+			.catch((error) => {
+				console.error(
+					`[shutdown] Failed while handling ${signal}:`,
+					error instanceof Error ? error.message : "unknown error",
+				);
+				process.exit(1);
+			});
+	});
+}
 
 server.listen(port, hostname, () => {
 	console.log(`> Ready on http://${hostname}:${port}`);

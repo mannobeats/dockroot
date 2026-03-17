@@ -20,7 +20,11 @@ function terminalErrorStatus(error: unknown) {
 	) {
 		return 403;
 	}
-	if (error.message === "Terminal session not found." || error.message === "Container not found") {
+	if (
+		error.message === "Terminal session not found." ||
+		error.message === "Container not found" ||
+		error.message === "Environment not found."
+	) {
 		return 404;
 	}
 	return 500;

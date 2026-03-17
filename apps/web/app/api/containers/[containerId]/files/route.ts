@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireUserSession } from "@/lib/authorization";
+import { isPrivilegedRole, requireUserSession } from "@/lib/authorization";
 import {
 	browseContainerPathForEnvironment,
 	deleteContainerPathForEnvironment,
@@ -7,6 +7,29 @@ import {
 	writeContainerFileForEnvironment,
 } from "@/lib/environment-runtime";
 import { requireAccessibleContainerForUser } from "@/lib/runtime-access";
+
+function fileApiErrorStatus(error: unknown) {
+	if (!(error instanceof Error)) {
+		return 500;
+	}
+
+	if (error.message === "Unauthorized" || error.message === "Forbidden") {
+		return 403;
+	}
+	if (error.message === "Environment not found.") {
+		return 404;
+	}
+	if (
+		error.message.includes("Container path is required") ||
+		error.message.includes("Container paths must be absolute") ||
+		error.message.includes("Refusing to target the container root directory") ||
+		error.message.includes("Refusing to modify container")
+	) {
+		return 400;
+	}
+
+	return 500;
+}
 
 export async function GET(
 	request: Request,
@@ -30,8 +53,11 @@ export async function GET(
 			environmentId,
 		);
 		return NextResponse.json(result.browser);
-	} catch (_error) {
-		return NextResponse.json({ error: "Unable to browse files." }, { status: 500 });
+	} catch (error) {
+		return NextResponse.json(
+			{ error: error instanceof Error ? error.message : "Unable to browse files." },
+			{ status: fileApiErrorStatus(error) },
+		);
 	}
 }
 
@@ -49,6 +75,12 @@ export async function PUT(
 			role: auth.role,
 			environmentId,
 		});
+		if (!isPrivilegedRole(auth.role)) {
+			return NextResponse.json(
+				{ error: "Privileged access is required to modify container files." },
+				{ status: 403 },
+			);
+		}
 		const body = (await request.json()) as { path?: string; content?: string };
 
 		if (!body.path) {
@@ -63,8 +95,11 @@ export async function PUT(
 			environmentId,
 		);
 		return NextResponse.json({ ok: result.ok, output: result.stderr || result.stdout });
-	} catch (_error) {
-		return NextResponse.json({ error: "Unable to save file." }, { status: 500 });
+	} catch (error) {
+		return NextResponse.json(
+			{ error: error instanceof Error ? error.message : "Unable to save file." },
+			{ status: fileApiErrorStatus(error) },
+		);
 	}
 }
 
@@ -82,6 +117,12 @@ export async function POST(
 			role: auth.role,
 			environmentId,
 		});
+		if (!isPrivilegedRole(auth.role)) {
+			return NextResponse.json(
+				{ error: "Privileged access is required to modify container files." },
+				{ status: 403 },
+			);
+		}
 		const formData = await request.formData();
 		const targetDirectory = String(formData.get("path") || "").trim();
 		const file = formData.get("file");
@@ -100,8 +141,11 @@ export async function POST(
 			environmentId,
 		);
 		return NextResponse.json({ ok: result.ok, output: result.stderr || result.stdout });
-	} catch (_error) {
-		return NextResponse.json({ error: "Unable to upload file." }, { status: 500 });
+	} catch (error) {
+		return NextResponse.json(
+			{ error: error instanceof Error ? error.message : "Unable to upload file." },
+			{ status: fileApiErrorStatus(error) },
+		);
 	}
 }
 
@@ -119,6 +163,12 @@ export async function DELETE(
 			role: auth.role,
 			environmentId,
 		});
+		if (!isPrivilegedRole(auth.role)) {
+			return NextResponse.json(
+				{ error: "Privileged access is required to modify container files." },
+				{ status: 403 },
+			);
+		}
 		const body = (await request.json()) as { path?: string };
 
 		if (!body.path) {
@@ -132,7 +182,10 @@ export async function DELETE(
 			environmentId,
 		);
 		return NextResponse.json({ ok: result.ok, output: result.stderr || result.stdout });
-	} catch (_error) {
-		return NextResponse.json({ error: "Unable to delete path." }, { status: 500 });
+	} catch (error) {
+		return NextResponse.json(
+			{ error: error instanceof Error ? error.message : "Unable to delete path." },
+			{ status: fileApiErrorStatus(error) },
+		);
 	}
 }

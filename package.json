@@ -15,6 +15,7 @@
 		"env:check": "node scripts/with-runtime-env.mjs -- node scripts/runtime-env.mjs",
 		"env:check:local": "node scripts/with-runtime-env.mjs -- node scripts/runtime-env.mjs",
 		"env:check:prod": "node scripts/runtime-env.mjs --production --compose",
+		"secrets:rotate": "node scripts/rotate-runtime-secrets.mjs",
 		"start": "node scripts/with-runtime-env.mjs -- node server.mjs",
 		"lint": "biome check .",
 		"lint:fix": "biome check --write .",

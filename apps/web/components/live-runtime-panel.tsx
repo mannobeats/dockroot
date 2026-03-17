@@ -2,21 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Area, AreaChart, CartesianGrid, Tooltip, XAxis, YAxis } from "recharts";
-import { io, type Socket } from "socket.io-client";
 import { ChartFrame } from "@/components/chart-frame";
 import { Panel } from "@/components/ui/panel";
-
-let socket: Socket | null = null;
-
-function getSocket() {
-	if (!socket) {
-		socket = io({
-			path: "/socket.io",
-		});
-	}
-
-	return socket;
-}
+import { getSocket } from "@/lib/socket-client";
 
 function parsePercent(value: string | undefined) {
 	return Number.parseFloat((value || "0").replace("%", "")) || 0;

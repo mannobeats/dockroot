@@ -42,6 +42,8 @@ async function getEnvironmentRecord(environmentId: string | undefined, userId: s
 		if (environment) {
 			return environment;
 		}
+
+		throw new Error("Environment not found.");
 	}
 
 	const fallback = await ensureDefaultLocalEnvironment(userId);

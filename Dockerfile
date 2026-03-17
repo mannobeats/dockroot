@@ -2,6 +2,7 @@ FROM node:22-alpine AS base
 WORKDIR /app
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
+RUN addgroup -S app && adduser -S -D -H -G app app
 RUN corepack enable && corepack prepare pnpm@10.30.3 --activate
 
 # Install dependencies
@@ -35,6 +36,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN apk add --no-cache docker-cli docker-cli-compose
+RUN mkdir -p /var/lib/dockroot && chown -R app:app /app /var/lib/dockroot
 
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps ./apps
@@ -52,5 +54,6 @@ RUN chmod +x ./scripts/start.sh
 EXPOSE 3080
 ENV PORT=3080
 ENV HOSTNAME="0.0.0.0"
+USER app
 
 CMD ["./scripts/start.sh"]

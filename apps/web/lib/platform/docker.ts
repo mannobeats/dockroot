@@ -43,6 +43,16 @@ type ComposeProjectExport = {
 };
 
 const DEFAULT_DOCKER_COMMAND_TIMEOUT_MS = 60_000;
+const DEFAULT_CONTAINER_MUTATION_ROOTS = [
+	"/app",
+	"/workspace",
+	"/config",
+	"/tmp",
+	"/var/www",
+	"/usr/src/app",
+	"/srv/app",
+	"/home/node/app",
+];
 
 function getDockerCommandTimeoutMs() {
 	const configured = Number(process.env.DOCKROOT_DOCKER_COMMAND_TIMEOUT_MS || "");
@@ -126,6 +136,55 @@ function stripAnsi(content: string) {
 	return content
 		.replaceAll(new RegExp(`${esc}\\[[0-9;]*[A-Za-z]`, "g"), "")
 		.replaceAll(new RegExp(`${esc}\\][^${bell}]*${bell}`, "g"), "");
+}
+
+function normalizeContainerPath(inputPath: string, options?: { allowRoot?: boolean }) {
+	const rawValue = String(inputPath || "").trim();
+	if (!rawValue) {
+		throw new Error("Container path is required.");
+	}
+
+	const normalized = path.posix.normalize(rawValue);
+	if (!normalized.startsWith("/")) {
+		throw new Error("Container paths must be absolute.");
+	}
+	if (!options?.allowRoot && normalized === "/") {
+		throw new Error("Refusing to target the container root directory.");
+	}
+
+	return normalized;
+}
+
+function getAllowedContainerMutationRoots() {
+	const configured = String(process.env.DOCKROOT_CONTAINER_MUTATION_ROOTS || "").trim();
+	if (configured === "*") {
+		return "*";
+	}
+	const roots = (configured ? configured.split(",") : DEFAULT_CONTAINER_MUTATION_ROOTS)
+		.map((value) => normalizeContainerPath(value, { allowRoot: false }))
+		.filter(Boolean);
+
+	return Array.from(new Set(roots));
+}
+
+function assertAllowedContainerMutationPath(targetPath: string, options?: { directory?: boolean }) {
+	const normalized = normalizeContainerPath(targetPath, { allowRoot: false });
+	const allowedRoots = getAllowedContainerMutationRoots();
+	if (allowedRoots === "*") {
+		return normalized;
+	}
+
+	const matchesAllowedRoot = allowedRoots.some(
+		(root) => normalized === root || normalized.startsWith(`${root}/`),
+	);
+	if (!matchesAllowedRoot) {
+		const noun = options?.directory ? "directory" : "path";
+		throw new Error(
+			`Refusing to modify container ${noun} outside allowed roots (${allowedRoots.join(", ")}).`,
+		);
+	}
+
+	return normalized;
 }
 
 export async function getLocalDockerSnapshot() {
@@ -364,9 +423,10 @@ async function withTempFile<T>(
 }
 
 export async function writeContainerFile(containerId: string, targetPath: string, content: string) {
-	const fileName = path.basename(targetPath) || "file.txt";
+	const normalizedPath = assertAllowedContainerMutationPath(targetPath);
+	const fileName = path.basename(normalizedPath) || "file.txt";
 	return withTempFile(fileName, content, async (tempFile) => {
-		const parentPath = path.posix.dirname(targetPath);
+		const parentPath = path.posix.dirname(normalizedPath);
 		await runDockerCommand([
 			"exec",
 			"-e",
@@ -376,7 +436,7 @@ export async function writeContainerFile(containerId: string, targetPath: string
 			"-lc",
 			'mkdir -p -- "$TARGET_PARENT"',
 		]);
-		return runDockerCommand(["cp", tempFile, `${containerId}:${targetPath}`]);
+		return runDockerCommand(["cp", tempFile, `${containerId}:${normalizedPath}`]);
 	});
 }
 
@@ -387,11 +447,14 @@ export async function uploadContainerFile(
 	content: Buffer,
 ) {
 	const safeFileName = sanitizeTempFileName(path.posix.basename(String(fileName || "").trim()));
+	const normalizedDirectory = assertAllowedContainerMutationPath(targetDirectory, {
+		directory: true,
+	});
 	return withTempFile(safeFileName, content, async (tempFile) => {
 		await runDockerCommand([
 			"exec",
 			"-e",
-			`TARGET_DIRECTORY=${targetDirectory}`,
+			`TARGET_DIRECTORY=${normalizedDirectory}`,
 			containerId,
 			"sh",
 			"-lc",
@@ -400,16 +463,17 @@ export async function uploadContainerFile(
 		return runDockerCommand([
 			"cp",
 			tempFile,
-			`${containerId}:${targetDirectory.replace(/\/$/, "")}/${safeFileName}`,
+			`${containerId}:${normalizedDirectory.replace(/\/$/, "")}/${safeFileName}`,
 		]);
 	});
 }
 
 export async function deleteContainerPath(containerId: string, targetPath: string) {
+	const normalizedPath = assertAllowedContainerMutationPath(targetPath);
 	return runDockerCommand([
 		"exec",
 		"-e",
-		`TARGET_PATH=${targetPath}`,
+		`TARGET_PATH=${normalizedPath}`,
 		containerId,
 		"sh",
 		"-lc",
@@ -456,10 +520,11 @@ export async function browseContainerPath(
 	containerId: string,
 	targetPath: string,
 ): Promise<ContainerBrowserResult> {
+	const normalizedPath = normalizeContainerPath(targetPath, { allowRoot: true });
 	const result = await runDockerCommand([
 		"exec",
 		"-e",
-		`TARGET_PATH=${targetPath}`,
+		`TARGET_PATH=${normalizedPath}`,
 		containerId,
 		"sh",
 		"-lc",
@@ -510,7 +575,7 @@ fi
 
 		return {
 			kind: "directory",
-			path: targetPath,
+			path: normalizedPath,
 			entries,
 		};
 	}
@@ -518,14 +583,14 @@ fi
 	if (output.startsWith("__FILE__")) {
 		return {
 			kind: "file",
-			path: targetPath,
+			path: normalizedPath,
 			content: output.split("\n").slice(1).join("\n"),
 		};
 	}
 
 	return {
 		kind: "missing",
-		path: targetPath,
+		path: normalizedPath,
 	};
 }
 

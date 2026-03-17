@@ -2,6 +2,8 @@ services:
   init:
     image: ${DOCKROOT_IMAGE:-ghcr.io/mannobeats/dockroot:latest}
     restart: "no"
+    mem_limit: 256m
+    cpus: 0.50
     environment:
       DOCKROOT_DATA_DIR: /var/lib/dockroot
     command:
@@ -13,10 +15,14 @@ services:
       - /var/lib/dockroot/bootstrap/metrics_token
     volumes:
       - dockroot_data:/var/lib/dockroot
+    networks:
+      - backend
 
   app:
     image: ${DOCKROOT_IMAGE:-ghcr.io/mannobeats/dockroot:latest}
     restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1.00
     environment:
       # Optional: set only if you want a fixed URL (e.g. behind a reverse proxy).
       # When omitted, Dockroot auto-detects the URL from incoming requests.
@@ -55,10 +61,20 @@ services:
     volumes:
       - dockroot_data:/var/lib/dockroot
       - /var/run/docker.sock:/var/run/docker.sock
+    group_add:
+      - "${DOCKROOT_DOCKER_SOCKET_GID:-998}"
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - frontend
+      - backend
+      - monitoring
 
   postgres:
     image: postgres:17-alpine
     restart: unless-stopped
+    mem_limit: 768m
+    cpus: 1.00
     depends_on:
       init:
         condition: service_completed_successfully
@@ -69,6 +85,8 @@ services:
     volumes:
       - dockroot_data:/var/lib/dockroot:ro
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - backend
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dockroot -d dockroot"]
       interval: 5s
@@ -78,6 +96,8 @@ services:
   prometheus:
     image: prom/prometheus:v3.5.0
     restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.50
     depends_on:
       init:
         condition: service_completed_successfully
@@ -133,11 +153,16 @@ services:
     volumes:
       - dockroot_data:/var/lib/dockroot:ro
       - prometheus_data:/prometheus
+    networks:
+      - monitoring
 
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:v0.52.1
     restart: unless-stopped
-    privileged: true
+    mem_limit: 256m
+    cpus: 0.50
+    cap_add:
+      - SYS_ADMIN
     devices:
       - /dev/kmsg
     volumes:
@@ -146,16 +171,31 @@ services:
       - /sys:/sys:ro
       - /var/lib/docker:/var/lib/docker:ro
       - /dev/disk:/dev/disk:ro
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - monitoring
 
   node-exporter:
     image: prom/node-exporter:v1.9.1
     restart: unless-stopped
+    mem_limit: 128m
+    cpus: 0.25
     command:
       - --path.rootfs=/host
     volumes:
       - /:/host:ro
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - monitoring
 
 volumes:
   dockroot_data:
   postgres_data:
   prometheus_data:
+
+networks:
+  frontend:
+  backend:
+  monitoring:
