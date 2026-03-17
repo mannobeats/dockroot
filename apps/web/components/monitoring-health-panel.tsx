@@ -33,6 +33,7 @@ export function MonitoringHealthPanel({
 		summary.degraded > 0
 			? `${summary.degraded} collector${summary.degraded === 1 ? "" : "s"} need attention`
 			: "All monitoring collectors are healthy";
+	const showDetailedCollectors = summary.degraded > 0;
 
 	return (
 		<Panel padding="md" className="min-w-0">
@@ -77,37 +78,51 @@ export function MonitoringHealthPanel({
 				</div>
 			</div>
 
-			<div className="mt-4 space-y-2">
-				{collectors.map((collector) => (
-					<div
-						key={collector.name}
-						className="flex items-start justify-between gap-3 rounded-xl border border-default/10 bg-surface px-3 py-3"
-					>
-						<div className="min-w-0 flex-1">
-							<div className="flex items-center gap-2">
-								<CheckCircle2
-									className={`h-3.5 w-3.5 ${collector.status === "healthy" ? "text-success" : "text-warning"}`}
-								/>
-								<p className="break-words text-sm font-medium [overflow-wrap:anywhere]">
-									{collector.name}
-								</p>
+			{showDetailedCollectors ? (
+				<div className="mt-4 space-y-2">
+					{collectors.map((collector) => (
+						<div
+							key={collector.name}
+							className="flex items-start justify-between gap-3 rounded-xl border border-default/10 bg-surface px-3 py-3"
+						>
+							<div className="min-w-0 flex-1">
+								<div className="flex items-center gap-2">
+									<CheckCircle2
+										className={`h-3.5 w-3.5 ${collector.status === "healthy" ? "text-success" : "text-warning"}`}
+									/>
+									<p className="break-words text-sm font-medium [overflow-wrap:anywhere]">
+										{collector.name}
+									</p>
+								</div>
+								{collector.lastError ? (
+									<p className="mt-1 break-words text-[11px] text-warning [overflow-wrap:anywhere]">
+										{collector.lastError}
+									</p>
+								) : (
+									<p className="mt-1 text-[11px] text-muted">
+										Telemetry is being collected successfully.
+									</p>
+								)}
 							</div>
-							{collector.lastError ? (
-								<p className="mt-1 break-words text-[11px] text-warning [overflow-wrap:anywhere]">
-									{collector.lastError}
-								</p>
-							) : (
-								<p className="mt-1 text-[11px] text-muted">
-									Telemetry is being collected successfully.
-								</p>
-							)}
+							<div className="shrink-0 pt-0.5">
+								<StatusBadge status={collector.status} />
+							</div>
 						</div>
-						<div className="shrink-0 pt-0.5">
-							<StatusBadge status={collector.status} />
+					))}
+				</div>
+			) : (
+				<div className="mt-4 flex flex-wrap gap-2">
+					{collectors.map((collector) => (
+						<div
+							key={collector.name}
+							className="inline-flex items-center gap-2 rounded-full border border-default/10 bg-surface px-3 py-1.5"
+						>
+							<span className="h-1.5 w-1.5 rounded-full bg-success" />
+							<span className="text-xs font-medium">{collector.name}</span>
 						</div>
-					</div>
-				))}
-			</div>
+					))}
+				</div>
+			)}
 		</Panel>
 	);
 }

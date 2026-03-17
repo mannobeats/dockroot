@@ -1,6 +1,5 @@
 import { Boxes, Layers3, PlayCircle, Server } from "lucide-react";
 import Link from "next/link";
-import { LiveRuntimePanel } from "@/components/live-runtime-panel";
 import { MonitoringHealthPanel } from "@/components/monitoring-health-panel";
 import { PrometheusOverview } from "@/components/prometheus-overview";
 import { StatCard } from "@/components/stat-card";
@@ -69,6 +68,34 @@ export default async function DashboardPage({
 		if (hour < 17) return "Good afternoon";
 		return "Good evening";
 	})();
+	const deploymentAlerts = data.recentDeployments.filter((deployment) =>
+		["failed", "queued", "deploying"].includes(deployment.status),
+	);
+	const collectorAlerts = (targets || []).filter((collector) => collector.status !== "healthy");
+	const environmentAlerts =
+		metrics?.environmentStatus.filter(
+			(entry) => ["degraded", "offline", "down"].includes(entry.label) && entry.value > 0,
+		) || [];
+	const attentionItems = [
+		...deploymentAlerts.slice(0, 3).map((deployment) => ({
+			id: deployment.id,
+			title: deployment.stack.name,
+			detail: `${deployment.status} · ${deployment.environment.name}`,
+			status: deployment.status,
+		})),
+		...collectorAlerts.slice(0, 2).map((collector) => ({
+			id: collector.name,
+			title: collector.name,
+			detail: collector.lastError || "Monitoring collector needs attention",
+			status: collector.status,
+		})),
+		...environmentAlerts.slice(0, 2).map((entry) => ({
+			id: entry.label,
+			title: `${entry.value} environment${entry.value === 1 ? "" : "s"}`,
+			detail: `${entry.label} status detected`,
+			status: entry.label,
+		})),
+	].slice(0, 4);
 
 	return (
 		<div className="animate-in space-y-6">
@@ -118,46 +145,148 @@ export default async function DashboardPage({
 				/>
 			</div>
 
-			{/* Host + Recent stacks side by side */}
-			<div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+			<div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.85fr)]">
+				<div className="min-w-0 space-y-4">
+					{includeRuntime && metrics ? <PrometheusOverview metrics={metrics} /> : null}
+					{includeRuntime && targets ? <MonitoringHealthPanel collectors={targets} /> : null}
+				</div>
+
+				<div className="space-y-4">
+					<Panel padding="md" className="min-w-0">
+						<div className="flex items-center justify-between gap-3">
+							<div>
+								<p className="text-xs font-medium text-muted">Needs Attention</p>
+								<h2 className="mt-1 text-sm font-semibold">
+									{attentionItems.length
+										? `${attentionItems.length} item${attentionItems.length === 1 ? "" : "s"} need review`
+										: "No urgent issues detected"}
+								</h2>
+							</div>
+							<Badge variant={attentionItems.length ? "warning" : "success"}>
+								{attentionItems.length || "Stable"}
+							</Badge>
+						</div>
+						<div className="mt-4 space-y-2">
+							{attentionItems.length ? (
+								attentionItems.map((item) => (
+									<div
+										key={item.id}
+										className="flex items-start justify-between gap-3 rounded-xl border border-default/10 bg-surface px-3 py-3"
+									>
+										<div className="min-w-0 flex-1">
+											<p className="truncate text-sm font-medium">{item.title}</p>
+											<p className="mt-1 break-words text-[11px] text-muted [overflow-wrap:anywhere]">
+												{item.detail}
+											</p>
+										</div>
+										<div className="shrink-0 pt-0.5">
+											<StatusBadge status={item.status} />
+										</div>
+									</div>
+								))
+							) : (
+								<EmptyState
+									title="Everything looks stable"
+									description="No failed deployments, degraded collectors, or unhealthy environments are currently visible."
+									className="border-default/10 bg-surface-raised p-4"
+								/>
+							)}
+						</div>
+					</Panel>
+
+					<Panel padding="md" className="min-w-0">
+						<div className="flex items-center justify-between gap-3">
+							<div>
+								<p className="text-xs font-medium text-muted">Recent Deployments</p>
+								<h2 className="mt-1 text-sm font-semibold">What changed most recently</h2>
+							</div>
+							<Link
+								href={`/dashboard/activity?environment=${environment.id}`}
+								className="text-xs font-medium text-accent hover:text-accent/80"
+							>
+								View all
+							</Link>
+						</div>
+						<div className="mt-4 space-y-2">
+							{data.recentDeployments.length ? (
+								data.recentDeployments.slice(0, 5).map((deployment) => (
+									<div
+										key={deployment.id}
+										className="rounded-xl border border-default/10 bg-surface px-3 py-3"
+									>
+										<div className="flex items-start justify-between gap-3">
+											<div className="min-w-0 flex-1">
+												<p className="truncate text-sm font-medium">{deployment.stack.name}</p>
+												<p className="mt-1 text-[11px] text-muted">
+													{deployment.environment.name} ·{" "}
+													<span className="font-mono">{deployment.version}</span>
+												</p>
+											</div>
+											<div className="shrink-0 pt-0.5">
+												<StatusBadge status={deployment.status} />
+											</div>
+										</div>
+										<p className="mt-2 text-[11px] text-muted">
+											{deployment.createdAt.toLocaleString()}
+										</p>
+									</div>
+								))
+							) : (
+								<EmptyState
+									title="No deployments yet"
+									description="Tracked stack deployments will appear here."
+									className="border-default/10 bg-surface-raised p-4"
+								/>
+							)}
+						</div>
+					</Panel>
+				</div>
+			</div>
+
+			<div className="grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
 				{includeRuntime && runtime ? (
 					<Panel padding="md" className="min-w-0">
 						<div className="flex items-start justify-between gap-3">
 							<div className="min-w-0">
-								<h2 className="break-words text-sm font-semibold [overflow-wrap:anywhere]">
+								<p className="text-xs font-medium text-muted">Runtime Host</p>
+								<h2 className="mt-1 break-words text-sm font-semibold [overflow-wrap:anywhere]">
 									{runtime.snapshot.host.hostname}
 								</h2>
-								<p className="text-xs text-muted">
+								<p className="mt-1 text-xs text-muted">
 									{runtime.snapshot.host.platform} · {runtime.snapshot.host.architecture} ·{" "}
 									{runtime.snapshot.host.cpus} CPU
 								</p>
 							</div>
 							<StatusBadge status="healthy" />
 						</div>
-						<div className="mt-3 grid gap-3 sm:grid-cols-2">
+						<div className="mt-4 grid gap-3 sm:grid-cols-2">
 							<UtilizationBar
 								label="Memory"
 								percent={memoryUsedPercent ?? 0}
 								valueLabel={`${memoryUsed ?? "—"} / ${runtime.snapshot.host.totalMemoryGb} GB`}
 							/>
 							<div className="min-w-0 text-xs text-muted">
-								<p className="font-medium text-foreground">Data</p>
+								<p className="font-medium text-foreground">Data Directory</p>
 								<p className="mt-1 break-all">{data.dataDir}</p>
 							</div>
 						</div>
 					</Panel>
 				) : (
 					<Panel padding="md" className="min-w-0">
-						<h2 className="text-sm font-semibold">Workspace overview</h2>
-						<p className="mt-1 text-sm text-muted">
-							Scoped to owned environments and stacks. Host telemetry restricted to operators.
+						<p className="text-xs font-medium text-muted">Workspace Overview</p>
+						<h2 className="mt-1 text-sm font-semibold">Operator telemetry is unavailable here</h2>
+						<p className="mt-2 text-sm text-muted">
+							Host-level telemetry appears only for privileged users on local runtime environments.
 						</p>
 					</Panel>
 				)}
 
 				<Panel padding="md" className="min-w-0">
 					<div className="flex items-center justify-between gap-3">
-						<h2 className="text-sm font-semibold">Recent stacks</h2>
+						<div>
+							<p className="text-xs font-medium text-muted">Recent Stacks</p>
+							<h2 className="mt-1 text-sm font-semibold">The stacks you touched most recently</h2>
+						</div>
 						<Link
 							href={`/dashboard/stacks?environment=${environment.id}`}
 							className="text-xs font-medium text-accent hover:text-accent/80"
@@ -165,17 +294,17 @@ export default async function DashboardPage({
 							View all
 						</Link>
 					</div>
-					<div className="mt-3 space-y-1">
+					<div className="mt-4 space-y-2">
 						{data.recentStacks.length ? (
 							data.recentStacks.map((stack) => (
 								<Link
 									key={stack.id}
 									href={`/dashboard/stacks/${stack.id}`}
-									className="flex min-w-0 items-start justify-between gap-3 rounded-lg px-2.5 py-2 transition-colors hover:bg-foreground/[0.03]"
+									className="flex min-w-0 items-start justify-between gap-3 rounded-xl border border-default/10 bg-surface px-3 py-3 transition-colors hover:border-default/18 hover:bg-foreground/[0.02]"
 								>
 									<div className="min-w-0 flex-1">
 										<p className="truncate text-sm font-medium">{stack.name}</p>
-										<p className="truncate text-xs text-muted">
+										<p className="mt-1 truncate text-xs text-muted">
 											{stack.description || stack.environment.name}
 										</p>
 									</div>
@@ -183,21 +312,19 @@ export default async function DashboardPage({
 								</Link>
 							))
 						) : (
-							<EmptyState title="No stacks yet" className="p-4" />
+							<EmptyState
+								title="No stacks yet"
+								description="Create a stack to start tracking deployments and runtime health."
+								className="border-default/10 bg-surface-raised p-4"
+							/>
 						)}
 					</div>
 				</Panel>
 			</div>
 
-			{/* Charts */}
-			{includeRuntime && metrics ? <PrometheusOverview metrics={metrics} /> : null}
-			{includeRuntime && targets ? <MonitoringHealthPanel collectors={targets} /> : null}
-			{includeRuntime && environment.kind === "local" ? <LiveRuntimePanel /> : null}
-
-			{/* Latest Activity */}
 			<Panel className="min-w-0">
 				<div className="flex items-center justify-between gap-3 px-3 py-2.5">
-					<h2 className="text-sm font-semibold">Latest deployments</h2>
+					<h2 className="text-sm font-semibold">Deployment Ledger</h2>
 					<Link
 						href={`/dashboard/activity?environment=${environment.id}`}
 						className="text-xs font-medium text-accent hover:text-accent/80"
