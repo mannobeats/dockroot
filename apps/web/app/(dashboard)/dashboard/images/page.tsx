@@ -5,12 +5,10 @@ import {
 	removeImageAction,
 } from "@/app/(dashboard)/actions";
 import { DestructiveActionModal } from "@/components/destructive-action-modal";
-import { ImagesTableWorkspace } from "@/components/images-table-workspace";
+import { ImagesPageWorkspace } from "@/components/images-page-workspace";
 import { PageHeader } from "@/components/page-header";
 import { PullImageModal } from "@/components/pull-image-modal";
 import { RuntimeUnavailablePanel } from "@/components/runtime-unavailable-panel";
-import { Input } from "@/components/ui/input";
-import { Panel } from "@/components/ui/panel";
 import { requirePrivilegedPageSession } from "@/lib/authorization";
 import {
 	getRuntimeConnectionMessage,
@@ -29,7 +27,6 @@ export default async function ImagesPage({
 	const session = await requirePrivilegedPageSession();
 	const params = await searchParams;
 	const environment = await resolveRuntimeEnvironment(session.userId, params.environment);
-	const query = (params.q || "").toLowerCase();
 	let runtimeIssue: string | null = null;
 	const { images } = await listImagesForEnvironment(session.userId, environment.id).catch(
 		(error) => {
@@ -39,12 +36,6 @@ export default async function ImagesPage({
 			}
 			throw error;
 		},
-	);
-	const filtered = images.filter((image: Record<string, string>) =>
-		!query
-			? true
-			: `${image.Repository}:${image.Tag}`.toLowerCase().includes(query) ||
-				(image.ID || "").toLowerCase().includes(query),
 	);
 	const { containers } = await listContainersForEnvironment(session.userId, environment.id).catch(
 		(error) => {
@@ -62,18 +53,18 @@ export default async function ImagesPage({
 			.map((container: Record<string, string>) => container.Image)
 			.filter((imageRef: string): imageRef is string => Boolean(imageRef)),
 	);
-	const inUseCount = filtered.filter((image: Record<string, string>) =>
-		containerImageRefs.has(`${image.Repository}:${image.Tag}`),
-	).length;
-	const danglingCount = filtered.filter(
+	const danglingCount = images.filter(
 		(image: Record<string, string>) => image.Repository === "<none>" || image.Tag === "<none>",
+	).length;
+	const totalInUseCount = images.filter((image: Record<string, string>) =>
+		containerImageRefs.has(`${image.Repository}:${image.Tag}`),
 	).length;
 
 	return (
 		<div className="animate-in space-y-5">
 			<PageHeader
 				title="Images"
-				description={`${environment.name} · ${filtered.length} images · ${inUseCount} in use · ${danglingCount} dangling`}
+				description={`${environment.name} · ${images.length} images · ${totalInUseCount} in use · ${danglingCount} dangling`}
 				actions={
 					<div className="flex items-center gap-1.5">
 						<DestructiveActionModal
@@ -107,31 +98,15 @@ export default async function ImagesPage({
 				<RuntimeUnavailablePanel title="Images unavailable" message={runtimeIssue} />
 			) : null}
 
-			<Panel>
-				<form className="border-b border-default/8 px-3 py-2">
-					<Input
-						type="search"
-						name="q"
-						defaultValue={params.q || ""}
-						placeholder="Search images..."
-						className="w-full"
-					/>
-				</form>
-				{inUseCount ? (
-					<p className="border-b border-default/8 px-3 py-2 text-xs text-muted">
-						{inUseCount} image(s) are currently in use by containers and cannot be deleted.
-					</p>
-				) : null}
-
-				<ImagesTableWorkspace
-					images={filtered as Array<Record<string, string>>}
-					environmentId={environment.id}
-					removeImageAction={removeImageAction}
-					bulkRemoveImagesAction={bulkRemoveImagesAction}
-					protectedImageRefs={Array.from(protectedImageRefs)}
-					inUseImageRefs={Array.from(containerImageRefs)}
-				/>
-			</Panel>
+			<ImagesPageWorkspace
+				images={images as Array<Record<string, string>>}
+				environmentId={environment.id}
+				removeImageAction={removeImageAction}
+				bulkRemoveImagesAction={bulkRemoveImagesAction}
+				protectedImageRefs={Array.from(protectedImageRefs)}
+				inUseImageRefs={Array.from(containerImageRefs)}
+				initialQuery={params.q || ""}
+			/>
 		</div>
 	);
 }

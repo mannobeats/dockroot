@@ -19,6 +19,7 @@ import {
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { DestructiveActionModal } from "@/components/destructive-action-modal";
 import { FormSubmitButton } from "@/components/form-submit-button";
+import { InstantFilterToolbar } from "@/components/instant-filter-toolbar";
 import { LiveStackFeed } from "@/components/live-stack-feed";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
@@ -31,10 +32,10 @@ import {
 	DataTableHeader,
 	DataTableRow,
 } from "@/components/ui/data-table";
-import { Input } from "@/components/ui/input";
 import { LinkButton } from "@/components/ui/link-button";
 import { Panel } from "@/components/ui/panel";
 import { getProtectedStackLabel } from "@/lib/runtime-protection";
+import { matchesSearchQuery } from "@/lib/search";
 import { getSocket } from "@/lib/socket-client";
 
 type FormAction = (formData: FormData) => void | Promise<void>;
@@ -128,32 +129,6 @@ export function StacksTableWorkspace({
 	const [logDockOpen, setLogDockOpen] = useState(Boolean(initialWatchStackId));
 
 	useEffect(() => {
-		function isTypingTarget(target: EventTarget | null) {
-			if (!(target instanceof HTMLElement)) {
-				return false;
-			}
-			const tag = target.tagName.toLowerCase();
-			return tag === "input" || tag === "textarea" || tag === "select" || target.isContentEditable;
-		}
-
-		function onKeyDown(event: KeyboardEvent) {
-			if (event.key === "/" && !event.metaKey && !event.ctrlKey && !event.altKey) {
-				if (isTypingTarget(event.target)) {
-					return;
-				}
-				event.preventDefault();
-				const element = document.getElementById("stack-list-search");
-				if (element instanceof HTMLInputElement) {
-					element.focus();
-				}
-			}
-		}
-
-		window.addEventListener("keydown", onKeyDown);
-		return () => window.removeEventListener("keydown", onKeyDown);
-	}, []);
-
-	useEffect(() => {
 		const client = getSocket();
 		const onDeploymentUpdate = (event: { stackId?: string; status?: string }) => {
 			if (!event?.stackId) {
@@ -172,15 +147,17 @@ export function StacksTableWorkspace({
 	}, []);
 
 	const filteredStacks = useMemo(() => {
-		const query = search.trim().toLowerCase();
-		if (!query) {
-			return stacks;
-		}
 		return stacks.filter((stack) =>
-			[stack.name, stack.slug, stack.environmentName || "", stack.status]
-				.join(" ")
-				.toLowerCase()
-				.includes(query),
+			matchesSearchQuery(
+				search,
+				stack.name,
+				stack.slug,
+				stack.environmentName,
+				stack.status,
+				stack.sourceType,
+				stack.type === "untracked" ? stack.configFiles : [],
+				stack.containers.map((container) => [container.Names, container.Image, container.State]),
+			),
 		);
 	}, [search, stacks]);
 
@@ -229,17 +206,15 @@ export function StacksTableWorkspace({
 
 	return (
 		<Panel>
-			{/* Inline search */}
-			<div className="border-b border-default/8 px-3 py-2">
-				<Input
-					id="stack-list-search"
-					type="search"
-					placeholder="Search stacks... (press /)"
-					value={search}
-					onChange={(event) => setSearch(event.target.value)}
-					className="w-full"
-				/>
-			</div>
+			<InstantFilterToolbar
+				searchId="stack-list-search"
+				searchPlaceholder="Search stacks by name, slug, environment, or container"
+				query={search}
+				onQueryChange={setSearch}
+				resultCount={filteredStacks.length}
+				totalCount={stacks.length}
+				onReset={() => setSearch("")}
+			/>
 			<div className="flex min-h-12 flex-wrap items-center gap-1.5 border-b border-default/8 px-3 py-2">
 				<p className="mr-2 text-xs text-muted">
 					{selectedCount ? `${selectedCount} selected` : "Select one or more stacks"}

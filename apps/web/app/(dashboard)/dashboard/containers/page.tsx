@@ -8,13 +8,10 @@ import {
 	createContainerAction,
 	setContainerUpdatePolicyAction,
 } from "@/app/(dashboard)/actions";
-import { ContainersTableWorkspace } from "@/components/containers-table-workspace";
+import { ContainersPageWorkspace } from "@/components/containers-page-workspace";
 import { CreateContainerModal } from "@/components/create-container-modal";
 import { PageHeader } from "@/components/page-header";
 import { RuntimeUnavailablePanel } from "@/components/runtime-unavailable-panel";
-import { Input } from "@/components/ui/input";
-import { Panel } from "@/components/ui/panel";
-import { Select } from "@/components/ui/select";
 import { requireUserSession } from "@/lib/authorization";
 import { getContainerUpdatePolicyMap, getContainerUpdateStateMap } from "@/lib/container-updates";
 import {
@@ -40,8 +37,6 @@ export default async function ContainersPage({
 	const params = await searchParams;
 	const environment = await resolveRuntimeEnvironment(userId, params.environment);
 	const settings = await getGlobalSettings(userId);
-	const query = (params.q || "").toLowerCase();
-	const status = (params.status || "all").toLowerCase();
 	const watchStackId = (params.watchStackId || "").trim();
 	let runtimeIssue: string | null = null;
 	const containers = await listAccessibleContainersForUser(userId, role, environment.id).catch(
@@ -54,15 +49,7 @@ export default async function ContainersPage({
 		},
 	);
 	// LiveRuntimePanel removed from containers page — stats now shown per-container in table
-	const filtered = containers.filter((container: Record<string, string>) => {
-		const matchesQuery =
-			!query ||
-			container.Names?.toLowerCase().includes(query) ||
-			container.Image?.toLowerCase().includes(query);
-		const matchesStatus = status === "all" || (container.State || "").toLowerCase() === status;
-		return matchesQuery && matchesStatus;
-	});
-	const runningCount = filtered.filter(
+	const runningCount = containers.filter(
 		(container: Record<string, string>) => container.State === "running",
 	).length;
 	const { map: policyMap } = await getContainerUpdatePolicyMap(userId, environment.id);
@@ -105,15 +92,9 @@ export default async function ContainersPage({
 			updatedAt: value.updatedAt,
 		};
 	}
-	const protectedContainerIds =
-		environment.kind === "local"
-			? filtered
-					.filter((container: Record<string, string>) => isProtectedManagerContainer(container))
-					.map((container: Record<string, string>) => container.ID)
-			: [];
 	const protectedContainerLabels: Record<string, string> = {};
 	if (environment.kind === "local") {
-		for (const container of filtered as Array<Record<string, string>>) {
+		for (const container of containers as Array<Record<string, string>>) {
 			if (!isProtectedManagerContainer(container)) {
 				continue;
 			}
@@ -125,7 +106,7 @@ export default async function ContainersPage({
 		<div className="animate-in space-y-5">
 			<PageHeader
 				title="Containers"
-				description={`${environment.name} · ${filtered.length} containers · ${runningCount} running`}
+				description={`${environment.name} · ${containers.length} containers · ${runningCount} running`}
 				actions={
 					<CreateContainerModal action={createContainerAction} environmentId={environment.id} />
 				}
@@ -135,45 +116,24 @@ export default async function ContainersPage({
 				<RuntimeUnavailablePanel title="Containers unavailable" message={runtimeIssue} />
 			) : null}
 
-			{/* Inline search + filter */}
-			<Panel>
-				<form className="flex items-center gap-2 border-b border-default/8 px-3 py-2">
-					<Input
-						type="search"
-						name="q"
-						defaultValue={params.q || ""}
-						placeholder="Search by name or image..."
-						className="flex-1"
-					/>
-					<Select name="status" defaultValue={status} className="w-32 h-7 text-xs">
-						<option value="all">All</option>
-						<option value="running">Running</option>
-						<option value="exited">Exited</option>
-						<option value="created">Created</option>
-						<option value="paused">Paused</option>
-					</Select>
-					<button type="submit" className="text-xs font-medium text-accent hover:text-accent/80">
-						Filter
-					</button>
-				</form>
-				<ContainersTableWorkspace
-					containers={filtered as Array<Record<string, string>>}
-					environmentId={environment.id}
-					managerUrl={settings.managerUrl || undefined}
-					controlContainerAction={controlContainerAction}
-					bulkControlContainerAction={bulkControlContainerAction}
-					checkContainerUpdatesAction={checkContainerUpdatesAction}
-					bulkCheckContainerUpdatesAction={bulkCheckContainerUpdatesAction}
-					applyContainerUpdatesAction={applyContainerUpdatesAction}
-					bulkApplyContainerUpdatesAction={bulkApplyContainerUpdatesAction}
-					setContainerUpdatePolicyAction={setContainerUpdatePolicyAction}
-					protectedContainerIds={protectedContainerIds}
-					protectedContainerLabels={protectedContainerLabels}
-					initialWatchStackId={watchStackId}
-					updatePolicyMap={updatePolicyMap}
-					updateStateMap={updateStateMap}
-				/>
-			</Panel>
+			<ContainersPageWorkspace
+				containers={containers as Array<Record<string, string>>}
+				environmentId={environment.id}
+				managerUrl={settings.managerUrl || undefined}
+				controlContainerAction={controlContainerAction}
+				bulkControlContainerAction={bulkControlContainerAction}
+				checkContainerUpdatesAction={checkContainerUpdatesAction}
+				bulkCheckContainerUpdatesAction={bulkCheckContainerUpdatesAction}
+				applyContainerUpdatesAction={applyContainerUpdatesAction}
+				bulkApplyContainerUpdatesAction={bulkApplyContainerUpdatesAction}
+				setContainerUpdatePolicyAction={setContainerUpdatePolicyAction}
+				protectedContainerLabels={protectedContainerLabels}
+				initialWatchStackId={watchStackId}
+				updatePolicyMap={updatePolicyMap}
+				updateStateMap={updateStateMap}
+				initialQuery={params.q || ""}
+				initialStatus={params.status || "all"}
+			/>
 		</div>
 	);
 }

@@ -11,9 +11,7 @@ import { CreateVolumeModal } from "@/components/create-volume-modal";
 import { DestructiveActionModal } from "@/components/destructive-action-modal";
 import { PageHeader } from "@/components/page-header";
 import { RuntimeUnavailablePanel } from "@/components/runtime-unavailable-panel";
-import { Input } from "@/components/ui/input";
-import { Panel } from "@/components/ui/panel";
-import { VolumesTableWorkspace } from "@/components/volumes-table-workspace";
+import { VolumesPageWorkspace } from "@/components/volumes-page-workspace";
 import { requirePrivilegedPageSession } from "@/lib/authorization";
 import {
 	getRuntimeConnectionMessage,
@@ -31,7 +29,6 @@ export default async function VolumesPage({
 	const session = await requirePrivilegedPageSession();
 	const params = await searchParams;
 	const environment = await resolveRuntimeEnvironment(session.userId, params.environment);
-	const query = (params.q || "").toLowerCase();
 	let runtimeIssue: string | null = null;
 	const { volumes } = await listVolumesForEnvironment(session.userId, environment.id).catch(
 		(error) => {
@@ -42,22 +39,17 @@ export default async function VolumesPage({
 			throw error;
 		},
 	);
-	const filtered = volumes.filter((volume: Record<string, string>) =>
-		!query
-			? true
-			: `${volume.Name} ${volume.Driver} ${volume.Mountpoint || ""}`.toLowerCase().includes(query),
-	);
 	const backupsByVolume = await listVolumeBackupsForUser({
 		userId: session.userId,
 		environmentId: environment.id,
-		volumeNames: filtered.map((volume: Record<string, string>) => volume.Name).filter(Boolean),
+		volumeNames: volumes.map((volume: Record<string, string>) => volume.Name).filter(Boolean),
 	});
 
 	return (
 		<div className="animate-in space-y-5">
 			<PageHeader
 				title="Volumes"
-				description={`${environment.name} · ${filtered.length} volumes`}
+				description={`${environment.name} · ${volumes.length} volumes`}
 				actions={
 					<div className="flex items-center gap-1.5">
 						<DestructiveActionModal
@@ -80,28 +72,17 @@ export default async function VolumesPage({
 				<RuntimeUnavailablePanel title="Volumes unavailable" message={runtimeIssue} />
 			) : null}
 
-			<Panel>
-				<form className="border-b border-default/8 px-3 py-2">
-					<Input
-						type="search"
-						name="q"
-						defaultValue={params.q || ""}
-						placeholder="Search volumes..."
-						className="w-full"
-					/>
-				</form>
-
-				<VolumesTableWorkspace
-					volumes={filtered as Array<Record<string, string>>}
-					environmentId={environment.id}
-					removeVolumeAction={removeVolumeAction}
-					bulkRemoveVolumesAction={bulkRemoveVolumesAction}
-					backupVolumeAction={backupVolumeAction}
-					restoreVolumeAction={restoreVolumeAction}
-					deleteVolumeBackupAction={deleteVolumeBackupAction}
-					backupsByVolume={backupsByVolume}
-				/>
-			</Panel>
+			<VolumesPageWorkspace
+				volumes={volumes as Array<Record<string, string>>}
+				environmentId={environment.id}
+				removeVolumeAction={removeVolumeAction}
+				bulkRemoveVolumesAction={bulkRemoveVolumesAction}
+				backupVolumeAction={backupVolumeAction}
+				restoreVolumeAction={restoreVolumeAction}
+				deleteVolumeBackupAction={deleteVolumeBackupAction}
+				backupsByVolume={backupsByVolume}
+				initialQuery={params.q || ""}
+			/>
 		</div>
 	);
 }
