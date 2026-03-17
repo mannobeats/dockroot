@@ -10,13 +10,12 @@ import {
 } from "@/app/(dashboard)/actions";
 import { ContainersTableWorkspace } from "@/components/containers-table-workspace";
 import { CreateContainerModal } from "@/components/create-container-modal";
-import { LiveRuntimePanel } from "@/components/live-runtime-panel";
 import { PageHeader } from "@/components/page-header";
 import { RuntimeUnavailablePanel } from "@/components/runtime-unavailable-panel";
 import { Input } from "@/components/ui/input";
 import { Panel } from "@/components/ui/panel";
 import { Select } from "@/components/ui/select";
-import { isPrivilegedRole, requireUserSession } from "@/lib/authorization";
+import { requireUserSession } from "@/lib/authorization";
 import { getContainerUpdatePolicyMap, getContainerUpdateStateMap } from "@/lib/container-updates";
 import {
 	getRuntimeConnectionMessage,
@@ -54,7 +53,7 @@ export default async function ContainersPage({
 			throw error;
 		},
 	);
-	const includeRuntime = isPrivilegedRole(role) && environment.kind === "local";
+	// LiveRuntimePanel removed from containers page — stats now shown per-container in table
 	const filtered = containers.filter((container: Record<string, string>) => {
 		const matchesQuery =
 			!query ||
@@ -131,8 +130,6 @@ export default async function ContainersPage({
 					<CreateContainerModal action={createContainerAction} environmentId={environment.id} />
 				}
 			/>
-
-			{includeRuntime ? <LiveRuntimePanel /> : null}
 
 			{runtimeIssue ? (
 				<RuntimeUnavailablePanel title="Containers unavailable" message={runtimeIssue} />
