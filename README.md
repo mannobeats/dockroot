@@ -96,6 +96,34 @@ Use this when you want the full platform to run in Docker with the published ima
 docker compose -f docker-compose.yaml up -d
 ```
 
+For the guided single-host installer:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mannobeats/dockroot/main/install.sh | sudo bash
+```
+
+Installer behavior:
+
+- `Quick install` uses recommended defaults
+- `Custom install` lets you choose port, install directory, version, and whether to include monitoring
+- `NONINTERACTIVE=true` or non-terminal environments fall back to the default mode automatically
+
+Useful installer env overrides:
+
+- `DOCKROOT_PORT=4080`
+- `DOCKROOT_INSTALL_DIR=/srv/dockroot`
+- `DOCKROOT_VERSION=latest`
+- `INSTALL_MODE=custom`
+- `INSTALL_MONITORING=false`
+
+To remove Dockroot and the Docker resources created for that installation:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mannobeats/dockroot/main/uninstall.sh | sudo bash
+```
+
+The installer also writes a local uninstall helper at `<install-dir>/uninstall.sh`.
+
 Use Docker Compose v2 (`docker compose ...`). Avoid legacy `docker-compose` v1, which is deprecated and can fail on recreate with errors like `KeyError: 'ContainerConfig'`.
 
 What it does:
