@@ -1,8 +1,11 @@
 import {
+	backupVolumeAction,
 	bulkRemoveVolumesAction,
 	createVolumeAction,
+	deleteVolumeBackupAction,
 	pruneVolumesAction,
 	removeVolumeAction,
+	restoreVolumeAction,
 } from "@/app/(dashboard)/actions";
 import { CreateVolumeModal } from "@/components/create-volume-modal";
 import { DestructiveActionModal } from "@/components/destructive-action-modal";
@@ -68,6 +71,9 @@ export default async function VolumesPage({
 					environmentId={environment.id}
 					removeVolumeAction={removeVolumeAction}
 					bulkRemoveVolumesAction={bulkRemoveVolumesAction}
+					backupVolumeAction={backupVolumeAction}
+					restoreVolumeAction={restoreVolumeAction}
+					deleteVolumeBackupAction={deleteVolumeBackupAction}
 				/>
 			</Panel>
 		</div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink, Trash2 } from "lucide-react";
+import { Archive, ExternalLink, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { DestructiveActionModal } from "@/components/destructive-action-modal";
@@ -24,11 +24,17 @@ export function VolumesTableWorkspace({
 	environmentId,
 	removeVolumeAction,
 	bulkRemoveVolumesAction,
+	backupVolumeAction,
+	restoreVolumeAction,
+	deleteVolumeBackupAction,
 }: {
 	volumes: VolumeRow[];
 	environmentId: string;
 	removeVolumeAction: FormAction;
 	bulkRemoveVolumesAction: FormAction;
+	backupVolumeAction?: FormAction;
+	restoreVolumeAction?: FormAction;
+	deleteVolumeBackupAction?: FormAction;
 }) {
 	const [selectedNames, setSelectedNames] = useState<Record<string, boolean>>({});
 	const allNames = useMemo(() => volumes.map((volume) => volume.Name), [volumes]);
@@ -128,6 +134,19 @@ export function VolumesTableWorkspace({
 								</DataTableCell>
 								<DataTableCell>
 									<div className="flex items-center justify-end gap-0.5">
+										{backupVolumeAction ? (
+											<form action={backupVolumeAction}>
+												<input type="hidden" name="volumeName" value={volume.Name} />
+												<input type="hidden" name="environmentId" value={environmentId} />
+												<button
+													type="submit"
+													className="flex h-6 w-6 items-center justify-center rounded-md p-0 text-muted transition-colors hover:text-foreground"
+													title="Backup volume"
+												>
+													<Archive className="h-3.5 w-3.5" />
+												</button>
+											</form>
+										) : null}
 										<LinkButton
 											href={`/dashboard/volumes/${encodeURIComponent(volume.Name)}?environment=${environmentId}`}
 											variant="ghost"

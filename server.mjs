@@ -139,7 +139,7 @@ function emitRuntimeAction(type, payload = {}) {
 			${payload.environmentId ? String(payload.environmentId) : null},
 			${payload.userId ? String(payload.userId) : null},
 			${payload.role ? String(payload.role) : null},
-			"socket",
+			${"socket"},
 			${event.type},
 			${event.status},
 			${payload.containerId ? String(payload.containerId) : null},
@@ -153,6 +153,104 @@ function emitRuntimeAction(type, payload = {}) {
 			"[runtime] Failed to persist runtime action event:",
 			error instanceof Error ? error.message : "unknown error",
 		);
+	});
+}
+
+/* ── Docker daemon event subscription ── */
+const dockrootInitiatedActions = new Map();
+let dockerEventProcess = null;
+let dockerEventBackoff = 3_000;
+const DOCKER_EVENT_MAX_BACKOFF = 30_000;
+
+function registerDockrootAction(containerId, action) {
+	const key = `${containerId}:${action}`;
+	dockrootInitiatedActions.set(key, Date.now());
+	setTimeout(() => dockrootInitiatedActions.delete(key), 5_000);
+}
+
+function isDockrootInitiated(containerId, action) {
+	const key = `${containerId}:${action}`;
+	return dockrootInitiatedActions.has(key);
+}
+
+function startDockerEventStream() {
+	if (dockerEventProcess) {
+		return;
+	}
+
+	const child = spawn(dockerBinary, [
+		"events",
+		"--format",
+		"{{json .}}",
+		"--filter",
+		"type=container",
+	], { stdio: ["ignore", "pipe", "pipe"] });
+
+	dockerEventProcess = child;
+	let buffer = "";
+
+	child.stdout.on("data", (chunk) => {
+		buffer += String(chunk);
+		const lines = buffer.split("\n");
+		buffer = lines.pop() || "";
+
+		for (const line of lines) {
+			if (!line.trim()) {
+				continue;
+			}
+
+			try {
+				const event = JSON.parse(line);
+				const action = event.Action || event.status || "";
+				const containerId = event.Actor?.ID || event.id || "";
+				const containerName = event.Actor?.Attributes?.name || "";
+
+				if (!containerId || !["start", "stop", "die", "destroy", "kill", "pause", "unpause"].includes(action)) {
+					continue;
+				}
+
+				if (isDockrootInitiated(containerId, action)) {
+					continue;
+				}
+
+				io.emit("container:state", {
+					containerId,
+					action,
+					ok: true,
+					at: Date.now(),
+					source: "daemon",
+				});
+
+				emitRuntimeAction(`container.external.${action}`, {
+					containerId,
+					containerName,
+					environmentId: null,
+				});
+			} catch {
+				// Ignore malformed JSON lines
+			}
+		}
+	});
+
+	child.on("close", (code) => {
+		dockerEventProcess = null;
+		if (!shuttingDown) {
+			console.error(`[docker-events] Process exited (code=${code}), restarting in ${dockerEventBackoff}ms...`);
+			setTimeout(() => {
+				startDockerEventStream();
+				dockerEventBackoff = Math.min(dockerEventBackoff * 2, DOCKER_EVENT_MAX_BACKOFF);
+			}, dockerEventBackoff);
+		}
+	});
+
+	child.on("error", (error) => {
+		dockerEventProcess = null;
+		console.error("[docker-events] Failed to spawn:", error.message);
+	});
+
+	// Reset backoff on successful connection (data received)
+	child.stdout.once("data", () => {
+		dockerEventBackoff = 3_000;
 	});
 }
 
@@ -799,6 +897,7 @@ const io = new SocketIOServer(server, {
 
 globalThis.__dockroot_io = io;
 globalThis.__dockroot_get_ws_metrics = getSocketRuntimeMetrics;
+globalThis.__dockroot_register_action = registerDockrootAction;
 
 io.use(async (socket, nextMiddleware) => {
 	try {
@@ -1444,6 +1543,10 @@ async function shutdownServer(signal) {
 			clearInterval(updateSchedulerInterval);
 			updateSchedulerInterval = null;
 		}
+		if (dockerEventProcess) {
+			dockerEventProcess.kill("SIGTERM");
+			dockerEventProcess = null;
+		}
 
 		const terminalClosures = Array.from(terminalSessions.keys(), (sessionId) =>
 			closeTrackedTerminalSession(sessionId),
@@ -1536,4 +1639,5 @@ for (const signal of ["SIGINT", "SIGTERM"]) {
 server.listen(port, hostname, () => {
 	console.log(`> Ready on http://${hostname}:${port}`);
 	void tickContainerUpdateScheduler();
+	startDockerEventStream();
 });

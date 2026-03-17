@@ -16,6 +16,7 @@ import {
 } from "@/lib/container-updates";
 import {
 	controlContainerForEnvironment,
+	createContainerForEnvironment,
 	createNetworkForEnvironment,
 	createVolumeForEnvironment,
 	listContainersForEnvironment,
@@ -41,7 +42,14 @@ import {
 	updateGlobalSettings,
 	updateStackConfig,
 } from "@/lib/platform";
-import { controlComposeProject, listContainers } from "@/lib/platform/docker";
+import {
+	backupVolume,
+	controlComposeProject,
+	deleteBackupFile,
+	getBackupFileSize,
+	listContainers,
+	restoreVolume,
+} from "@/lib/platform/docker";
 import {
 	listAccessibleContainersForUser,
 	requireAccessibleContainerForUser,
@@ -629,6 +637,51 @@ export async function deleteStackAction(formData: FormData) {
 	redirect("/dashboard/stacks");
 }
 
+export async function createContainerAction(formData: FormData) {
+	const auth = await requirePrivilegedSession();
+	const name = getValue(formData, "name");
+	const image = getValue(formData, "image");
+	const environmentId = getValue(formData, "environmentId") || undefined;
+	const memory = getValue(formData, "memory") || undefined;
+	const cpus = getValue(formData, "cpus") || undefined;
+	const restartPolicy = getValue(formData, "restartPolicy") || undefined;
+	const network = getValue(formData, "network") || undefined;
+	const command = getValue(formData, "command") || undefined;
+
+	if (!name || !image) {
+		throw new Error("Container name and image are required.");
+	}
+
+	const ports = parseJsonValue<Array<{ host: string; container: string }>>(formData, "ports") || [];
+	const volumes =
+		parseJsonValue<Array<{ host: string; container: string }>>(formData, "volumes") || [];
+	const envVars =
+		parseJsonValue<Array<{ key: string; value: string }>>(formData, "envVars") || [];
+
+	const result = await createContainerForEnvironment(
+		auth.userId,
+		{
+			name,
+			image,
+			memory,
+			cpus,
+			restartPolicy,
+			ports,
+			volumes,
+			envVars,
+			network,
+			command,
+		},
+		environmentId,
+	);
+
+	if (!result.ok) {
+		throw new Error(result.output || "Failed to create container.");
+	}
+
+	revalidatePath("/dashboard/containers");
+}
+
 export async function controlContainerAction(formData: FormData) {
 	const auth = await requireUserSession();
 	const containerId = getValue(formData, "containerId");
@@ -666,6 +719,7 @@ export async function controlContainerAction(formData: FormData) {
 		containerId,
 		action: action as "start" | "stop" | "restart" | "remove",
 		removeVolumes,
+		containerName: container?.Names || container?.Name || undefined,
 	});
 	revalidatePath("/dashboard/containers");
 }
@@ -707,6 +761,7 @@ export async function bulkControlContainerAction(formData: FormData) {
 			containerId,
 			action: action as "start" | "stop" | "restart" | "remove",
 			removeVolumes,
+			containerName: container?.Names || container?.Name || undefined,
 		});
 	}
 	revalidatePath("/dashboard/containers");
@@ -1197,6 +1252,121 @@ export async function runContainerUpdateApplyNowAction(formData: FormData) {
 	revalidatePath("/dashboard/containers");
 	revalidatePath("/dashboard/stacks");
 	revalidatePath("/dashboard/schedules");
+}
+
+// ---------------------------------------------------------------------------
+// Volume backup / restore
+// ---------------------------------------------------------------------------
+
+export async function backupVolumeAction(formData: FormData) {
+	const auth = await requirePrivilegedSession();
+	const volumeName = getValue(formData, "volumeName");
+	const environmentId = getValue(formData, "environmentId") || undefined;
+
+	if (!volumeName) {
+		throw new Error("Volume name is required.");
+	}
+
+	const environment = await resolveRuntimeEnvironment(auth.userId, environmentId);
+	const { randomUUID } = await import("node:crypto");
+	const backupId = randomUUID();
+	const createdAt = new Date();
+
+	const { db: dbClient, volumeBackups } = await import("@dockroot/db");
+	await dbClient.insert(volumeBackups).values({
+		id: backupId,
+		environmentId: environment.id,
+		volumeName,
+		fileName: `${backupId}.tar.gz`,
+		status: "in_progress",
+		createdByUserId: auth.userId,
+		createdAt,
+	});
+
+	try {
+		const result = await backupVolume(volumeName, backupId);
+		if (!result.ok) {
+			const { eq } = await import("drizzle-orm");
+			await dbClient
+				.update(volumeBackups)
+				.set({ status: "failed", error: result.output || "Backup failed.", completedAt: new Date() })
+				.where(eq(volumeBackups.id, backupId));
+			throw new Error(`Backup failed: ${result.output}`);
+		}
+
+		const sizeBytes = await getBackupFileSize(backupId);
+		const { eq } = await import("drizzle-orm");
+		await dbClient
+			.update(volumeBackups)
+			.set({ status: "completed", sizeBytes: sizeBytes ?? undefined, completedAt: new Date() })
+			.where(eq(volumeBackups.id, backupId));
+	} catch (error) {
+		const { eq } = await import("drizzle-orm");
+		await dbClient
+			.update(volumeBackups)
+			.set({
+				status: "failed",
+				error: error instanceof Error ? error.message : "Backup failed.",
+				completedAt: new Date(),
+			})
+			.where(eq(volumeBackups.id, backupId));
+		throw error;
+	}
+
+	revalidatePath("/dashboard/volumes");
+}
+
+export async function restoreVolumeAction(formData: FormData) {
+	requireDestructiveConfirmation(formData);
+	const auth = await requirePrivilegedSession();
+	const backupId = getValue(formData, "backupId");
+	const volumeName = getValue(formData, "volumeName");
+
+	if (!backupId || !volumeName) {
+		throw new Error("Backup ID and volume name are required.");
+	}
+
+	const result = await restoreVolume(volumeName, backupId);
+	if (!result.ok) {
+		throw new Error(`Restore failed: ${result.output}`);
+	}
+
+	revalidatePath("/dashboard/volumes");
+}
+
+export async function deleteVolumeBackupAction(formData: FormData) {
+	requireDestructiveConfirmation(formData);
+	const auth = await requirePrivilegedSession();
+	const backupId = getValue(formData, "backupId");
+
+	if (!backupId) {
+		throw new Error("Backup ID is required.");
+	}
+
+	await deleteBackupFile(backupId);
+
+	const { db: dbClient, volumeBackups } = await import("@dockroot/db");
+	const { eq } = await import("drizzle-orm");
+	await dbClient.delete(volumeBackups).where(eq(volumeBackups.id, backupId));
+
+	revalidatePath("/dashboard/volumes");
+}
+
+export async function listVolumeBackupsAction(volumeName: string, environmentId?: string) {
+	const auth = await requireUserSession();
+	const environment = await resolveRuntimeEnvironment(auth.userId, environmentId);
+	const { db: dbClient, volumeBackups } = await import("@dockroot/db");
+	const { and, eq, desc } = await import("drizzle-orm");
+
+	return dbClient.query.volumeBackups.findMany({
+		where: and(
+			eq(volumeBackups.environmentId, environment.id),
+			eq(volumeBackups.volumeName, volumeName),
+			eq(volumeBackups.createdByUserId, auth.userId),
+		),
+		orderBy: [desc(volumeBackups.createdAt)],
+		limit: 50,
+	});
 }
 
 export async function updateContainerUpdateScheduleAction(formData: FormData) {

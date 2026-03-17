@@ -1,5 +1,8 @@
 import "server-only";
 
+import { readFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import {
 	containerUpdatePolicies,
@@ -261,7 +264,81 @@ function parseLeadingMajor(tag: string) {
 	return Number(match[1]);
 }
 
+// ---------------------------------------------------------------------------
+// Digest cache – avoids redundant registry round-trips within a short window
+// ---------------------------------------------------------------------------
+const DIGEST_CACHE_TTL_MS = 5 * 60_000; // 5 minutes
+const digestCache = new Map<string, { digest: string | null; expiresAt: number }>();
+
+function getCachedDigest(imageRef: string): { hit: boolean; digest: string | null } {
+	const entry = digestCache.get(imageRef);
+	if (entry && Date.now() < entry.expiresAt) {
+		return { hit: true, digest: entry.digest };
+	}
+	if (entry) {
+		digestCache.delete(imageRef);
+	}
+	return { hit: false, digest: null };
+}
+
+function setCachedDigest(imageRef: string, digest: string | null) {
+	digestCache.set(imageRef, { digest, expiresAt: Date.now() + DIGEST_CACHE_TTL_MS });
+}
+
+// ---------------------------------------------------------------------------
+// Docker credential helper – reads ~/.docker/config.json for private registries
+// ---------------------------------------------------------------------------
+let dockerConfigCache: { config: Record<string, unknown> | null; expiresAt: number } | null = null;
+const DOCKER_CONFIG_CACHE_TTL_MS = 60_000; // re-read at most every minute
+
+async function loadDockerConfig(): Promise<Record<string, unknown> | null> {
+	if (dockerConfigCache && Date.now() < dockerConfigCache.expiresAt) {
+		return dockerConfigCache.config;
+	}
+	try {
+		const configPath = join(homedir(), ".docker", "config.json");
+		const raw = await readFile(configPath, "utf-8");
+		const config = JSON.parse(raw) as Record<string, unknown>;
+		dockerConfigCache = { config, expiresAt: Date.now() + DOCKER_CONFIG_CACHE_TTL_MS };
+		return config;
+	} catch {
+		dockerConfigCache = { config: null, expiresAt: Date.now() + DOCKER_CONFIG_CACHE_TTL_MS };
+		return null;
+	}
+}
+
+async function getDockerCredentials(registryHost: string): Promise<string | null> {
+	const config = await loadDockerConfig();
+	if (!config) {
+		return null;
+	}
+	const auths = config.auths as Record<string, { auth?: string }> | undefined;
+	if (!auths || typeof auths !== "object") {
+		return null;
+	}
+	// Try exact match first, then common variations
+	const candidates = [
+		registryHost,
+		`https://${registryHost}`,
+		`https://${registryHost}/v1/`,
+		`https://${registryHost}/v2/`,
+	];
+	for (const key of candidates) {
+		const entry = auths[key];
+		if (entry?.auth && typeof entry.auth === "string") {
+			return entry.auth; // base64-encoded "user:pass"
+		}
+	}
+	return null;
+}
+
 async function fetchRegistryManifestDigest(imageRef: string) {
+	// Check cache first
+	const cached = getCachedDigest(imageRef);
+	if (cached.hit) {
+		return cached.digest;
+	}
+
 	const parsed = parseRegistryImageReference(imageRef);
 	if (!parsed) {
 		return null;
@@ -286,6 +363,7 @@ async function fetchRegistryManifestDigest(imageRef: string) {
 		const challenge = response.headers.get("www-authenticate") || "";
 		const bearer = parseBearerChallenge(challenge);
 		if (!bearer) {
+			setCachedDigest(imageRef, null);
 			return null;
 		}
 		const scope = bearer.scope || `repository:${parsed.repository}:pull`;
@@ -294,12 +372,22 @@ async function fetchRegistryManifestDigest(imageRef: string) {
 			tokenUrl.searchParams.set("service", bearer.service);
 		}
 		tokenUrl.searchParams.set("scope", scope);
+
+		// For private registries, pass Docker credentials as Basic auth when fetching the bearer token
+		const credentials = await getDockerCredentials(parsed.registryHost);
+		const tokenHeaders: Record<string, string> = {};
+		if (credentials) {
+			tokenHeaders.authorization = `Basic ${credentials}`;
+		}
+
 		const tokenResponse = await fetch(tokenUrl.toString(), {
 			method: "GET",
+			headers: tokenHeaders,
 			signal: AbortSignal.timeout(8000),
 			cache: "no-store",
 		});
 		if (!tokenResponse.ok) {
+			setCachedDigest(imageRef, null);
 			return null;
 		}
 		const tokenBody = (await tokenResponse.json().catch(() => null)) as {
@@ -308,14 +396,18 @@ async function fetchRegistryManifestDigest(imageRef: string) {
 		} | null;
 		const token = tokenBody?.token || tokenBody?.access_token || "";
 		if (!token) {
+			setCachedDigest(imageRef, null);
 			return null;
 		}
 		response = await runRequest(token);
 	}
 	if (!response.ok) {
+		setCachedDigest(imageRef, null);
 		return null;
 	}
-	return normalizeDigest(response.headers.get("docker-content-digest") || "");
+	const digest = normalizeDigest(response.headers.get("docker-content-digest") || "");
+	setCachedDigest(imageRef, digest);
+	return digest;
 }
 
 async function findDockerHubMajorTargetTag(imageRef: string) {

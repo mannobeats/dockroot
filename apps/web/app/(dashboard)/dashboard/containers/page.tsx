@@ -5,9 +5,11 @@ import {
 	bulkControlContainerAction,
 	checkContainerUpdatesAction,
 	controlContainerAction,
+	createContainerAction,
 	setContainerUpdatePolicyAction,
 } from "@/app/(dashboard)/actions";
 import { ContainersTableWorkspace } from "@/components/containers-table-workspace";
+import { CreateContainerModal } from "@/components/create-container-modal";
 import { LiveRuntimePanel } from "@/components/live-runtime-panel";
 import { PageHeader } from "@/components/page-header";
 import { Input } from "@/components/ui/input";
@@ -111,6 +113,12 @@ export default async function ContainersPage({
 			<PageHeader
 				title="Containers"
 				description={`${environment.name} · ${filtered.length} containers · ${runningCount} running`}
+				actions={
+					<CreateContainerModal
+						action={createContainerAction}
+						environmentId={environment.id}
+					/>
+				}
 			/>
 
 			{includeRuntime ? <LiveRuntimePanel /> : null}

@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 import { db, deployments, stacks } from "@dockroot/db";
 import { eq } from "drizzle-orm";
 import { ensureDirectory, getPlatformDataDir, removeDirectory } from "@/lib/platform/fs";
-import { emitRealtime, emitToRoom } from "@/lib/realtime";
+import { emitRealtime, emitToRoom, registerDockrootAction } from "@/lib/realtime";
 
 const execFileAsync = promisify(execFile);
 
@@ -42,7 +42,13 @@ type ComposeProjectExport = {
 	configFiles: string[];
 };
 
-const DEFAULT_DOCKER_COMMAND_TIMEOUT_MS = 60_000;
+const DOCKER_OPERATION_TIMEOUTS: Record<string, number> = {
+	default: 30_000,
+	"image.pull": 10 * 60_000,
+	"container.stats": 15_000,
+	prune: 2 * 60_000,
+};
+
 const DEFAULT_CONTAINER_MUTATION_ROOTS = [
 	"/app",
 	"/workspace",
@@ -54,19 +60,22 @@ const DEFAULT_CONTAINER_MUTATION_ROOTS = [
 	"/home/node/app",
 ];
 
-function getDockerCommandTimeoutMs() {
-	const configured = Number(process.env.DOCKROOT_DOCKER_COMMAND_TIMEOUT_MS || "");
-	if (!Number.isFinite(configured) || configured <= 0) {
-		return DEFAULT_DOCKER_COMMAND_TIMEOUT_MS;
+function getOperationTimeoutMs(operation?: string): number {
+	if (operation && DOCKER_OPERATION_TIMEOUTS[operation]) {
+		return DOCKER_OPERATION_TIMEOUTS[operation];
 	}
-	return Math.max(5_000, Math.min(10 * 60_000, Math.floor(configured)));
+	const configured = Number(process.env.DOCKROOT_DOCKER_COMMAND_TIMEOUT_MS || "");
+	if (Number.isFinite(configured) && configured > 0) {
+		return Math.max(5_000, Math.min(10 * 60_000, Math.floor(configured)));
+	}
+	return DOCKER_OPERATION_TIMEOUTS.default;
 }
 
-async function runDockerCommand(args: string[]) {
+async function runDockerCommand(args: string[], operation?: string): Promise<DockerCommandResult> {
 	try {
 		const result = await execFileAsync("docker", args, {
 			maxBuffer: 1024 * 1024 * 8,
-			timeout: getDockerCommandTimeoutMs(),
+			timeout: getOperationTimeoutMs(operation),
 			killSignal: "SIGTERM",
 		});
 		return {
@@ -200,6 +209,18 @@ export async function getLocalDockerSnapshot() {
 	const volumeRows = parseJsonLines<Record<string, string>>(volumes.stdout);
 	const networkRows = parseJsonLines<Record<string, string>>(networks.stdout);
 
+	// Extract health status from docker ps Status field (e.g. "Up 2 hours (healthy)")
+	const enrichedContainers = containers.map((row) => {
+		const status = row.Status || "";
+		let healthStatus: string | null = null;
+		const healthMatch = status.match(/\((healthy|unhealthy|health: starting)\)/i);
+		if (healthMatch) {
+			const raw = healthMatch[1].toLowerCase();
+			healthStatus = raw === "health: starting" ? "starting" : raw;
+		}
+		return { ...row, HealthStatus: healthStatus };
+	});
+
 	return {
 		host: {
 			hostname: os.hostname(),
@@ -209,7 +230,7 @@ export async function getLocalDockerSnapshot() {
 			totalMemoryGb: Number((os.totalmem() / 1024 / 1024 / 1024).toFixed(1)),
 			freeMemoryGb: Number((os.freemem() / 1024 / 1024 / 1024).toFixed(1)),
 		},
-		containers,
+		containers: enrichedContainers,
 		images: imageRows,
 		volumes: volumeRows,
 		networks: networkRows,
@@ -227,7 +248,7 @@ export async function getContainerDetails(containerId: string) {
 	const [inspectResult, logsResult, statsResult] = await Promise.all([
 		runDockerCommand(["inspect", containerId]),
 		runDockerCommand(["logs", "--tail", "200", containerId]),
-		runDockerCommand(["stats", "--no-stream", "--format", "{{json .}}", containerId]),
+		runDockerCommand(["stats", "--no-stream", "--format", "{{json .}}", containerId], "container.stats"),
 	]);
 
 	let inspect = null;
@@ -238,10 +259,28 @@ export async function getContainerDetails(containerId: string) {
 		inspect = null;
 	}
 
+	// Extract structured health check data if present
+	const rawHealth = inspect?.State?.Health ?? null;
+	const health = rawHealth
+		? {
+				status: rawHealth.Status as string,
+				failingStreak: (rawHealth.FailingStreak as number) || 0,
+				log: (Array.isArray(rawHealth.Log) ? rawHealth.Log : [])
+					.slice(-5)
+					.map((entry: { Start?: string; End?: string; ExitCode?: number; Output?: string }) => ({
+						start: entry.Start || null,
+						end: entry.End || null,
+						exitCode: entry.ExitCode ?? null,
+						output: (entry.Output || "").trim(),
+					})),
+			}
+		: null;
+
 	return {
 		inspect,
 		logs: stripAnsi([logsResult.stdout, logsResult.stderr].filter(Boolean).join("\n")),
 		stats: parseJsonLines<Record<string, string>>(statsResult.stdout)[0] ?? null,
+		health,
 	};
 }
 
@@ -599,8 +638,16 @@ export async function controlContainer(
 	action: "start" | "stop" | "restart" | "remove",
 	options?: {
 		removeVolumes?: boolean;
+		auditContext?: {
+			userId?: string;
+			environmentId?: string;
+			containerName?: string;
+		};
 	},
 ) {
+	// Register with daemon event dedup so external event stream skips this action
+	registerDockrootAction(containerId, action === "remove" ? "destroy" : action);
+
 	const args =
 		action === "remove"
 			? ["rm", "-f", ...(options?.removeVolumes ? ["-v"] : []), containerId]
@@ -614,6 +661,32 @@ export async function controlContainer(
 		ok,
 		at: Date.now(),
 	});
+
+	if (options?.auditContext?.userId) {
+		try {
+			const { db, runtimeActionEvents } = await import("@dockroot/db");
+			await db.insert(runtimeActionEvents).values({
+				id: crypto.randomUUID(),
+				environmentId: options.auditContext.environmentId || null,
+				actorUserId: options.auditContext.userId,
+				actorRole: null,
+				source: "server-action",
+				actionType: `container.${action}`,
+				status: ok ? "success" : "error",
+				containerId,
+				sessionId: null,
+				details: JSON.stringify({
+					containerName: options.auditContext.containerName || null,
+					removeVolumes: options.removeVolumes || false,
+					output: result.stderr || null,
+				}),
+				occurredAt: new Date(),
+				createdAt: new Date(),
+			});
+		} catch {
+			// Non-critical: audit persistence failure should not break the action
+		}
+	}
 
 	return {
 		ok,
@@ -630,7 +703,204 @@ export async function removeVolume(name: string) {
 }
 
 export async function pruneVolumes() {
-	return runDockerCommand(["volume", "prune", "-f"]);
+	return runDockerCommand(["volume", "prune", "-f"], "prune");
+}
+
+// ---------------------------------------------------------------------------
+// Volume backup / restore
+// ---------------------------------------------------------------------------
+const BACKUP_DIR_NAME = "backups";
+
+function getBackupDir() {
+	return path.join(getPlatformDataDir(), BACKUP_DIR_NAME);
+}
+
+function sanitizeBackupInput(value: string) {
+	// Prevent path traversal and shell injection
+	return value.replace(/[^a-zA-Z0-9._-]/g, "_");
+}
+
+export async function backupVolume(volumeName: string, backupId: string) {
+	const safeVolume = sanitizeBackupInput(volumeName);
+	const safeId = sanitizeBackupInput(backupId);
+	const backupDir = getBackupDir();
+	await ensureDirectory(backupDir);
+	const fileName = `${safeId}.tar.gz`;
+
+	const result = await runDockerCommand(
+		[
+			"run",
+			"--rm",
+			"-v",
+			`${safeVolume}:/volume:ro`,
+			"-v",
+			`${backupDir}:/backups`,
+			"busybox",
+			"tar",
+			"czf",
+			`/backups/${fileName}`,
+			"-C",
+			"/volume",
+			".",
+		],
+		"prune", // reuse 2-minute timeout for heavy I/O
+	);
+
+	return { ok: result.ok, fileName, output: [result.stdout, result.stderr].filter(Boolean).join("\n") };
+}
+
+export async function restoreVolume(volumeName: string, backupId: string) {
+	const safeVolume = sanitizeBackupInput(volumeName);
+	const safeId = sanitizeBackupInput(backupId);
+	const backupDir = getBackupDir();
+	const fileName = `${safeId}.tar.gz`;
+
+	const result = await runDockerCommand(
+		[
+			"run",
+			"--rm",
+			"-v",
+			`${safeVolume}:/volume`,
+			"-v",
+			`${backupDir}:/backups`,
+			"busybox",
+			"sh",
+			"-c",
+			`rm -rf /volume/* && tar xzf /backups/${fileName} -C /volume`,
+		],
+		"prune",
+	);
+
+	return { ok: result.ok, output: [result.stdout, result.stderr].filter(Boolean).join("\n") };
+}
+
+export async function getBackupFileSize(backupId: string) {
+	const safeId = sanitizeBackupInput(backupId);
+	const filePath = path.join(getBackupDir(), `${safeId}.tar.gz`);
+	try {
+		const { stat } = await import("node:fs/promises");
+		const stats = await stat(filePath);
+		return stats.size;
+	} catch {
+		return null;
+	}
+}
+
+export async function deleteBackupFile(backupId: string) {
+	const safeId = sanitizeBackupInput(backupId);
+	const filePath = path.join(getBackupDir(), `${safeId}.tar.gz`);
+	try {
+		await rm(filePath);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Standalone container creation
+// ---------------------------------------------------------------------------
+export type CreateContainerInput = {
+	name: string;
+	image: string;
+	memory?: string;
+	cpus?: string;
+	restartPolicy?: string;
+	ports?: Array<{ host: string; container: string }>;
+	volumes?: Array<{ host: string; container: string }>;
+	envVars?: Array<{ key: string; value: string }>;
+	network?: string;
+	command?: string;
+};
+
+const CONTAINER_NAME_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
+const MEMORY_REGEX = /^\d+[bkmg]$/i;
+
+export async function createContainer(input: CreateContainerInput) {
+	if (!CONTAINER_NAME_REGEX.test(input.name)) {
+		return {
+			ok: false,
+			output: "Invalid container name. Use alphanumeric characters, dots, hyphens, and underscores.",
+		};
+	}
+	if (!input.image.trim()) {
+		return { ok: false, output: "Image is required." };
+	}
+
+	const args: string[] = ["run", "-d", "--name", input.name];
+
+	if (input.memory?.trim()) {
+		const mem = input.memory.trim();
+		if (!MEMORY_REGEX.test(mem)) {
+			return { ok: false, output: "Invalid memory format. Use e.g. 512m, 1g." };
+		}
+		args.push("--memory", mem);
+	}
+
+	if (input.cpus?.trim()) {
+		const cpuVal = Number(input.cpus);
+		if (!Number.isFinite(cpuVal) || cpuVal <= 0) {
+			return { ok: false, output: "CPUs must be a positive number." };
+		}
+		args.push("--cpus", String(cpuVal));
+	}
+
+	if (input.restartPolicy?.trim()) {
+		const policy = input.restartPolicy.trim();
+		if (!["no", "always", "unless-stopped", "on-failure"].includes(policy)) {
+			return { ok: false, output: "Invalid restart policy." };
+		}
+		args.push("--restart", policy);
+	}
+
+	if (input.ports?.length) {
+		for (const port of input.ports) {
+			if (port.host && port.container) {
+				args.push("-p", `${port.host}:${port.container}`);
+			}
+		}
+	}
+
+	if (input.volumes?.length) {
+		for (const vol of input.volumes) {
+			if (vol.host && vol.container) {
+				args.push("-v", `${vol.host}:${vol.container}`);
+			}
+		}
+	}
+
+	if (input.envVars?.length) {
+		for (const env of input.envVars) {
+			if (env.key) {
+				args.push("-e", `${env.key}=${env.value || ""}`);
+			}
+		}
+	}
+
+	if (input.network?.trim()) {
+		args.push("--network", input.network.trim());
+	}
+
+	args.push(input.image.trim());
+
+	if (input.command?.trim()) {
+		// Split on spaces but respect quotes
+		const cmdParts = input.command.trim().match(/(?:[^\s"]+|"[^"]*")+/g) || [];
+		args.push(...cmdParts.map((part) => part.replace(/^"|"$/g, "")));
+	}
+
+	const result = await runDockerCommand(args, "image.pull"); // uses 10-min timeout for potential image pull
+	const output = [result.stdout, result.stderr].filter(Boolean).join("\n");
+
+	if (result.ok) {
+		emitRealtime("container:state", {
+			type: "created",
+			containerId: result.stdout.trim().slice(0, 12),
+			containerName: input.name,
+		});
+	}
+
+	return { ok: result.ok, output };
 }
 
 export async function createNetwork(name: string, driver = "bridge") {
@@ -642,11 +912,11 @@ export async function removeNetwork(name: string) {
 }
 
 export async function pruneNetworks() {
-	return runDockerCommand(["network", "prune", "-f"]);
+	return runDockerCommand(["network", "prune", "-f"], "prune");
 }
 
 export async function pullImage(imageRef: string) {
-	return runDockerCommand(["pull", imageRef]);
+	return runDockerCommand(["pull", imageRef], "image.pull");
 }
 
 export async function removeImage(imageRef: string) {
@@ -654,7 +924,7 @@ export async function removeImage(imageRef: string) {
 }
 
 export async function pruneImages(options?: { all?: boolean }) {
-	return runDockerCommand(["image", "prune", "-f", ...(options?.all ? ["-a"] : [])]);
+	return runDockerCommand(["image", "prune", "-f", ...(options?.all ? ["-a"] : [])], "prune");
 }
 
 export async function deployStackLocally({

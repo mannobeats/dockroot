@@ -3,9 +3,11 @@ import "server-only";
 import { db, environments } from "@dockroot/db";
 import { and, eq } from "drizzle-orm";
 import { ensureDefaultLocalEnvironment } from "@/lib/platform";
+import type { CreateContainerInput } from "@/lib/platform/docker";
 import {
 	browseContainerPath,
 	controlContainer,
+	createContainer,
 	createNetwork,
 	createVolume,
 	deleteContainerPath,
@@ -207,11 +209,17 @@ export async function controlContainerForEnvironment(input: {
 	containerId: string;
 	action: "start" | "stop" | "restart" | "remove";
 	removeVolumes?: boolean;
+	containerName?: string;
 }) {
 	const environment = await getEnvironmentRecord(input.environmentId, input.userId);
 	if (environment.kind === "local") {
 		return controlContainer(input.containerId, input.action, {
 			removeVolumes: input.removeVolumes,
+			auditContext: {
+				userId: input.userId,
+				environmentId: environment.id,
+				containerName: input.containerName,
+			},
 		});
 	}
 
@@ -222,6 +230,24 @@ export async function controlContainerForEnvironment(input: {
 		},
 		body: JSON.stringify({ action: input.action, removeVolumes: input.removeVolumes }),
 	});
+}
+
+export async function createContainerForEnvironment(
+	userId: string,
+	input: CreateContainerInput,
+	environmentId?: string,
+) {
+	const environment = await getEnvironmentRecord(environmentId, userId);
+	if (environment.kind === "local") {
+		return createContainer(input);
+	}
+
+	const result = await fetchAgentJson(environment, "/containers", {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify(input),
+	});
+	return result as { ok: boolean; output: string };
 }
 
 export async function browseContainerPathForEnvironment(

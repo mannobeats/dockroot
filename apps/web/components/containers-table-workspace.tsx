@@ -446,7 +446,12 @@ export function ContainersTableWorkspace({
 										{container.Image}
 									</DataTableCell>
 									<DataTableCell>
-										<StatusBadge status={state || "offline"} />
+										<div className="space-y-0.5">
+											<StatusBadge status={state || "offline"} />
+											{container.HealthStatus ? (
+												<StatusBadge status={container.HealthStatus} />
+											) : null}
+										</div>
 									</DataTableCell>
 									<DataTableCell className="text-xs text-muted">
 										{container.Status || "—"}

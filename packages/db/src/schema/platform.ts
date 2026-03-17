@@ -61,6 +61,12 @@ export const containerUpdateCheckModeEnum = pgEnum("container_update_check_mode"
 	"include_major",
 ]);
 
+export const volumeBackupStatusEnum = pgEnum("volume_backup_status", [
+	"in_progress",
+	"completed",
+	"failed",
+]);
+
 export const githubProviders = pgTable(
 	"github_providers",
 	{
@@ -421,6 +427,31 @@ export const containerUpdateRuns = pgTable(
 	],
 );
 
+export const volumeBackups = pgTable(
+	"volume_backups",
+	{
+		id: text("id").primaryKey(),
+		environmentId: text("environment_id")
+			.notNull()
+			.references(() => environments.id, { onDelete: "cascade" }),
+		volumeName: text("volume_name").notNull(),
+		fileName: text("file_name").notNull(),
+		sizeBytes: integer("size_bytes"),
+		status: volumeBackupStatusEnum("status").notNull().default("in_progress"),
+		error: text("error"),
+		createdByUserId: text("created_by_user_id")
+			.notNull()
+			.references(() => user.id, { onDelete: "cascade" }),
+		createdAt: timestamp("created_at").notNull(),
+		completedAt: timestamp("completed_at"),
+	},
+	(table) => [
+		index("volume_backups_environment_idx").on(table.environmentId),
+		index("volume_backups_volume_name_idx").on(table.volumeName),
+		index("volume_backups_user_idx").on(table.createdByUserId),
+	],
+);
+
 export const environmentRelations = relations(environments, ({ many, one }) => ({
 	agent: many(agents),
 	stacks: many(stacks),
@@ -557,6 +588,17 @@ export const containerUpdateRunRelations = relations(containerUpdateRuns, ({ one
 	}),
 	createdBy: one(user, {
 		fields: [containerUpdateRuns.createdByUserId],
+		references: [user.id],
+	}),
+}));
+
+export const volumeBackupRelations = relations(volumeBackups, ({ one }) => ({
+	environment: one(environments, {
+		fields: [volumeBackups.environmentId],
+		references: [environments.id],
+	}),
+	createdBy: one(user, {
+		fields: [volumeBackups.createdByUserId],
 		references: [user.id],
 	}),
 }));
