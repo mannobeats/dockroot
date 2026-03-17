@@ -76,7 +76,7 @@ export function VolumesPageWorkspace({
 						id: "volume-backup-filter",
 						value: backupFilter,
 						onChange: setBackupFilter,
-						className: "h-9 min-w-40 text-xs",
+						className: "h-7 min-w-40 text-xs",
 						options: [
 							{ value: "all", label: "All volumes" },
 							{ value: "with-backups", label: "With backups" },

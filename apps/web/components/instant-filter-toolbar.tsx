@@ -37,6 +37,7 @@ export function InstantFilterToolbar({
 	const inputRef = useRef<HTMLInputElement>(null);
 	const hasActiveFilters =
 		query.trim().length > 0 || filters.some((filter) => filter.value !== filter.options[0]?.value);
+	const isFiltered = resultCount !== totalCount;
 
 	useEffect(() => {
 		if (!enableShortcut) {
@@ -67,28 +68,48 @@ export function InstantFilterToolbar({
 		return () => window.removeEventListener("keydown", onKeyDown);
 	}, [enableShortcut]);
 
+	const hasFiltersOrReset = filters.length > 0 || onReset;
+
 	return (
-		<div className="border-b border-default/8 px-3 py-2">
-			<div className="flex flex-col gap-2 lg:flex-row lg:items-center">
-				<div className="relative min-w-0 flex-1">
-					<Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
-					<Input
-						ref={inputRef}
-						id={searchId}
-						type="search"
-						value={query}
-						onChange={(event) => onQueryChange(event.target.value)}
-						placeholder={`${searchPlaceholder}${enableShortcut ? " (press /)" : ""}`}
-						className="w-full pl-9"
-					/>
-				</div>
-				<div className="flex flex-wrap items-center gap-2">
+		<div className="border-b border-default/8 px-3 py-2.5 space-y-2">
+			{/* Row 1: Full-width search */}
+			<div className="relative">
+				<Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
+				<Input
+					ref={inputRef}
+					id={searchId}
+					type="search"
+					value={query}
+					onChange={(event) => onQueryChange(event.target.value)}
+					placeholder={`${searchPlaceholder}${enableShortcut ? " (press /)" : ""}`}
+					className="w-full pl-9"
+				/>
+			</div>
+
+			{/* Row 2: Filters + result count + reset — single compact line */}
+			{hasFiltersOrReset ? (
+				<div className="flex items-center gap-2">
+					{/* Result count on the left */}
+					{isFiltered ? (
+						<span className="shrink-0 text-[11px] tabular-nums text-muted">
+							Showing {resultCount} of {totalCount}
+						</span>
+					) : (
+						<span className="shrink-0 text-[11px] text-muted">
+							{totalCount} total
+						</span>
+					)}
+
+					{/* Spacer pushes filters to the right */}
+					<div className="flex-1" />
+
+					{/* Filter dropdowns */}
 					{filters.map((filter) => (
 						<Select
 							key={filter.id}
 							value={filter.value}
 							onChange={(event) => filter.onChange(event.target.value)}
-							className={filter.className || "h-9 min-w-32 text-xs"}
+							className={filter.className || "h-7 min-w-32 text-xs"}
 						>
 							{filter.options.map((option) => (
 								<option key={option.value} value={option.value}>
@@ -97,25 +118,21 @@ export function InstantFilterToolbar({
 							))}
 						</Select>
 					))}
+
+					{/* Reset */}
 					{onReset ? (
 						<button
 							type="button"
 							onClick={onReset}
 							disabled={!hasActiveFilters}
-							className="inline-flex h-9 items-center gap-1 rounded-lg border border-default/18 px-3 text-xs font-medium text-muted transition-colors hover:border-default/28 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+							className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-default/18 px-2 text-xs text-muted transition-colors hover:border-default/28 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
 						>
-							<RotateCcw className="h-3.5 w-3.5" />
+							<RotateCcw className="h-3 w-3" />
 							Reset
 						</button>
 					) : null}
 				</div>
-			</div>
-			<div className="mt-2 flex items-center justify-between gap-2 text-xs text-muted">
-				<p>
-					Showing {resultCount} of {totalCount}
-				</p>
-				{hasActiveFilters ? <p>Results update instantly as you type and refine filters.</p> : null}
-			</div>
+			) : null}
 		</div>
 	);
 }

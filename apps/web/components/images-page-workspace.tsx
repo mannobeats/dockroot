@@ -80,7 +80,7 @@ export function ImagesPageWorkspace({
 						id: "image-usage-filter",
 						value: usageFilter,
 						onChange: setUsageFilter,
-						className: "h-9 min-w-36 text-xs",
+						className: "h-7 min-w-36 text-xs",
 						options: [
 							{ value: "all", label: "All images" },
 							{ value: "in-use", label: "In use" },

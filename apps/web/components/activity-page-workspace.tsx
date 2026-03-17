@@ -67,7 +67,7 @@ export function ActivityPageWorkspace({
 						id: "activity-kind-filter",
 						value: kind,
 						onChange: setKind,
-						className: "h-9 min-w-36 text-xs",
+						className: "h-7 min-w-36 text-xs",
 						options: [
 							{ value: "all", label: "All sources" },
 							{ value: "deployment", label: "Deployments" },
@@ -78,7 +78,7 @@ export function ActivityPageWorkspace({
 						id: "activity-severity-filter",
 						value: severity,
 						onChange: setSeverity,
-						className: "h-9 min-w-32 text-xs",
+						className: "h-7 min-w-32 text-xs",
 						options: [
 							{ value: "all", label: "All severities" },
 							{ value: "info", label: "Info" },

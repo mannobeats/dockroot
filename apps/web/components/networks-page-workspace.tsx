@@ -57,7 +57,7 @@ export function NetworksPageWorkspace({
 						id: "network-scope-filter",
 						value: scopeFilter,
 						onChange: setScopeFilter,
-						className: "h-9 min-w-36 text-xs",
+						className: "h-7 min-w-36 text-xs",
 						options: [
 							{ value: "all", label: "All scopes" },
 							{ value: "local", label: "Local" },

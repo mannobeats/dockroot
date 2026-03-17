@@ -106,7 +106,7 @@ export function ContainersPageWorkspace({
 						id: "container-status-filter",
 						value: status,
 						onChange: setStatus,
-						className: "h-9 min-w-36 text-xs",
+						className: "h-7 min-w-36 text-xs",
 						options: [
 							{ value: "all", label: "All statuses" },
 							{ value: "running", label: "Running" },
