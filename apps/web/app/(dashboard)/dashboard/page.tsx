@@ -40,12 +40,13 @@ export default async function DashboardPage({
 				})
 			: null,
 		includeRuntime ? getEnvironmentMetricsSeries(environment.id) : null,
-		includeRuntime ? getRuntimeCollectorHealth(environment) : null,
+		includeRuntime
+			? getRuntimeCollectorHealth(environment, { runtimeAvailable: Boolean(runtimeIssue === null) })
+			: null,
 	]);
 	const runtime = runtimeResult;
-	const dashboardMetrics = metrics?.available
-		? metrics
-		: includeRuntime && runtime
+	const runtimeFallbackMetrics =
+		includeRuntime && runtime
 			? {
 					available: true,
 					cpuPercent: runtime.snapshot.usage?.cpuPercent ?? null,
@@ -75,6 +76,27 @@ export default async function DashboardPage({
 					memoryTotalBytes: null,
 				}
 			: null;
+	const dashboardMetrics =
+		metrics?.available && runtimeFallbackMetrics
+			? {
+					...metrics,
+					cpuPercent: metrics.cpuPercent ?? runtimeFallbackMetrics.cpuPercent,
+					memoryPercent: metrics.memoryPercent ?? runtimeFallbackMetrics.memoryPercent,
+					cpuSeries: metrics.cpuSeries.length
+						? metrics.cpuSeries
+						: runtimeFallbackMetrics.cpuSeries,
+					memorySeries: metrics.memorySeries.length
+						? metrics.memorySeries
+						: runtimeFallbackMetrics.memorySeries,
+					runningContainers: metrics.runningContainers ?? runtimeFallbackMetrics.runningContainers,
+					containerCount: metrics.containerCount ?? runtimeFallbackMetrics.containerCount,
+					imageCount: metrics.imageCount ?? runtimeFallbackMetrics.imageCount,
+					memoryUsedBytes: metrics.memoryUsedBytes ?? runtimeFallbackMetrics.memoryUsedBytes,
+					memoryTotalBytes: metrics.memoryTotalBytes ?? runtimeFallbackMetrics.memoryTotalBytes,
+				}
+			: metrics?.available
+				? metrics
+				: runtimeFallbackMetrics;
 	const collectorHealth = targets || null;
 	const deploymentStatus = data.recentDeployments
 		.filter(

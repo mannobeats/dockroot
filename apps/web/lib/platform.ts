@@ -1757,6 +1757,7 @@ export async function registerAgent({
 export async function heartbeatAgent(
 	accessToken: string,
 	snapshot?: Parameters<typeof persistRuntimeSnapshotMetrics>[0]["snapshot"],
+	agentUrl?: string,
 ) {
 	const agent = await findAgentByAccessToken(accessToken);
 
@@ -1780,6 +1781,7 @@ export async function heartbeatAgent(
 		.update(environments)
 		.set({
 			status: "healthy",
+			managerUrl: agentUrl ? normalizeAgentUrl(agentUrl) : undefined,
 			updatedAt,
 		})
 		.where(eq(environments.id, agent.environmentId));
@@ -1791,6 +1793,17 @@ export async function heartbeatAgent(
 			environmentId: agent.environmentId,
 			snapshot,
 			source: "agent",
+		});
+
+		emitRealtime("runtime:metrics", {
+			environmentId: agent.environmentId,
+			at: Date.now(),
+			containers: snapshot.containerStats || [],
+			host: {
+				source: "native",
+				cpuPercent: snapshot.usage?.cpuPercent ?? null,
+				memoryPercent: snapshot.usage?.memoryPercent ?? null,
+			},
 		});
 	}
 

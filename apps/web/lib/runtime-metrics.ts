@@ -277,17 +277,31 @@ export async function getEnvironmentMetricsSeries(environmentId: string) {
 	};
 }
 
-export async function getRuntimeCollectorHealth(environment: {
-	id: string;
-	kind: "local" | "agent";
-	name: string;
-}) {
+export async function getRuntimeCollectorHealth(
+	environment: {
+		id: string;
+		kind: "local" | "agent";
+		name: string;
+	},
+	options?: { runtimeAvailable?: boolean },
+) {
 	const latest = await db.query.environmentMetricSamples.findFirst({
 		where: eq(environmentMetricSamples.environmentId, environment.id),
 		orderBy: [desc(environmentMetricSamples.sampledAt)],
 	});
 
 	if (!latest) {
+		if (options?.runtimeAvailable) {
+			return [
+				{
+					name:
+						environment.kind === "local" ? "Dockroot local collector" : "Dockroot agent collector",
+					status: "healthy",
+					lastError: "",
+				},
+			];
+		}
+
 		return [
 			{
 				name:

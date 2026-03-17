@@ -18,7 +18,10 @@ export async function POST(request: Request) {
 			operatingSystem: payload.operatingSystem ? String(payload.operatingSystem) : undefined,
 			architecture: payload.architecture ? String(payload.architecture) : undefined,
 			dockerVersion: payload.dockerVersion ? String(payload.dockerVersion) : undefined,
-			agentUrl: inferAgentUrlFromHeaders(request.headers) || undefined,
+			agentUrl:
+				(payload.agentUrl ? String(payload.agentUrl) : null) ||
+				inferAgentUrlFromHeaders(request.headers) ||
+				undefined,
 			managerUrl: inferRequestManagerUrl(request.headers) || undefined,
 		});
 

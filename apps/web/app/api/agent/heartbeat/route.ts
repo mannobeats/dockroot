@@ -20,7 +20,11 @@ export async function POST(request: Request) {
 
 	try {
 		const payload = await request.json().catch(() => null);
-		await heartbeatAgent(token, payload?.snapshot || undefined);
+		await heartbeatAgent(
+			token,
+			payload?.snapshot || undefined,
+			payload?.agentUrl ? String(payload.agentUrl) : undefined,
+		);
 		return NextResponse.json({ ok: true });
 	} catch (error) {
 		const message = error instanceof Error ? error.message : "Heartbeat failed";

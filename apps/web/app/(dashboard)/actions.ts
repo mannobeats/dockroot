@@ -718,7 +718,9 @@ export async function deleteStackAction(formData: FormData) {
 		details: { stackName: stack.name, stackId },
 	});
 
-	redirect("/dashboard/stacks");
+	redirect(
+		`/dashboard/stacks${stack.environment?.id ? `?environment=${encodeURIComponent(stack.environment.id)}` : ""}`,
+	);
 }
 
 export async function createContainerAction(formData: FormData) {
