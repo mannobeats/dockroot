@@ -114,10 +114,7 @@ export default async function ContainersPage({
 				title="Containers"
 				description={`${environment.name} · ${filtered.length} containers · ${runningCount} running`}
 				actions={
-					<CreateContainerModal
-						action={createContainerAction}
-						environmentId={environment.id}
-					/>
+					<CreateContainerModal action={createContainerAction} environmentId={environment.id} />
 				}
 			/>
 

@@ -121,48 +121,26 @@ export function CreateContainerModal({
 				<div className="grid grid-cols-2 gap-3">
 					<Field>
 						<FieldLabel htmlFor="modal-container-name">Name</FieldLabel>
-						<Input
-							id="modal-container-name"
-							name="name"
-							required
-							placeholder="my-container"
-						/>
+						<Input id="modal-container-name" name="name" required placeholder="my-container" />
 					</Field>
 					<Field>
 						<FieldLabel htmlFor="modal-container-image">Image</FieldLabel>
-						<Input
-							id="modal-container-image"
-							name="image"
-							required
-							placeholder="nginx:latest"
-						/>
+						<Input id="modal-container-image" name="image" required placeholder="nginx:latest" />
 					</Field>
 				</div>
 
 				<div className="grid grid-cols-3 gap-3">
 					<Field>
 						<FieldLabel htmlFor="modal-container-memory">Memory</FieldLabel>
-						<Input
-							id="modal-container-memory"
-							name="memory"
-							placeholder="512m"
-						/>
+						<Input id="modal-container-memory" name="memory" placeholder="512m" />
 					</Field>
 					<Field>
 						<FieldLabel htmlFor="modal-container-cpus">CPUs</FieldLabel>
-						<Input
-							id="modal-container-cpus"
-							name="cpus"
-							placeholder="1.0"
-						/>
+						<Input id="modal-container-cpus" name="cpus" placeholder="1.0" />
 					</Field>
 					<Field>
 						<FieldLabel htmlFor="modal-container-restart">Restart</FieldLabel>
-						<Select
-							id="modal-container-restart"
-							name="restartPolicy"
-							defaultValue="no"
-						>
+						<Select id="modal-container-restart" name="restartPolicy" defaultValue="no">
 							<option value="no">no</option>
 							<option value="always">always</option>
 							<option value="unless-stopped">unless-stopped</option>
@@ -173,11 +151,7 @@ export function CreateContainerModal({
 
 				<Field>
 					<FieldLabel htmlFor="modal-container-network">Network</FieldLabel>
-					<Input
-						id="modal-container-network"
-						name="network"
-						placeholder="bridge"
-					/>
+					<Input id="modal-container-network" name="network" placeholder="bridge" />
 				</Field>
 
 				<DynamicListField

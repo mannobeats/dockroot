@@ -1,7 +1,7 @@
 "use client";
 
-import { Archive, Download, RotateCcw, Trash2 } from "lucide-react";
-import { useEffect, useState, useTransition } from "react";
+import { Archive, RotateCcw, Trash2 } from "lucide-react";
+import { useState } from "react";
 import { ActionModal } from "@/components/action-modal";
 import { DestructiveActionModal } from "@/components/destructive-action-modal";
 import { FormSubmitButton } from "@/components/form-submit-button";
@@ -124,15 +124,11 @@ export function VolumeBackupModal({
 								<div className="min-w-0 flex-1 space-y-0.5">
 									<div className="flex items-center gap-2">
 										{statusBadge(backup.status)}
-										<span className="text-[11px] text-muted">
-											{formatDate(backup.createdAt)}
-										</span>
+										<span className="text-[11px] text-muted">{formatDate(backup.createdAt)}</span>
 									</div>
 									<p className="truncate text-[11px] text-muted">
 										{formatBytes(backup.sizeBytes)}
-										{backup.error ? (
-											<span className="ml-1 text-danger">{backup.error}</span>
-										) : null}
+										{backup.error ? <span className="ml-1 text-danger">{backup.error}</span> : null}
 									</p>
 								</div>
 								{backup.status === "completed" ? (

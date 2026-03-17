@@ -25,16 +25,12 @@ export function VolumesTableWorkspace({
 	removeVolumeAction,
 	bulkRemoveVolumesAction,
 	backupVolumeAction,
-	restoreVolumeAction,
-	deleteVolumeBackupAction,
 }: {
 	volumes: VolumeRow[];
 	environmentId: string;
 	removeVolumeAction: FormAction;
 	bulkRemoveVolumesAction: FormAction;
 	backupVolumeAction?: FormAction;
-	restoreVolumeAction?: FormAction;
-	deleteVolumeBackupAction?: FormAction;
 }) {
 	const [selectedNames, setSelectedNames] = useState<Record<string, boolean>>({});
 	const allNames = useMemo(() => volumes.map((volume) => volume.Name), [volumes]);

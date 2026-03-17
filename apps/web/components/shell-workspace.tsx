@@ -12,7 +12,6 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { LinkButton } from "@/components/ui/link-button";
 import { Panel } from "@/components/ui/panel";
-import { cn } from "@/lib/cn";
 import { getSocket } from "@/lib/socket-client";
 
 type ContainerOption = {

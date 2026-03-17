@@ -655,8 +655,7 @@ export async function createContainerAction(formData: FormData) {
 	const ports = parseJsonValue<Array<{ host: string; container: string }>>(formData, "ports") || [];
 	const volumes =
 		parseJsonValue<Array<{ host: string; container: string }>>(formData, "volumes") || [];
-	const envVars =
-		parseJsonValue<Array<{ key: string; value: string }>>(formData, "envVars") || [];
+	const envVars = parseJsonValue<Array<{ key: string; value: string }>>(formData, "envVars") || [];
 
 	const result = await createContainerForEnvironment(
 		auth.userId,
@@ -1289,7 +1288,11 @@ export async function backupVolumeAction(formData: FormData) {
 			const { eq } = await import("drizzle-orm");
 			await dbClient
 				.update(volumeBackups)
-				.set({ status: "failed", error: result.output || "Backup failed.", completedAt: new Date() })
+				.set({
+					status: "failed",
+					error: result.output || "Backup failed.",
+					completedAt: new Date(),
+				})
 				.where(eq(volumeBackups.id, backupId));
 			throw new Error(`Backup failed: ${result.output}`);
 		}
@@ -1318,7 +1321,7 @@ export async function backupVolumeAction(formData: FormData) {
 
 export async function restoreVolumeAction(formData: FormData) {
 	requireDestructiveConfirmation(formData);
-	const auth = await requirePrivilegedSession();
+	await requirePrivilegedSession();
 	const backupId = getValue(formData, "backupId");
 	const volumeName = getValue(formData, "volumeName");
 
@@ -1336,7 +1339,7 @@ export async function restoreVolumeAction(formData: FormData) {
 
 export async function deleteVolumeBackupAction(formData: FormData) {
 	requireDestructiveConfirmation(formData);
-	const auth = await requirePrivilegedSession();
+	await requirePrivilegedSession();
 	const backupId = getValue(formData, "backupId");
 
 	if (!backupId) {

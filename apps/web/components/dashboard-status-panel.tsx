@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
 import { CheckCircle2 } from "lucide-react";
+import Link from "next/link";
+import { useState } from "react";
 import { DonutStatusCard } from "@/components/prometheus-overview";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
@@ -108,10 +108,7 @@ function ActivityTab({
 				))}
 			</div>
 			<div className="mt-3 border-t border-default/8 pt-3">
-				<Link
-					href={activityLink}
-					className="text-xs font-medium text-accent hover:text-accent/80"
-				>
+				<Link href={activityLink} className="text-xs font-medium text-accent hover:text-accent/80">
 					View all deployments →
 				</Link>
 			</div>

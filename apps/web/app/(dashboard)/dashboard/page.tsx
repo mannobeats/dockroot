@@ -4,9 +4,8 @@ import { DashboardStatusPanel } from "@/components/dashboard-status-panel";
 import { InfrastructureCharts } from "@/components/prometheus-overview";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
-import { EmptyState } from "@/components/ui/empty-state";
 import { LinkButton } from "@/components/ui/link-button";
-import { Panel, PanelHeader, PanelContent } from "@/components/ui/panel";
+import { Panel, PanelContent, PanelHeader } from "@/components/ui/panel";
 import { UtilizationBar } from "@/components/ui/utilization-bar";
 import { isPrivilegedRole, requireUserSession } from "@/lib/authorization";
 import {
@@ -100,10 +99,8 @@ export default async function DashboardPage({
 		environment: { id: d.environment.id, name: d.environment.name },
 	}));
 
-	const containerCount =
-		includeRuntime && runtime ? runtime.snapshot.counts.containers : null;
-	const imageCount =
-		includeRuntime && runtime ? runtime.snapshot.counts.images : null;
+	const containerCount = includeRuntime && runtime ? runtime.snapshot.counts.containers : null;
+	const imageCount = includeRuntime && runtime ? runtime.snapshot.counts.images : null;
 
 	return (
 		<div className="animate-in space-y-5">
@@ -224,9 +221,7 @@ export default async function DashboardPage({
 											valueLabel={`${memoryUsed ?? "—"} / ${hostTotalMemoryGb} GB`}
 										/>
 									</div>
-									<p className="truncate text-[10px] text-muted/60">
-										{data.dataDir}
-									</p>
+									<p className="truncate text-[10px] text-muted/60">{data.dataDir}</p>
 								</div>
 							) : null}
 						</PanelContent>
@@ -236,8 +231,7 @@ export default async function DashboardPage({
 						<p className="text-xs font-medium text-muted">Infrastructure</p>
 						<p className="mt-1 text-sm font-semibold">Telemetry unavailable</p>
 						<p className="mt-2 text-xs text-muted">
-							Host-level telemetry appears only for privileged users on local runtime
-							environments.
+							Host-level telemetry appears only for privileged users on local runtime environments.
 						</p>
 					</Panel>
 				)}

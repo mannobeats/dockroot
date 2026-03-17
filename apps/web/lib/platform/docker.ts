@@ -248,7 +248,10 @@ export async function getContainerDetails(containerId: string) {
 	const [inspectResult, logsResult, statsResult] = await Promise.all([
 		runDockerCommand(["inspect", containerId]),
 		runDockerCommand(["logs", "--tail", "200", containerId]),
-		runDockerCommand(["stats", "--no-stream", "--format", "{{json .}}", containerId], "container.stats"),
+		runDockerCommand(
+			["stats", "--no-stream", "--format", "{{json .}}", containerId],
+			"container.stats",
+		),
 	]);
 
 	let inspect = null;
@@ -746,7 +749,11 @@ export async function backupVolume(volumeName: string, backupId: string) {
 		"prune", // reuse 2-minute timeout for heavy I/O
 	);
 
-	return { ok: result.ok, fileName, output: [result.stdout, result.stderr].filter(Boolean).join("\n") };
+	return {
+		ok: result.ok,
+		fileName,
+		output: [result.stdout, result.stderr].filter(Boolean).join("\n"),
+	};
 }
 
 export async function restoreVolume(volumeName: string, backupId: string) {
@@ -820,7 +827,8 @@ export async function createContainer(input: CreateContainerInput) {
 	if (!CONTAINER_NAME_REGEX.test(input.name)) {
 		return {
 			ok: false,
-			output: "Invalid container name. Use alphanumeric characters, dots, hyphens, and underscores.",
+			output:
+				"Invalid container name. Use alphanumeric characters, dots, hyphens, and underscores.",
 		};
 	}
 	if (!input.image.trim()) {
