@@ -73,14 +73,20 @@ export default async function DashboardPage({
 	return (
 		<div className="animate-in space-y-6">
 			{/* Greeting + quick action */}
-			<div className="flex items-center justify-between">
-				<div>
-					<h1 className="text-lg font-bold tracking-tight">
+			<div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+				<div className="min-w-0">
+					<h1 className="break-words text-lg font-bold tracking-tight [overflow-wrap:anywhere]">
 						{greeting}, {session.user.name}
 					</h1>
-					<p className="text-sm text-muted">{environment.name}</p>
+					<p className="break-words text-sm text-muted [overflow-wrap:anywhere]">
+						{environment.name}
+					</p>
 				</div>
-				<LinkButton href={`/dashboard/stacks?environment=${environment.id}`} size="sm">
+				<LinkButton
+					href={`/dashboard/stacks?environment=${environment.id}`}
+					size="sm"
+					className="self-start"
+				>
 					Deploy Stack
 				</LinkButton>
 			</div>
@@ -115,10 +121,12 @@ export default async function DashboardPage({
 			{/* Host + Recent stacks side by side */}
 			<div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
 				{includeRuntime && runtime ? (
-					<Panel padding="md">
-						<div className="flex items-center justify-between">
-							<div>
-								<h2 className="text-sm font-semibold">{runtime.snapshot.host.hostname}</h2>
+					<Panel padding="md" className="min-w-0">
+						<div className="flex items-start justify-between gap-3">
+							<div className="min-w-0">
+								<h2 className="break-words text-sm font-semibold [overflow-wrap:anywhere]">
+									{runtime.snapshot.host.hostname}
+								</h2>
 								<p className="text-xs text-muted">
 									{runtime.snapshot.host.platform} · {runtime.snapshot.host.architecture} ·{" "}
 									{runtime.snapshot.host.cpus} CPU
@@ -132,14 +140,14 @@ export default async function DashboardPage({
 								percent={memoryUsedPercent ?? 0}
 								valueLabel={`${memoryUsed ?? "—"} / ${runtime.snapshot.host.totalMemoryGb} GB`}
 							/>
-							<div className="text-xs text-muted">
+							<div className="min-w-0 text-xs text-muted">
 								<p className="font-medium text-foreground">Data</p>
 								<p className="mt-1 break-all">{data.dataDir}</p>
 							</div>
 						</div>
 					</Panel>
 				) : (
-					<Panel padding="md">
+					<Panel padding="md" className="min-w-0">
 						<h2 className="text-sm font-semibold">Workspace overview</h2>
 						<p className="mt-1 text-sm text-muted">
 							Scoped to owned environments and stacks. Host telemetry restricted to operators.
@@ -147,8 +155,8 @@ export default async function DashboardPage({
 					</Panel>
 				)}
 
-				<Panel padding="md">
-					<div className="flex items-center justify-between">
+				<Panel padding="md" className="min-w-0">
+					<div className="flex items-center justify-between gap-3">
 						<h2 className="text-sm font-semibold">Recent stacks</h2>
 						<Link
 							href={`/dashboard/stacks?environment=${environment.id}`}
@@ -163,15 +171,15 @@ export default async function DashboardPage({
 								<Link
 									key={stack.id}
 									href={`/dashboard/stacks/${stack.id}`}
-									className="flex items-center justify-between rounded-lg px-2.5 py-2 transition-colors hover:bg-foreground/[0.03]"
+									className="flex min-w-0 items-start justify-between gap-3 rounded-lg px-2.5 py-2 transition-colors hover:bg-foreground/[0.03]"
 								>
-									<div className="min-w-0">
-										<p className="text-sm font-medium">{stack.name}</p>
+									<div className="min-w-0 flex-1">
+										<p className="truncate text-sm font-medium">{stack.name}</p>
 										<p className="truncate text-xs text-muted">
 											{stack.description || stack.environment.name}
 										</p>
 									</div>
-									<Badge className="shrink-0 ml-2">{stack.environment.name}</Badge>
+									<Badge className="shrink-0">{stack.environment.name}</Badge>
 								</Link>
 							))
 						) : (
@@ -187,8 +195,8 @@ export default async function DashboardPage({
 			{includeRuntime && environment.kind === "local" ? <LiveRuntimePanel /> : null}
 
 			{/* Latest Activity */}
-			<Panel>
-				<div className="flex items-center justify-between px-3 py-2.5">
+			<Panel className="min-w-0">
+				<div className="flex items-center justify-between gap-3 px-3 py-2.5">
 					<h2 className="text-sm font-semibold">Latest deployments</h2>
 					<Link
 						href={`/dashboard/activity?environment=${environment.id}`}
@@ -210,11 +218,13 @@ export default async function DashboardPage({
 						{data.recentDeployments.length ? (
 							data.recentDeployments.map((deployment) => (
 								<DataTableRow key={deployment.id}>
-									<DataTableCell className="font-medium">{deployment.stack.name}</DataTableCell>
-									<DataTableCell className="text-muted">
+									<DataTableCell className="max-w-[260px] truncate font-medium">
+										{deployment.stack.name}
+									</DataTableCell>
+									<DataTableCell className="max-w-[220px] truncate text-muted">
 										{deployment.environment.name}
 									</DataTableCell>
-									<DataTableCell className="font-mono text-xs text-muted">
+									<DataTableCell className="max-w-[200px] truncate font-mono text-xs text-muted">
 										{deployment.version}
 									</DataTableCell>
 									<DataTableCell>
