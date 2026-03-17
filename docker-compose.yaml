@@ -20,6 +20,7 @@ services:
 
   app:
     image: ${DOCKROOT_IMAGE:-ghcr.io/mannobeats/dockroot:latest}
+    user: "${DOCKROOT_CONTAINER_USER:-0:0}"
     restart: unless-stopped
     mem_limit: 1g
     cpus: 1.00

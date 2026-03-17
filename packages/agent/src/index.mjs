@@ -1,4 +1,5 @@
 import { execFile, spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { access, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import os from "node:os";
@@ -644,7 +645,12 @@ async function readHealthSnapshot() {
 async function requireAgentAuth(request) {
 	const state = await loadState();
 	const header = request.headers.authorization || "";
-	if (!state.agentToken || header !== `Bearer ${state.agentToken}`) {
+	const bearerToken = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
+	const hashedStateToken = state.agentToken
+		? createHash("sha256").update(state.agentToken).digest("hex")
+		: "";
+
+	if (!state.agentToken || (bearerToken !== state.agentToken && bearerToken !== hashedStateToken)) {
 		return null;
 	}
 

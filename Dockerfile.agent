@@ -24,6 +24,6 @@ ENV DOCKROOT_AGENT_PORT=9095
 ENV DOCKROOT_AGENT_DATA_DIR=/var/lib/dockroot-agent
 
 EXPOSE 9095
-USER app
+USER root
 
 CMD ["node", "/app/src/index.mjs"]

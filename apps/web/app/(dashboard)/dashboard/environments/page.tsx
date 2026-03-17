@@ -3,6 +3,7 @@ import Link from "next/link";
 import { createEnvironmentAction, deleteEnvironmentAction } from "@/app/(dashboard)/actions";
 import { CreateEnvironmentModal } from "@/components/create-environment-modal";
 import { DestructiveActionModal } from "@/components/destructive-action-modal";
+import { EnvironmentLiveRefresh } from "@/components/environment-live-refresh";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
 import {
@@ -29,6 +30,7 @@ export default async function EnvironmentsPage() {
 
 	return (
 		<div className="animate-in space-y-5">
+			<EnvironmentLiveRefresh />
 			<PageHeader
 				title="Environments"
 				description={`${environments.length} environments`}

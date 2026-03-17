@@ -6,6 +6,7 @@ import {
 } from "@/app/(dashboard)/actions";
 import { CopyButton } from "@/components/copy-button";
 import { DestructiveActionModal } from "@/components/destructive-action-modal";
+import { EnvironmentLiveRefresh } from "@/components/environment-live-refresh";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { StatusBadge } from "@/components/status-badge";
 import { LinkButton } from "@/components/ui/link-button";
@@ -46,6 +47,7 @@ export default async function EnvironmentDetailPage({
 
 	return (
 		<div className="animate-in space-y-5">
+			<EnvironmentLiveRefresh environmentId={environment.id} />
 			{/* Header */}
 			<div className="flex items-center justify-between gap-3">
 				<div className="flex items-center gap-2.5">

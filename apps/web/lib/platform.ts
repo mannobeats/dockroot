@@ -131,6 +131,14 @@ function normalizeManagerUrl(value: string | undefined) {
 	return parsed.toString().replace(/\/$/, "");
 }
 
+function emitEnvironmentUpdate(environmentId: string, status: string) {
+	emitRealtime("environment:update", {
+		environmentId,
+		status,
+		at: Date.now(),
+	});
+}
+
 function parseAutoDeployPathPatterns(raw: string | null | undefined) {
 	return (raw || "")
 		.split(/\r?\n|,/u)
@@ -1618,7 +1626,7 @@ export async function registerAgent({
 			architecture: architecture || agent.architecture,
 			dockerVersion: dockerVersion || agent.dockerVersion,
 			status: "healthy",
-			accessToken: hashToken(accessToken),
+			accessToken,
 			registrationToken: hashToken(randomToken(48)),
 			lastSeenAt: updatedAt,
 			installedAt: agent.installedAt ?? updatedAt,
@@ -1634,6 +1642,8 @@ export async function registerAgent({
 			updatedAt,
 		})
 		.where(eq(environments.id, agent.environmentId));
+
+	emitEnvironmentUpdate(agent.environmentId, "healthy");
 
 	return {
 		agentId: agent.id,
@@ -1658,6 +1668,7 @@ export async function heartbeatAgent(accessToken: string) {
 	await db
 		.update(agents)
 		.set({
+			accessToken,
 			status: "healthy",
 			lastSeenAt: updatedAt,
 			updatedAt,
@@ -1671,6 +1682,8 @@ export async function heartbeatAgent(accessToken: string) {
 			updatedAt,
 		})
 		.where(eq(environments.id, agent.environmentId));
+
+	emitEnvironmentUpdate(agent.environmentId, "healthy");
 
 	return agent;
 }
@@ -1902,6 +1915,7 @@ export async function getInstallCommand(
 	const dockerRun = [
 		"docker run -d \\",
 		`  --name dockroot-agent-${environment.slug} \\`,
+		"  --user root \\",
 		"  --restart unless-stopped \\",
 		"  -v /var/run/docker.sock:/var/run/docker.sock \\",
 		`  -v ${dataVolumeName}:/var/lib/dockroot-agent \\`,
@@ -1916,6 +1930,7 @@ export async function getInstallCommand(
 		"  dockroot-agent:",
 		`    image: ${AGENT_IMAGE}`,
 		`    container_name: dockroot-agent-${environment.slug}`,
+		"    user: root",
 		"    restart: unless-stopped",
 		"    environment:",
 		`      DOCKROOT_MANAGER_URL: ${managerUrl}`,

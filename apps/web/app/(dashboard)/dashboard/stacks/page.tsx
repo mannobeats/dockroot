@@ -14,6 +14,7 @@ import { PageHeader } from "@/components/page-header";
 import { StackCreateModal } from "@/components/stack-create-modal";
 import { StacksTableWorkspace } from "@/components/stacks-table-workspace";
 import { isPrivilegedRole, requireUserSession } from "@/lib/authorization";
+import { resolveRuntimeEnvironment } from "@/lib/environment-runtime";
 import { isGitHubAppConfigured } from "@/lib/github-app";
 import {
 	listEnvironments,
@@ -33,9 +34,10 @@ export default async function StacksPage({
 	const { userId, role } = await requireUserSession();
 	const includeUntracked = isPrivilegedRole(role);
 	const params = await searchParams;
+	const environment = await resolveRuntimeEnvironment(userId, params.environment);
 
 	const [stacks, environments, githubInstallations, githubProviders] = await Promise.all([
-		listStacks(userId, { includeUntracked, environmentId: params.environment }),
+		listStacks(userId, { includeUntracked, environmentId: environment.id }),
 		listEnvironments(userId),
 		listGitHubInstallations(userId),
 		listGitHubProviders(userId),
@@ -69,7 +71,7 @@ export default async function StacksPage({
 			<StacksTableWorkspace
 				stacks={stacks}
 				includeUntracked={includeUntracked}
-				environmentId={params.environment}
+				environmentId={environment.id}
 				initialWatchStackId={params.watchStackId}
 				deployStackAction={deployStackAction}
 				destroyStackAction={destroyStackAction}
