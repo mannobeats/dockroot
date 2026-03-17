@@ -71,7 +71,9 @@ export async function GET(request: Request) {
 		const auth = await requirePrivilegedSession();
 		userId = auth.userId;
 	} catch {
-		return NextResponse.redirect(new URL("/dashboard/settings/github?github=forbidden", request.url));
+		return NextResponse.redirect(
+			new URL("/dashboard/settings/github?github=forbidden", request.url),
+		);
 	}
 
 	const url = new URL(request.url);

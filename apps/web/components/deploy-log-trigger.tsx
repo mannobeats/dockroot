@@ -18,12 +18,7 @@ export function DeployLogTrigger({
 
 	return (
 		<>
-			<Button
-				variant="outline"
-				size="xs"
-				onClick={() => setOpen(true)}
-				title="View deploy log"
-			>
+			<Button variant="outline" size="xs" onClick={() => setOpen(true)} title="View deploy log">
 				<ScrollText className="h-3.5 w-3.5" />
 				Logs
 			</Button>

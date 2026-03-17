@@ -39,7 +39,9 @@ export async function GET(request: Request) {
 	if (state) {
 		const parsedState = verifyGitHubAppState(state);
 		if (parsedState.userId !== session.user.id) {
-			return NextResponse.redirect(new URL("/dashboard/settings/github?github=denied", request.url));
+			return NextResponse.redirect(
+				new URL("/dashboard/settings/github?github=denied", request.url),
+			);
 		}
 		redirectTo = sanitizeInternalRedirectPath(parsedState.redirectTo);
 		providerId = parsedState.providerId?.trim() || providerId;
@@ -48,7 +50,9 @@ export async function GET(request: Request) {
 	}
 
 	if (providerId && !(await getGitHubProviderConfigById(providerId))) {
-		return NextResponse.redirect(new URL("/dashboard/settings/github?github=provider-missing", request.url));
+		return NextResponse.redirect(
+			new URL("/dashboard/settings/github?github=provider-missing", request.url),
+		);
 	}
 
 	await syncGitHubInstallation({

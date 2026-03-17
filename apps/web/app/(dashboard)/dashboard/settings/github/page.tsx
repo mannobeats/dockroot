@@ -1,6 +1,5 @@
 import { GitHubAppsPanel } from "@/components/github-apps-panel";
 import { requirePrivilegedPageSession } from "@/lib/authorization";
-import { isGitHubAppConfigured } from "@/lib/github-app";
 import { listGitHubInstallations, listGitHubProviders } from "@/lib/platform";
 
 export default async function GitHubSettingsPage({

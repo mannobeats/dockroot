@@ -70,10 +70,7 @@ export function ResizableEditorPanels({
 					</div>
 				</Separator>
 
-				<Panel
-					defaultSize={100 - defaultLeftSize}
-					minSize={minRightSize}
-				>
+				<Panel defaultSize={100 - defaultLeftSize} minSize={minRightSize}>
 					<div className="flex h-full flex-col">
 						<div className="border-b border-default/5 bg-foreground/[0.02] px-3 py-1.5">
 							<p className="text-[11px] font-medium text-muted">{rightLabel}</p>

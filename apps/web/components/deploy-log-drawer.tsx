@@ -46,9 +46,7 @@ export function DeployLogDrawer({
 					<p className="text-xs font-semibold uppercase tracking-wide text-muted/75">
 						Live Deploy Console
 					</p>
-					{stackName ? (
-						<p className="truncate text-sm font-medium">{stackName}</p>
-					) : null}
+					{stackName ? <p className="truncate text-sm font-medium">{stackName}</p> : null}
 				</div>
 				<div className="flex items-center gap-1.5">
 					<LinkButton
@@ -72,11 +70,7 @@ export function DeployLogDrawer({
 
 			{/* Body */}
 			<div className="p-3">
-				<LiveStackFeed
-					stackId={stackId}
-					initialLog={initialLog}
-					height="min(72vh, 760px)"
-				/>
+				<LiveStackFeed stackId={stackId} initialLog={initialLog} height="min(72vh, 760px)" />
 			</div>
 		</div>
 	);

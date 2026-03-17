@@ -4,8 +4,6 @@ import {
 	AlertCircle,
 	ArrowUpRight,
 	CheckCircle2,
-	ChevronDown,
-	ChevronRight,
 	Github,
 	Loader2,
 	Plus,
@@ -340,18 +338,20 @@ export function GitHubAppsPanel({
 	const createAppForm = (
 		<div className="space-y-3">
 			<div className="grid gap-3 sm:grid-cols-2">
-				<label className="grid gap-1">
+				<label htmlFor="github-app-name" className="grid gap-1">
 					<span className="text-xs font-medium">App name</span>
 					<Input
+						id="github-app-name"
 						value={manifestName}
 						onChange={(event) => setManifestName(event.target.value)}
 						placeholder="Dockroot GitHub App"
 						inputSize="sm"
 					/>
 				</label>
-				<label className="grid gap-1">
+				<label htmlFor="github-app-owner" className="grid gap-1">
 					<span className="text-xs font-medium">Organization (optional)</span>
 					<Input
+						id="github-app-owner"
 						value={manifestOwner}
 						onChange={(event) => setManifestOwner(event.target.value)}
 						placeholder="my-org"
@@ -436,7 +436,9 @@ export function GitHubAppsPanel({
 													<div className="flex items-center gap-2">
 														<p className="text-sm font-semibold">{provider.name}</p>
 														<Badge
-															variant={installCount ? (hasErrors ? "warning" : "success") : "default"}
+															variant={
+																installCount ? (hasErrors ? "warning" : "success") : "default"
+															}
 														>
 															{installCount
 																? `${installCount} install${installCount === 1 ? "" : "s"}`
@@ -466,9 +468,7 @@ export function GitHubAppsPanel({
 													disabled={isRefreshing || Boolean(pendingProviderId)}
 													title="Sync installations"
 												>
-													<RefreshCw
-														className={`h-3 w-3 ${isRefreshing ? "animate-spin" : ""}`}
-													/>
+													<RefreshCw className={`h-3 w-3 ${isRefreshing ? "animate-spin" : ""}`} />
 												</Button>
 												<Button
 													size="xs"
@@ -492,18 +492,9 @@ export function GitHubAppsPanel({
 											<div className="border-t border-default/6 bg-surface px-4 py-2.5">
 												<div className="flex flex-wrap items-center gap-3">
 													{providerInstallations.map((installation) => (
-														<div
-															key={installation.id}
-															className="flex items-center gap-2 text-xs"
-														>
-															<span className="font-medium">
-																{installation.accountLogin}
-															</span>
-															<Badge
-																variant={
-																	installation.repositoryError ? "warning" : "success"
-																}
-															>
+														<div key={installation.id} className="flex items-center gap-2 text-xs">
+															<span className="font-medium">{installation.accountLogin}</span>
+															<Badge variant={installation.repositoryError ? "warning" : "success"}>
 																{installation.repositoryError ? "Needs sync" : "Healthy"}
 															</Badge>
 															<span className="text-muted">

@@ -6,9 +6,9 @@ import {
 	destroyStackAction,
 	updateStackConfigAction,
 } from "@/app/(dashboard)/actions";
+import { DeployLogTrigger } from "@/components/deploy-log-trigger";
 import { DestructiveActionModal } from "@/components/destructive-action-modal";
 import { FormSubmitButton } from "@/components/form-submit-button";
-import { DeployLogTrigger } from "@/components/deploy-log-trigger";
 import { StackConfigEditor } from "@/components/stack-config-editor";
 import { StackServicesAccordion } from "@/components/stack-services-accordion";
 import { StatusBadge } from "@/components/status-badge";

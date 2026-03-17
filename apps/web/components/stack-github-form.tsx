@@ -7,16 +7,16 @@ import {
 	Check,
 	ChevronDown,
 	ChevronRight,
-	Github,
 	GitBranch,
+	Github,
 	Search,
 	Settings,
 	Sparkles,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { FormSubmitButton } from "@/components/form-submit-button";
-import { ResizableEditorPanels } from "@/components/resizable-editor-panels";
 import type { GitHubProviderOption, InstallationOption } from "@/components/github-types";
+import { ResizableEditorPanels } from "@/components/resizable-editor-panels";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -529,12 +529,8 @@ export function StackGitHubForm({
 										className={`flex w-full items-center justify-between border-b border-default/5 px-3 py-2 text-left text-xs last:border-b-0 transition-colors ${active ? "bg-accent/6 text-foreground" : "text-muted hover:bg-foreground/[0.02] hover:text-foreground"}`}
 									>
 										<div className="flex min-w-0 items-center gap-2">
-											{active ? (
-												<Check className="h-3 w-3 shrink-0 text-accent" />
-											) : null}
-											<span className="truncate font-medium">
-												{repository.full_name}
-											</span>
+											{active ? <Check className="h-3 w-3 shrink-0 text-accent" /> : null}
+											<span className="truncate font-medium">{repository.full_name}</span>
 										</div>
 										<Badge
 											variant={repository.private ? "warning" : "success"}
@@ -546,9 +542,7 @@ export function StackGitHubForm({
 								);
 							})
 						) : (
-							<p className="px-3 py-4 text-center text-xs text-muted">
-								No repositories match.
-							</p>
+							<p className="px-3 py-4 text-center text-xs text-muted">No repositories match.</p>
 						)}
 					</div>
 
