@@ -365,6 +365,27 @@ async function resolveOwnedEnvironmentId(userId, environmentId) {
 	return rows[0]?.id ? String(rows[0].id) : null;
 }
 
+async function resolveOwnedEnvironmentWithKind(userId, environmentId) {
+	const normalized =
+		typeof environmentId === "string" && environmentId.trim() ? environmentId.trim() : "";
+	if (!normalized) {
+		return { id: "", kind: "local" };
+	}
+
+	const rows = await sql`
+		select id, kind
+		from environments
+		where id = ${normalized}
+		  and created_by_user_id = ${userId}
+		limit 1
+	`;
+
+	if (!rows[0]?.id) {
+		return null;
+	}
+	return { id: String(rows[0].id), kind: String(rows[0].kind || "local") };
+}
+
 function consumeSocketRateLimit(socket, eventName, cost = 1) {
 	const rule = SOCKET_EVENT_RATE_LIMITS[eventName];
 	if (!rule) {
@@ -411,7 +432,14 @@ async function closeTrackedTerminalSession(sessionId, options = {}) {
 		session.pollAbort.abort();
 	}
 
-	if (session.kind === "proxy" && !skipBackendClose) {
+	if (session.kind === "direct" && !skipBackendClose) {
+		// Direct mode: close local PTY session directly
+		try {
+			closeLocalTerminalSession(session.backendSessionId);
+		} catch {
+			// Already cleaned up
+		}
+	} else if (session.kind === "proxy" && !skipBackendClose) {
 		const environmentQuery = session.environmentId
 			? `?environmentId=${encodeURIComponent(session.environmentId)}`
 			: "";
@@ -883,11 +911,11 @@ io.on("connection", (socket) => {
 				return;
 			}
 
-			const resolvedEnvironmentId = await resolveOwnedEnvironmentId(
+			const resolvedEnvironment = await resolveOwnedEnvironmentWithKind(
 				socket.data.userId,
 				payload?.environmentId,
 			);
-			if (resolvedEnvironmentId === null) {
+			if (resolvedEnvironment === null) {
 				callback?.({ error: "Environment not found." });
 				emitRuntimeAction("terminal.create.failed", {
 					userId: socket.data.userId,
@@ -898,6 +926,9 @@ io.on("connection", (socket) => {
 				});
 				return;
 			}
+
+			const resolvedEnvironmentId = resolvedEnvironment.id;
+			const isLocal = resolvedEnvironment.kind === "local" || !resolvedEnvironment.kind;
 
 			// Enforce per-user socket session limit
 			let userSessionCount = 0;
@@ -920,127 +951,181 @@ io.on("connection", (socket) => {
 				return;
 			}
 
-			const createResult = await requestTerminalApi("/api/runtime/terminal", {
-				method: "POST",
-				headers: {
-					"content-type": "application/json",
-				},
-				body: JSON.stringify({
+			if (isLocal) {
+				// ── Direct streaming for local environments ──
+				// Bypass HTTP polling entirely — call local-terminal.mjs directly
+				// with onData/onExit callbacks for instant Socket.IO emission.
+				const sessionId = randomUUID();
+
+				const result = await createLocalTerminalSession({
 					target: "container",
 					containerId: payload.containerId,
-					environmentId: resolvedEnvironmentId || undefined,
 					shell: payload.shell,
 					customShell: payload.customShell,
 					cols: clampTerminalColumns(payload?.cols),
 					rows: clampTerminalRows(payload?.rows),
-				}),
-			});
-
-			const backendSessionId = String(createResult.payload?.sessionId || "");
-			if (!createResult.ok || !backendSessionId) {
-				callback?.({
-					error:
-						String(createResult.payload?.error || "").trim() ||
-						"Unable to start terminal session.",
+					userId: socket.data.userId,
+					onData: (data) => {
+						const session = terminalSessions.get(sessionId);
+						if (session?.socketId === socket.id) {
+							socket.emit("terminal:data", { sessionId, data });
+						}
+					},
+					onExit: ({ exitCode }) => {
+						const session = terminalSessions.get(sessionId);
+						if (session?.socketId === socket.id) {
+							socket.emit("terminal:exit", { sessionId, exitCode: exitCode ?? 0 });
+						}
+						void closeTrackedTerminalSession(sessionId, { skipBackendClose: true });
+					},
 				});
-				emitRuntimeAction("terminal.create.failed", {
+
+				terminalSessions.set(sessionId, {
+					kind: "direct",
+					backendSessionId: result.sessionId,
+					environmentId: resolvedEnvironmentId || "",
+					socketId: socket.id,
+					userId: socket.data.userId,
+					authCookie,
+					idleTimer: null,
+				});
+
+				callback?.({ sessionId });
+				emitRuntimeAction("terminal.create.succeeded", {
 					userId: socket.data.userId,
 					socketId: socket.id,
 					containerId: payload.containerId,
-					reason: "backend_create_failed",
+					sessionId,
 					environmentId: resolvedEnvironmentId || null,
+					mode: "direct",
 				});
-				return;
-			}
 
-			const sessionId = randomUUID();
-			const pollAbort = new AbortController();
-			terminalSessions.set(sessionId, {
-				kind: "proxy",
-				backendSessionId,
-				environmentId: resolvedEnvironmentId || "",
-				socketId: socket.id,
-				userId: socket.data.userId,
-				authCookie,
-				idleTimer: null,
-				pollAbort,
-				cursor: 0,
-				writeQueue: Promise.resolve(),
-			});
+				scheduleTerminalIdleTimeout(sessionId);
+			} else {
+				// ── HTTP proxy mode for remote/agent environments ──
+				const createResult = await requestTerminalApi("/api/runtime/terminal", {
+					method: "POST",
+					headers: {
+						"content-type": "application/json",
+					},
+					body: JSON.stringify({
+						target: "container",
+						containerId: payload.containerId,
+						environmentId: resolvedEnvironmentId || undefined,
+						shell: payload.shell,
+						customShell: payload.customShell,
+						cols: clampTerminalColumns(payload?.cols),
+						rows: clampTerminalRows(payload?.rows),
+					}),
+				});
 
-			callback?.({ sessionId });
-			emitRuntimeAction("terminal.create.succeeded", {
-				userId: socket.data.userId,
-				socketId: socket.id,
-				containerId: payload.containerId,
-				sessionId,
-				environmentId: resolvedEnvironmentId || null,
-			});
+				const backendSessionId = String(createResult.payload?.sessionId || "");
+				if (!createResult.ok || !backendSessionId) {
+					callback?.({
+						error:
+							String(createResult.payload?.error || "").trim() ||
+							"Unable to start terminal session.",
+					});
+					emitRuntimeAction("terminal.create.failed", {
+						userId: socket.data.userId,
+						socketId: socket.id,
+						containerId: payload.containerId,
+						reason: "backend_create_failed",
+						environmentId: resolvedEnvironmentId || null,
+					});
+					return;
+				}
 
-			const poll = async () => {
-				try {
-					while (true) {
-						const session = terminalSessions.get(sessionId);
-						if (!session || session.kind !== "proxy" || pollAbort.signal.aborted) {
-							return;
+				const sessionId = randomUUID();
+				const pollAbort = new AbortController();
+				terminalSessions.set(sessionId, {
+					kind: "proxy",
+					backendSessionId,
+					environmentId: resolvedEnvironmentId || "",
+					socketId: socket.id,
+					userId: socket.data.userId,
+					authCookie,
+					idleTimer: null,
+					pollAbort,
+					cursor: 0,
+					writeQueue: Promise.resolve(),
+				});
+
+				callback?.({ sessionId });
+				emitRuntimeAction("terminal.create.succeeded", {
+					userId: socket.data.userId,
+					socketId: socket.id,
+					containerId: payload.containerId,
+					sessionId,
+					environmentId: resolvedEnvironmentId || null,
+					mode: "proxy",
+				});
+
+				const poll = async () => {
+					try {
+						while (true) {
+							const session = terminalSessions.get(sessionId);
+							if (!session || session.kind !== "proxy" || pollAbort.signal.aborted) {
+								return;
+							}
+
+							const environmentQuery = session.environmentId
+								? `&environmentId=${encodeURIComponent(session.environmentId)}`
+								: "";
+							const readResult = await requestTerminalApi(
+								`/api/runtime/terminal/${encodeURIComponent(session.backendSessionId)}?cursor=${Number(session.cursor || 0)}&waitMs=1200${environmentQuery}`,
+								{
+									signal: pollAbort.signal,
+								},
+							);
+
+							if (pollAbort.signal.aborted) {
+								return;
+							}
+							if (!readResult.ok) {
+								socket.emit("terminal:exit", {
+									sessionId,
+									exitCode: -2,
+								});
+								await closeTrackedTerminalSession(sessionId);
+								return;
+							}
+
+							const chunks = Array.isArray(readResult.payload?.chunks)
+								? readResult.payload.chunks
+								: [];
+							for (const chunk of chunks) {
+								socket.emit("terminal:data", {
+									sessionId,
+									data: String(chunk || ""),
+								});
+							}
+							session.cursor = Number(readResult.payload?.cursor || session.cursor || 0);
+
+							if (readResult.payload?.closed) {
+								socket.emit("terminal:exit", {
+									sessionId,
+									exitCode: Number(readResult.payload?.exitCode ?? 0),
+								});
+								await closeTrackedTerminalSession(sessionId, { skipBackendClose: true });
+								return;
+							}
 						}
-
-						const environmentQuery = session.environmentId
-							? `&environmentId=${encodeURIComponent(session.environmentId)}`
-							: "";
-						const readResult = await requestTerminalApi(
-							`/api/runtime/terminal/${encodeURIComponent(session.backendSessionId)}?cursor=${Number(session.cursor || 0)}&waitMs=1200${environmentQuery}`,
-							{
-								signal: pollAbort.signal,
-							},
-						);
-
+					} catch {
 						if (pollAbort.signal.aborted) {
 							return;
 						}
-						if (!readResult.ok) {
-							socket.emit("terminal:exit", {
-								sessionId,
-								exitCode: -2,
-							});
-							await closeTrackedTerminalSession(sessionId);
-							return;
-						}
-
-						const chunks = Array.isArray(readResult.payload?.chunks)
-							? readResult.payload.chunks
-							: [];
-						for (const chunk of chunks) {
-							socket.emit("terminal:data", {
-								sessionId,
-								data: String(chunk || ""),
-							});
-						}
-						session.cursor = Number(readResult.payload?.cursor || session.cursor || 0);
-
-						if (readResult.payload?.closed) {
-							socket.emit("terminal:exit", {
-								sessionId,
-								exitCode: Number(readResult.payload?.exitCode ?? 0),
-							});
-							await closeTrackedTerminalSession(sessionId, { skipBackendClose: true });
-							return;
-						}
+						socket.emit("terminal:exit", {
+							sessionId,
+							exitCode: -2,
+						});
+						await closeTrackedTerminalSession(sessionId);
 					}
-				} catch {
-					if (pollAbort.signal.aborted) {
-						return;
-					}
-					socket.emit("terminal:exit", {
-						sessionId,
-						exitCode: -2,
-					});
-					await closeTrackedTerminalSession(sessionId);
-				}
-			};
+				};
 
-			void poll();
-			scheduleTerminalIdleTimeout(sessionId);
+				void poll();
+				scheduleTerminalIdleTimeout(sessionId);
+			}
 		} catch (error) {
 			callback?.({
 				error: error instanceof Error ? error.message : "Unable to start terminal session.",
@@ -1067,11 +1152,20 @@ io.on("connection", (socket) => {
 		}
 
 		const session = terminalSessions.get(payload?.sessionId);
-		if (
-			session?.socketId === socket.id &&
-			session.kind === "proxy" &&
-			typeof payload?.data === "string"
-		) {
+		if (!session || session.socketId !== socket.id || typeof payload?.data !== "string") {
+			return;
+		}
+
+		if (session.kind === "direct") {
+			// Direct mode: write to local PTY immediately
+			try {
+				writeLocalTerminalInput(session.backendSessionId, String(payload.data || "").slice(0, 8192));
+			} catch {
+				// Session may have been closed
+			}
+			scheduleTerminalIdleTimeout(payload.sessionId);
+		} else if (session.kind === "proxy") {
+			// Proxy mode: HTTP POST to backend
 			const environmentQuery = session.environmentId
 				? `?environmentId=${encodeURIComponent(session.environmentId)}`
 				: "";
@@ -1102,7 +1196,22 @@ io.on("connection", (socket) => {
 		}
 
 		const session = terminalSessions.get(payload?.sessionId);
-		if (session?.socketId === socket.id && session.kind === "proxy") {
+		if (!session || session.socketId !== socket.id) {
+			return;
+		}
+
+		if (session.kind === "direct") {
+			// Direct mode: resize local PTY immediately
+			try {
+				resizeLocalTerminalSession(
+					session.backendSessionId,
+					clampTerminalColumns(payload?.cols),
+					clampTerminalRows(payload?.rows),
+				);
+			} catch {
+				// Session may have been closed
+			}
+		} else if (session.kind === "proxy") {
 			const environmentQuery = session.environmentId
 				? `?environmentId=${encodeURIComponent(session.environmentId)}`
 				: "";

@@ -281,6 +281,11 @@ export async function createLocalTerminalSession(payload) {
 	const rows = Math.max(12, Math.min(120, Number(payload?.rows || 36)));
 	const { process: processHandle, compatibilityMode } = createTerminalProcess(command, cols, rows);
 
+	// Direct streaming callbacks — when provided, PTY output is piped directly
+	// to the caller (e.g. Socket.IO emit) instead of buffering in the ring buffer.
+	const streamOnData = typeof payload?.onData === "function" ? payload.onData : null;
+	const streamOnExit = typeof payload?.onExit === "function" ? payload.onExit : null;
+
 	const sessionId = globalThis.crypto.randomUUID();
 	const session = {
 		process: processHandle,
@@ -294,17 +299,28 @@ export async function createLocalTerminalSession(payload) {
 	};
 
 	if (compatibilityMode) {
+		const msg = "Terminal is running in compatibility mode.\r\n";
+		if (streamOnData) {
+			streamOnData(msg);
+		}
 		session.events.push({
 			cursor: session.nextCursor,
-			data: "Terminal is running in compatibility mode.\r\n",
+			data: msg,
 		});
 		session.nextCursor += 1;
 	}
 
 	const onData = (chunk) => {
+		const data = String(chunk || "");
+
+		// Direct streaming: emit immediately to the caller
+		if (streamOnData) {
+			streamOnData(data);
+		}
+
 		session.events.push({
 			cursor: session.nextCursor,
-			data: String(chunk || ""),
+			data,
 		});
 		session.nextCursor += 1;
 
@@ -328,6 +344,12 @@ export async function createLocalTerminalSession(payload) {
 			clearTimeout(session.idleTimer);
 			session.idleTimer = null;
 		}
+
+		// Direct streaming: notify caller of exit immediately
+		if (streamOnExit) {
+			streamOnExit({ exitCode: session.exitCode });
+		}
+
 		const pendingWaiters = session.waiters.splice(0, session.waiters.length);
 		for (const waiter of pendingWaiters) {
 			waiter();

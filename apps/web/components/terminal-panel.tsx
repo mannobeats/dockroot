@@ -8,13 +8,6 @@ import { Badge } from "@/components/ui/badge";
 import { Panel } from "@/components/ui/panel";
 import { getSocket } from "@/lib/socket-client";
 
-function sanitizeTerminalChunk(chunk: string) {
-	return chunk.replaceAll(
-		/(bash: cannot set terminal process group \(-1\): Not a tty\r?\n|bash: no job control in this shell\r?\n|sh: can't access tty; job control turned off\r?\n)/g,
-		"",
-	);
-}
-
 function getCssColorValue(variable: string, fallback: string) {
 	if (typeof window === "undefined") {
 		return fallback;
@@ -71,12 +64,13 @@ export function TerminalPanel({
 			}
 
 			const terminal = new Terminal({
-				convertEol: true,
 				cursorBlink: true,
+				cursorStyle: "underline",
 				fontFamily:
 					"ui-monospace, SFMono-Regular, SF Mono, Menlo, Monaco, Consolas, Liberation Mono, monospace",
 				fontSize: 13,
 				lineHeight: 1.4,
+				scrollback: 5000,
 				theme: {
 					background: getCssColorValue("--console", "#0a0a0a"),
 					foreground: getCssColorValue("--console-foreground", "#fafafa"),
@@ -98,7 +92,7 @@ export function TerminalPanel({
 			const flushPendingSocketEvents = (sessionId: string) => {
 				for (const payload of pendingChunksRef.current) {
 					if (payload.sessionId === sessionId) {
-						terminal.write(sanitizeTerminalChunk(payload.data));
+						terminal.write(payload.data);
 					}
 				}
 				pendingChunksRef.current = pendingChunksRef.current.filter(
@@ -138,7 +132,7 @@ export function TerminalPanel({
 				}
 
 				if (payload.sessionId === sessionIdRef.current) {
-					terminal.write(sanitizeTerminalChunk(payload.data));
+					terminal.write(payload.data);
 				}
 			};
 			const onExit = (payload: { sessionId: string; exitCode?: number }) => {
@@ -177,7 +171,7 @@ export function TerminalPanel({
 					sessionIdRef.current = response.sessionId;
 					setStatus(`Connected to ${label}`);
 					if (response.initialData) {
-						terminal.write(sanitizeTerminalChunk(response.initialData));
+						terminal.write(response.initialData);
 					}
 					flushPendingSocketEvents(response.sessionId);
 					window.requestAnimationFrame(() => {
