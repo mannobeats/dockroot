@@ -42,14 +42,7 @@ import {
 	updateGlobalSettings,
 	updateStackConfig,
 } from "@/lib/platform";
-import {
-	backupVolume,
-	controlComposeProject,
-	deleteBackupFile,
-	getBackupFileSize,
-	listContainers,
-	restoreVolume,
-} from "@/lib/platform/docker";
+import { controlComposeProject, listContainers } from "@/lib/platform/docker";
 import {
 	listAccessibleContainersForUser,
 	requireAccessibleContainerForUser,
@@ -1283,7 +1276,13 @@ export async function backupVolumeAction(formData: FormData) {
 	});
 
 	try {
-		const result = await backupVolume(volumeName, backupId);
+		const { backupVolumeForEnvironment } = await import("@/lib/environment-runtime");
+		const result = await backupVolumeForEnvironment(
+			auth.userId,
+			volumeName,
+			backupId,
+			environmentId,
+		);
 		if (!result.ok) {
 			const { eq } = await import("drizzle-orm");
 			await dbClient
@@ -1297,7 +1296,7 @@ export async function backupVolumeAction(formData: FormData) {
 			throw new Error(`Backup failed: ${result.output}`);
 		}
 
-		const sizeBytes = await getBackupFileSize(backupId);
+		const sizeBytes = result.sizeBytes;
 		const { eq } = await import("drizzle-orm");
 		await dbClient
 			.update(volumeBackups)
@@ -1321,15 +1320,22 @@ export async function backupVolumeAction(formData: FormData) {
 
 export async function restoreVolumeAction(formData: FormData) {
 	requireDestructiveConfirmation(formData);
-	await requirePrivilegedSession();
+	const auth = await requirePrivilegedSession();
 	const backupId = getValue(formData, "backupId");
 	const volumeName = getValue(formData, "volumeName");
+	const environmentId = getValue(formData, "environmentId") || undefined;
 
 	if (!backupId || !volumeName) {
 		throw new Error("Backup ID and volume name are required.");
 	}
 
-	const result = await restoreVolume(volumeName, backupId);
+	const { restoreVolumeForEnvironment } = await import("@/lib/environment-runtime");
+	const result = await restoreVolumeForEnvironment(
+		auth.userId,
+		volumeName,
+		backupId,
+		environmentId,
+	);
 	if (!result.ok) {
 		throw new Error(`Restore failed: ${result.output}`);
 	}
@@ -1339,14 +1345,16 @@ export async function restoreVolumeAction(formData: FormData) {
 
 export async function deleteVolumeBackupAction(formData: FormData) {
 	requireDestructiveConfirmation(formData);
-	await requirePrivilegedSession();
+	const auth = await requirePrivilegedSession();
 	const backupId = getValue(formData, "backupId");
+	const environmentId = getValue(formData, "environmentId") || undefined;
 
 	if (!backupId) {
 		throw new Error("Backup ID is required.");
 	}
 
-	await deleteBackupFile(backupId);
+	const { deleteVolumeBackupForEnvironment } = await import("@/lib/environment-runtime");
+	await deleteVolumeBackupForEnvironment(auth.userId, backupId, environmentId);
 
 	const { db: dbClient, volumeBackups } = await import("@dockroot/db");
 	const { eq } = await import("drizzle-orm");

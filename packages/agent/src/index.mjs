@@ -1,5 +1,5 @@
-import { execFile } from "node:child_process";
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { execFile, spawn } from "node:child_process";
+import { access, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import os from "node:os";
 import path from "node:path";
@@ -192,10 +192,31 @@ async function detectDockerVersion() {
 	}
 }
 
-async function runDocker(args) {
+// ---------------------------------------------------------------------------
+// Per-operation Docker command timeouts (matching the web app's docker.ts)
+// ---------------------------------------------------------------------------
+const DOCKER_OPERATION_TIMEOUTS = {
+	default: 30_000,
+	"image.pull": 10 * 60_000,
+	"container.stats": 15_000,
+	prune: 2 * 60_000,
+};
+
+function getOperationTimeoutMs(operation) {
+	if (process.env.DOCKROOT_DOCKER_COMMAND_TIMEOUT_MS) {
+		const override = Number(process.env.DOCKROOT_DOCKER_COMMAND_TIMEOUT_MS);
+		if (Number.isFinite(override) && override > 0) {
+			return override;
+		}
+	}
+	return DOCKER_OPERATION_TIMEOUTS[operation] || DOCKER_OPERATION_TIMEOUTS.default;
+}
+
+async function runDocker(args, operation) {
 	try {
 		const result = await execFileAsync("docker", args, {
 			maxBuffer: 1024 * 1024 * 16,
+			timeout: getOperationTimeoutMs(operation),
 		});
 		return {
 			ok: true,
@@ -648,6 +669,17 @@ async function readRequestJson(request) {
 	return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 
+function enrichContainerHealth(row) {
+	const status = row.Status || "";
+	let healthStatus = null;
+	const healthMatch = status.match(/\((healthy|unhealthy|health: starting)\)/i);
+	if (healthMatch) {
+		const raw = healthMatch[1].toLowerCase();
+		healthStatus = raw === "health: starting" ? "starting" : raw;
+	}
+	return { ...row, HealthStatus: healthStatus };
+}
+
 async function getSnapshot() {
 	const [containers, images, volumes, networks] = await Promise.all([
 		runDocker(["ps", "-a", "--size", "--format", "{{json .}}"]),
@@ -655,7 +687,7 @@ async function getSnapshot() {
 		runDocker(["volume", "ls", "--format", "{{json .}}"]),
 		runDocker(["network", "ls", "--format", "{{json .}}"]),
 	]);
-	const containerRows = parseJsonLines(containers.stdout);
+	const containerRows = parseJsonLines(containers.stdout).map(enrichContainerHealth);
 	const imageRows = parseJsonLines(images.stdout);
 	const volumeRows = parseJsonLines(volumes.stdout);
 	const networkRows = parseJsonLines(networks.stdout);
@@ -687,13 +719,31 @@ async function getContainerDetails(containerId) {
 	const [inspectResult, logsResult, statsResult] = await Promise.all([
 		runDocker(["inspect", containerId]),
 		runDocker(["logs", "--tail", "200", containerId]),
-		runDocker(["stats", "--no-stream", "--format", "{{json .}}", containerId]),
+		runDocker(["stats", "--no-stream", "--format", "{{json .}}", containerId], "container.stats"),
 	]);
 
+	const inspect = parseJsonValue(inspectResult.stdout)?.[0] ?? null;
+
+	// Extract structured health data (matching docker.ts getContainerDetails)
+	const rawHealth = inspect?.State?.Health ?? null;
+	const health = rawHealth
+		? {
+				status: rawHealth.Status,
+				failingStreak: rawHealth.FailingStreak || 0,
+				log: (Array.isArray(rawHealth.Log) ? rawHealth.Log : []).slice(-5).map((entry) => ({
+					start: entry.Start || null,
+					end: entry.End || null,
+					exitCode: entry.ExitCode ?? null,
+					output: (entry.Output || "").slice(0, 500),
+				})),
+			}
+		: null;
+
 	return {
-		inspect: parseJsonValue(inspectResult.stdout)?.[0] ?? null,
+		inspect,
 		logs: stripAnsi([logsResult.stdout, logsResult.stderr].filter(Boolean).join("\n")),
 		stats: parseJsonLines(statsResult.stdout)[0] ?? null,
+		health,
 	};
 }
 
@@ -876,11 +926,95 @@ function startHttpServer() {
 
 		const containerActionsMatch = pathName.match(/^\/containers\/([^/]+)\/actions$/);
 		if (request.method === "POST" && containerActionsMatch) {
-			const { action } = await readRequestJson(request);
+			const { action, removeVolumes } = await readRequestJson(request);
 			const containerId = decodeURIComponent(containerActionsMatch[1]);
-			const args = action === "remove" ? ["rm", "-f", containerId] : [String(action), containerId];
+			registerAgentAction(containerId, action === "remove" ? "destroy" : action);
+			if (action === "stop" || action === "remove") {
+				registerAgentAction(containerId, "die");
+			}
+			const args =
+				action === "remove"
+					? ["rm", "-f", ...(removeVolumes ? ["-v"] : []), containerId]
+					: [String(action), containerId];
 			const result = await runDocker(args);
 			sendJson(response, result.ok ? 200 : 400, result);
+			return;
+		}
+
+		// POST /containers — standalone container creation
+		if (request.method === "POST" && pathName === "/containers") {
+			const input = await readRequestJson(request);
+			const name = String(input.name || "").trim();
+			const image = String(input.image || "").trim();
+			if (!name || !image) {
+				sendJson(response, 400, { ok: false, output: "Name and image are required." });
+				return;
+			}
+			if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(name)) {
+				sendJson(response, 400, { ok: false, output: "Invalid container name." });
+				return;
+			}
+
+			const dockerArgs = ["run", "-d", "--name", name];
+
+			if (input.memory?.trim()) {
+				if (!/^\d+[bkmg]$/i.test(input.memory.trim())) {
+					sendJson(response, 400, { ok: false, output: "Invalid memory format." });
+					return;
+				}
+				dockerArgs.push("--memory", input.memory.trim());
+			}
+			if (input.cpus?.trim()) {
+				const cpuVal = Number(input.cpus);
+				if (!Number.isFinite(cpuVal) || cpuVal <= 0) {
+					sendJson(response, 400, { ok: false, output: "CPUs must be a positive number." });
+					return;
+				}
+				dockerArgs.push("--cpus", String(cpuVal));
+			}
+			if (input.restartPolicy?.trim()) {
+				const policy = input.restartPolicy.trim();
+				if (!["no", "always", "unless-stopped", "on-failure"].includes(policy)) {
+					sendJson(response, 400, { ok: false, output: "Invalid restart policy." });
+					return;
+				}
+				dockerArgs.push("--restart", policy);
+			}
+			if (Array.isArray(input.ports)) {
+				for (const port of input.ports) {
+					if (port.host && port.container) {
+						dockerArgs.push("-p", `${port.host}:${port.container}`);
+					}
+				}
+			}
+			if (Array.isArray(input.volumes)) {
+				for (const vol of input.volumes) {
+					if (vol.host && vol.container) {
+						dockerArgs.push("-v", `${vol.host}:${vol.container}`);
+					}
+				}
+			}
+			if (Array.isArray(input.envVars)) {
+				for (const env of input.envVars) {
+					if (env.key) {
+						dockerArgs.push("-e", `${env.key}=${env.value || ""}`);
+					}
+				}
+			}
+			if (input.network?.trim()) {
+				dockerArgs.push("--network", input.network.trim());
+			}
+
+			dockerArgs.push(image);
+
+			if (input.command?.trim()) {
+				const cmdParts = input.command.trim().match(/(?:[^\s"]+|"[^"]*")+/g) || [];
+				dockerArgs.push(...cmdParts.map((part) => part.replace(/^"|"$/g, "")));
+			}
+
+			const result = await runDocker(dockerArgs, "image.pull");
+			const output = [result.stdout, result.stderr].filter(Boolean).join("\n");
+			sendJson(response, result.ok ? 200 : 400, { ok: result.ok, output });
 			return;
 		}
 
@@ -1028,6 +1162,97 @@ function startHttpServer() {
 			return;
 		}
 
+		// POST /volumes/:name/backup — create a volume backup
+		const volumeBackupMatch = pathName.match(/^\/volumes\/([^/]+)\/backup$/);
+		if (request.method === "POST" && volumeBackupMatch) {
+			const volumeName = decodeURIComponent(volumeBackupMatch[1]).replace(/[^a-zA-Z0-9._-]/g, "_");
+			const { backupId } = await readRequestJson(request);
+			const safeId = String(backupId).replace(/[^a-zA-Z0-9._-]/g, "_");
+			const backupDir = path.join(dataDir, "backups");
+			await mkdir(backupDir, { recursive: true });
+			const fileName = `${safeId}.tar.gz`;
+			const result = await runDocker(
+				[
+					"run",
+					"--rm",
+					"-v",
+					`${volumeName}:/volume:ro`,
+					"-v",
+					`${backupDir}:/backups`,
+					"busybox",
+					"tar",
+					"czf",
+					`/backups/${fileName}`,
+					"-C",
+					"/volume",
+					".",
+				],
+				"prune",
+			);
+			let sizeBytes = null;
+			if (result.ok) {
+				try {
+					const st = await stat(path.join(backupDir, fileName));
+					sizeBytes = st.size;
+				} catch {}
+			}
+			sendJson(response, result.ok ? 200 : 400, {
+				ok: result.ok,
+				fileName,
+				sizeBytes,
+				output: [result.stdout, result.stderr].filter(Boolean).join("\n"),
+			});
+			return;
+		}
+
+		// POST /volumes/:name/restore — restore a volume from backup
+		const volumeRestoreMatch = pathName.match(/^\/volumes\/([^/]+)\/restore$/);
+		if (request.method === "POST" && volumeRestoreMatch) {
+			const volumeName = decodeURIComponent(volumeRestoreMatch[1]).replace(/[^a-zA-Z0-9._-]/g, "_");
+			const { backupId } = await readRequestJson(request);
+			const safeId = String(backupId).replace(/[^a-zA-Z0-9._-]/g, "_");
+			const backupDir = path.join(dataDir, "backups");
+			const fileName = `${safeId}.tar.gz`;
+			const result = await runDocker(
+				[
+					"run",
+					"--rm",
+					"-v",
+					`${volumeName}:/volume`,
+					"-v",
+					`${backupDir}:/backups`,
+					"busybox",
+					"sh",
+					"-c",
+					`rm -rf /volume/* && tar xzf /backups/${fileName} -C /volume`,
+				],
+				"prune",
+			);
+			sendJson(response, result.ok ? 200 : 400, {
+				ok: result.ok,
+				output: [result.stdout, result.stderr].filter(Boolean).join("\n"),
+			});
+			return;
+		}
+
+		// DELETE /backups/:id — delete a backup file
+		const backupDeleteMatch = pathName.match(/^\/backups\/([^/]+)$/);
+		if (request.method === "DELETE" && backupDeleteMatch) {
+			const safeId = decodeURIComponent(backupDeleteMatch[1]).replace(/[^a-zA-Z0-9._-]/g, "_");
+			const backupDir = path.join(dataDir, "backups");
+			const filePath = path.join(backupDir, `${safeId}.tar.gz`);
+			try {
+				await rm(filePath, { force: true });
+				sendJson(response, 200, { ok: true });
+			} catch (error) {
+				sendJson(response, 400, {
+					ok: false,
+					error: error instanceof Error ? error.message : "Delete failed",
+				});
+			}
+			return;
+		}
+
 		if (request.method === "GET" && pathName === "/networks") {
 			sendJson(
 				response,
@@ -1079,6 +1304,126 @@ function startHttpServer() {
 	});
 }
 
+// ─── Docker Event Stream ───────────────────────────────────────
+
+let dockerEventProcess = null;
+let dockerEventBackoff = 3000;
+const DOCKER_EVENT_MAX_BACKOFF = 30000;
+const DOCKER_EVENT_ACTIONS = new Set([
+	"start",
+	"stop",
+	"die",
+	"destroy",
+	"kill",
+	"pause",
+	"unpause",
+]);
+const dockrootInitiatedActions = new Map();
+
+function registerAgentAction(containerId, action) {
+	const key = `${containerId}:${action}`;
+	dockrootInitiatedActions.set(key, Date.now());
+	setTimeout(() => dockrootInitiatedActions.delete(key), 5000);
+}
+
+function isAgentInitiated(containerId, action) {
+	return dockrootInitiatedActions.has(`${containerId}:${action}`);
+}
+
+function startDockerEventStream(state) {
+	if (dockerEventProcess || !state.agentToken) {
+		return;
+	}
+
+	const eventsUrl = `${state.managerUrl || managerUrl}/api/agent/events`;
+	const eventBuffer = [];
+	let flushTimer = null;
+
+	function flushEvents() {
+		if (!eventBuffer.length) {
+			return;
+		}
+		const batch = eventBuffer.splice(0);
+		fetch(eventsUrl, {
+			method: "POST",
+			headers: {
+				Authorization: `Bearer ${state.agentToken}`,
+				"content-type": "application/json",
+			},
+			body: JSON.stringify(batch),
+		}).catch((error) => {
+			console.error("[docker-events] Failed to push events:", error.message);
+		});
+	}
+
+	const child = spawn(
+		"docker",
+		["events", "--format", "{{json .}}", "--filter", "type=container"],
+		{ stdio: ["ignore", "pipe", "pipe"] },
+	);
+
+	dockerEventProcess = child;
+	let buffer = "";
+
+	child.stdout.on("data", (chunk) => {
+		buffer += String(chunk);
+		const lines = buffer.split("\n");
+		buffer = lines.pop() || "";
+
+		for (const line of lines) {
+			if (!line.trim()) {
+				continue;
+			}
+
+			try {
+				const event = JSON.parse(line);
+				const action = event.Action || event.status || "";
+				const containerId = event.Actor?.ID || event.id || "";
+				const containerName = event.Actor?.Attributes?.name || "";
+
+				if (!containerId || !DOCKER_EVENT_ACTIONS.has(action)) {
+					continue;
+				}
+
+				if (isAgentInitiated(containerId, action)) {
+					continue;
+				}
+
+				eventBuffer.push({ containerId, action, containerName });
+
+				if (!flushTimer) {
+					flushTimer = setTimeout(() => {
+						flushTimer = null;
+						flushEvents();
+					}, 500);
+				}
+			} catch {
+				// Ignore malformed JSON
+			}
+		}
+	});
+
+	child.on("close", (code) => {
+		dockerEventProcess = null;
+		console.error(
+			`[docker-events] Process exited (code=${code}), restarting in ${dockerEventBackoff}ms...`,
+		);
+		setTimeout(() => {
+			startDockerEventStream(state);
+			dockerEventBackoff = Math.min(dockerEventBackoff * 2, DOCKER_EVENT_MAX_BACKOFF);
+		}, dockerEventBackoff);
+	});
+
+	child.on("error", (error) => {
+		dockerEventProcess = null;
+		console.error("[docker-events] Failed to spawn:", error.message);
+	});
+
+	console.log("[docker-events] Listening for container events...");
+}
+
+// ─── Main Loop ─────────────────────────────────────────────────
+
 async function loop() {
 	let state = await loadState();
 
@@ -1086,6 +1431,10 @@ async function loop() {
 		try {
 			state = await ensureRegistered(state);
 			await heartbeat(state);
+
+			// Start docker event stream once registered
+			startDockerEventStream(state);
+
 			const job = await pollJob(state);
 
 			if (job.JOB_ID) {

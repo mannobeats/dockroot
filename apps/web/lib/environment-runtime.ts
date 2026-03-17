@@ -663,6 +663,62 @@ export async function pruneVolumesForEnvironment(userId: string, environmentId?:
 	});
 }
 
+export async function backupVolumeForEnvironment(
+	userId: string,
+	volumeName: string,
+	backupId: string,
+	environmentId?: string,
+) {
+	const environment = await getEnvironmentRecord(environmentId, userId);
+	if (environment.kind === "local") {
+		const { backupVolume, getBackupFileSize } = await import("@/lib/platform/docker");
+		const result = await backupVolume(volumeName, backupId);
+		const sizeBytes = result.ok ? ((await getBackupFileSize(backupId)) ?? null) : null;
+		return { ...result, sizeBytes };
+	}
+
+	return fetchAgentJson(environment, `/volumes/${encodeURIComponent(volumeName)}/backup`, {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify({ backupId }),
+	}) as Promise<{ ok: boolean; fileName: string; sizeBytes: number | null; output: string }>;
+}
+
+export async function restoreVolumeForEnvironment(
+	userId: string,
+	volumeName: string,
+	backupId: string,
+	environmentId?: string,
+) {
+	const environment = await getEnvironmentRecord(environmentId, userId);
+	if (environment.kind === "local") {
+		const { restoreVolume } = await import("@/lib/platform/docker");
+		return restoreVolume(volumeName, backupId);
+	}
+
+	return fetchAgentJson(environment, `/volumes/${encodeURIComponent(volumeName)}/restore`, {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify({ backupId }),
+	}) as Promise<{ ok: boolean; output: string }>;
+}
+
+export async function deleteVolumeBackupForEnvironment(
+	userId: string,
+	backupId: string,
+	environmentId?: string,
+) {
+	const environment = await getEnvironmentRecord(environmentId, userId);
+	if (environment.kind === "local") {
+		const { deleteBackupFile } = await import("@/lib/platform/docker");
+		return deleteBackupFile(backupId);
+	}
+
+	await fetchAgent(environment, `/backups/${encodeURIComponent(backupId)}`, {
+		method: "DELETE",
+	});
+}
+
 export async function listNetworksForEnvironment(userId: string, environmentId?: string) {
 	const environment = await getEnvironmentRecord(environmentId, userId);
 	if (environment.kind === "local") {
