@@ -4,15 +4,15 @@ import "xterm/css/xterm.css";
 
 import { TerminalSquare } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useMemo, useState } from "react";
 import { StatusBadge } from "@/components/status-badge";
+import { useSocketTerminalSession } from "@/components/terminal/use-socket-terminal-session";
 import { Button } from "@/components/ui/button";
 import { Dropdown, DropdownItem, DropdownMenu, DropdownTrigger } from "@/components/ui/dropdown";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { LinkButton } from "@/components/ui/link-button";
 import { Panel } from "@/components/ui/panel";
-import { getSocket } from "@/lib/socket-client";
 
 type ContainerOption = {
 	id: string;
@@ -21,6 +21,7 @@ type ContainerOption = {
 	status: string;
 	image: string;
 };
+
 type ShellOption = "sh" | "bash" | "ash" | "zsh" | "custom";
 
 const shellOptions: Array<{ value: ShellOption; label: string }> = [
@@ -42,15 +43,6 @@ function matchesSearch(container: ContainerOption, query: string) {
 		.some((field) => field.toLowerCase().includes(value));
 }
 
-function getCssColorValue(variable: string, fallback: string) {
-	if (typeof window === "undefined") {
-		return fallback;
-	}
-
-	const value = window.getComputedStyle(document.documentElement).getPropertyValue(variable).trim();
-	return value || fallback;
-}
-
 export function ShellWorkspace({
 	environmentId,
 	containers,
@@ -68,28 +60,13 @@ export function ShellWorkspace({
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
 
-	/* ── sidebar state ── */
 	const [query, setQuery] = useState("");
 	const deferredQuery = useDeferredValue(query);
 	const [containerId, setContainerId] = useState(initialContainerId || containers[0]?.id || "");
 
-	/* ── shell config state ── */
 	const [shell, setShell] = useState<ShellOption>(initialShell || "sh");
 	const [customShell, setCustomShell] = useState(initialCustomShell || "");
-
-	/* ── terminal state ── */
-	const [status, setStatus] = useState("Connecting...");
 	const [attached, setAttached] = useState(Boolean(initialContainerId));
-	const terminalRef = useRef<HTMLDivElement | null>(null);
-	const terminalInstanceRef = useRef<{
-		dispose: () => void;
-		focus: () => void;
-		write: (data: string) => void;
-	} | null>(null);
-	const fitRef = useRef<{ fit: () => void } | null>(null);
-	const sessionIdRef = useRef<string | null>(null);
-	const pendingChunksRef = useRef<Array<{ sessionId: string; data: string }>>([]);
-	const pendingExitsRef = useRef<Array<{ sessionId: string; exitCode?: number }>>([]);
 
 	const filteredContainers = useMemo(
 		() => containers.filter((container) => matchesSearch(container, deferredQuery)),
@@ -100,10 +77,17 @@ export function ShellWorkspace({
 		containers.find((container) => container.id === containerId) || filteredContainers[0] || null;
 	const selectedContainerId = selectedContainer?.id || "";
 	const selectedContainerName = selectedContainer?.name || "Container";
-	const containerNameRef = useRef(selectedContainerName);
-	containerNameRef.current = selectedContainerName;
 
-	/* ── select a container and navigate ── */
+	const { terminalRef, terminalInstanceRef, status } = useSocketTerminalSession({
+		enabled: attached && Boolean(selectedContainerId),
+		target: "container",
+		containerId: selectedContainerId || undefined,
+		environmentId,
+		shell,
+		customShell,
+		label: selectedContainerName,
+	});
+
 	function selectContainer(id: string) {
 		setContainerId(id);
 	}
@@ -128,201 +112,8 @@ export function ShellWorkspace({
 		router.push(`${pathname}?${params.toString()}`);
 	}
 
-	/* ── Terminal lifecycle ── */
-	useEffect(() => {
-		if (!attached || !terminalRef.current || !selectedContainerId) {
-			return;
-		}
-
-		let disposed = false;
-		let cleanup = () => {};
-		const containerId = selectedContainerId;
-		const label = containerNameRef.current;
-
-		void (async () => {
-			const [{ FitAddon }, { WebLinksAddon }, { Terminal }] = await Promise.all([
-				import("@xterm/addon-fit"),
-				import("@xterm/addon-web-links"),
-				import("xterm"),
-			]);
-
-			if (disposed || !terminalRef.current) {
-				return;
-			}
-
-			const terminal = new Terminal({
-				cursorBlink: true,
-				cursorStyle: "underline",
-				fontFamily:
-					"ui-monospace, SFMono-Regular, SF Mono, Menlo, Monaco, Consolas, Liberation Mono, monospace",
-				fontSize: 13,
-				lineHeight: 1.4,
-				scrollback: 5000,
-				theme: {
-					background: getCssColorValue("--console", "#0a0a0a"),
-					foreground: getCssColorValue("--console-foreground", "#fafafa"),
-					cursor: getCssColorValue("--console-foreground", "#fafafa"),
-					selectionBackground: "#ffffff30",
-				},
-			});
-			const fitAddon = new FitAddon();
-			terminal.loadAddon(fitAddon);
-			terminal.loadAddon(new WebLinksAddon());
-			terminal.open(terminalRef.current);
-			fitAddon.fit();
-			terminal.focus();
-			terminalInstanceRef.current = terminal;
-			fitRef.current = fitAddon;
-			pendingChunksRef.current = [];
-			pendingExitsRef.current = [];
-
-			const flushPendingSocketEvents = (sessionId: string) => {
-				for (const payload of pendingChunksRef.current) {
-					if (payload.sessionId === sessionId) {
-						terminal.write(payload.data);
-					}
-				}
-				pendingChunksRef.current = pendingChunksRef.current.filter(
-					(payload) => payload.sessionId !== sessionId,
-				);
-
-				for (const payload of pendingExitsRef.current) {
-					if (payload.sessionId === sessionId) {
-						setStatus(`Session closed (${payload.exitCode ?? 0})`);
-						terminal.writeln(`\r\nSession closed (${payload.exitCode ?? 0}).`);
-					}
-				}
-				pendingExitsRef.current = pendingExitsRef.current.filter(
-					(payload) => payload.sessionId !== sessionId,
-				);
-			};
-
-			let resizeTimer: ReturnType<typeof setTimeout> | null = null;
-			let lastCols = terminal.cols;
-			let lastRows = terminal.rows;
-
-			const resizeObserver = new ResizeObserver(() => {
-				if (resizeTimer) {
-					clearTimeout(resizeTimer);
-				}
-
-				resizeTimer = setTimeout(() => {
-					resizeTimer = null;
-					fitAddon.fit();
-					if (terminal.cols === lastCols && terminal.rows === lastRows) {
-						return;
-					}
-
-					lastCols = terminal.cols;
-					lastRows = terminal.rows;
-					if (sessionIdRef.current) {
-						const socket = getSocket();
-						socket.emit("terminal:resize", {
-							sessionId: sessionIdRef.current,
-							cols: terminal.cols,
-							rows: terminal.rows,
-						});
-					}
-				}, 80);
-			});
-			resizeObserver.observe(terminalRef.current);
-
-			const socket = getSocket();
-
-			const onData = (payload: { sessionId: string; data: string }) => {
-				if (!sessionIdRef.current) {
-					pendingChunksRef.current.push(payload);
-					return;
-				}
-
-				if (payload.sessionId === sessionIdRef.current) {
-					terminal.write(payload.data);
-				}
-			};
-			const onExit = (payload: { sessionId: string; exitCode?: number }) => {
-				if (!sessionIdRef.current) {
-					pendingExitsRef.current.push(payload);
-					return;
-				}
-
-				if (payload.sessionId === sessionIdRef.current) {
-					setStatus(`Session closed (${payload.exitCode ?? 0})`);
-					terminal.writeln(`\r\nSession closed (${payload.exitCode ?? 0}).`);
-				}
-			};
-
-			socket.on("terminal:data", onData);
-			socket.on("terminal:exit", onExit);
-
-			socket.emit(
-				"terminal:create",
-				{
-					target: "container",
-					containerId,
-					environmentId,
-					shell,
-					customShell,
-					cols: terminal.cols,
-					rows: terminal.rows,
-				},
-				(response: { sessionId?: string; initialData?: string; error?: string }) => {
-					if (response.error || !response.sessionId) {
-						setStatus(response.error || "Unable to start shell session.");
-						terminal.writeln(`\r\n${response.error || "Unable to start shell session."}`);
-						return;
-					}
-
-					sessionIdRef.current = response.sessionId;
-					setStatus(`Connected to ${label}`);
-					if (response.initialData) {
-						terminal.write(response.initialData);
-					}
-					flushPendingSocketEvents(response.sessionId);
-					window.requestAnimationFrame(() => {
-						terminal.focus();
-					});
-				},
-			);
-
-			const disposable = terminal.onData((data) => {
-				if (!sessionIdRef.current) {
-					return;
-				}
-
-				socket.emit("terminal:input", {
-					sessionId: sessionIdRef.current,
-					data,
-				});
-			});
-
-			cleanup = () => {
-				disposable.dispose();
-				resizeObserver.disconnect();
-				if (sessionIdRef.current) {
-					socket.emit("terminal:close", {
-						sessionId: sessionIdRef.current,
-					});
-				}
-				socket.off("terminal:data", onData);
-				socket.off("terminal:exit", onExit);
-				terminal.dispose();
-				terminalInstanceRef.current = null;
-				fitRef.current = null;
-				sessionIdRef.current = null;
-				pendingChunksRef.current = [];
-				pendingExitsRef.current = [];
-			};
-		})();
-
-		return () => {
-			disposed = true;
-			cleanup();
-		};
-	}, [attached, selectedContainerId, customShell, environmentId, shell]);
-
 	return (
 		<div className="flex gap-5 xl:flex-row flex-col" style={{ height: "calc(100vh - 180px)" }}>
-			{/* Container sidebar */}
 			<div className="flex w-full flex-col xl:w-[300px] xl:shrink-0">
 				<Panel padding="md" className="flex h-full flex-col overflow-hidden">
 					<p className="text-sm font-semibold tracking-tight">Containers</p>
@@ -372,7 +163,6 @@ export function ShellWorkspace({
 				</Panel>
 			</div>
 
-			{/* Terminal panel */}
 			<div className="flex min-h-0 flex-1 flex-col">
 				<Panel
 					padding="md"
@@ -430,7 +220,6 @@ export function ShellWorkspace({
 						</div>
 					</div>
 
-					{/* terminal body */}
 					{containers.length === 0 ? (
 						<div className="mt-3 flex flex-1 items-center justify-center rounded-lg border border-default/10 bg-console">
 							<EmptyState

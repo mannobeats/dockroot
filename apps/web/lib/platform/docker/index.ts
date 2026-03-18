@@ -15,26 +15,10 @@ export {
 export {
 	controlContainer,
 	createContainer,
-	createNetwork,
-	createVolume,
 	getContainerDetails,
 	getContainerLogs,
-	getImageDetails,
-	getLocalDockerSnapshot,
-	getNetworkDetails,
-	getVolumeDetails,
 	listContainers,
-	listImages,
-	listNetworks,
 	listStackContainers,
-	listVolumes,
-	pruneImages,
-	pruneNetworks,
-	pruneVolumes,
-	pullImage,
-	removeImage,
-	removeNetwork,
-	removeVolume,
 } from "@/lib/platform/docker/containers";
 export { deleteLocalStackResources, deployStackLocally } from "@/lib/platform/docker/deployment";
 export {
@@ -45,11 +29,26 @@ export {
 	writeContainerFile,
 } from "@/lib/platform/docker/files";
 export {
+	getImageDetails,
+	listImages,
+	pruneImages,
+	pullImage,
+	removeImage,
+} from "@/lib/platform/docker/images";
+export {
+	createNetwork,
+	getNetworkDetails,
+	listNetworks,
+	pruneNetworks,
+	removeNetwork,
+} from "@/lib/platform/docker/networks";
+export {
 	parseJsonLines,
 	parseJsonValue,
 	sanitizeTempFileName,
 	stripAnsi,
 } from "@/lib/platform/docker/parsing";
+export { getLocalDockerSnapshot } from "@/lib/platform/docker/snapshot";
 export type {
 	ComposeProjectExport,
 	ComposeProjectSummary,
@@ -57,3 +56,10 @@ export type {
 	CreateContainerInput,
 	DockerCommandResult,
 } from "@/lib/platform/docker/types";
+export {
+	createVolume,
+	getVolumeDetails,
+	listVolumes,
+	pruneVolumes,
+	removeVolume,
+} from "@/lib/platform/docker/volumes";

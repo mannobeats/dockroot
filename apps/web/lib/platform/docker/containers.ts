@@ -1,84 +1,12 @@
 import "server-only";
 
-import os from "node:os";
 import { runDockerCommand } from "@/lib/platform/docker/command";
-import { parseJsonLines, parseJsonValue, stripAnsi } from "@/lib/platform/docker/parsing";
+import { parseJsonLines, stripAnsi } from "@/lib/platform/docker/parsing";
 import type { CreateContainerInput } from "@/lib/platform/docker/types";
 import { emitRealtime, registerDockrootAction } from "@/lib/realtime";
 
 const CONTAINER_NAME_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
 const MEMORY_REGEX = /^\d+[bkmg]$/i;
-
-export async function getLocalDockerSnapshot() {
-	const [ps, images, volumes, networks, version, stats] = await Promise.all([
-		runDockerCommand(["ps", "-a", "--size", "--format", "{{json .}}"]),
-		runDockerCommand(["images", "--digests", "--format", "{{json .}}"]),
-		runDockerCommand(["volume", "ls", "--format", "{{json .}}"]),
-		runDockerCommand(["network", "ls", "--format", "{{json .}}"]),
-		runDockerCommand(["version", "--format", "{{.Server.Version}}"]),
-		runDockerCommand(["stats", "--no-stream", "--format", "{{json .}}"], "container.stats"),
-	]);
-
-	const containers = parseJsonLines<Record<string, string>>(ps.stdout);
-	const imageRows = parseJsonLines<Record<string, string>>(images.stdout);
-	const volumeRows = parseJsonLines<Record<string, string>>(volumes.stdout);
-	const networkRows = parseJsonLines<Record<string, string>>(networks.stdout);
-	const statsRows = parseJsonLines<Record<string, string>>(stats.stdout);
-	const cpuPercent = Number(
-		statsRows
-			.reduce((sum, row) => {
-				return sum + (Number.parseFloat((row.CPUPerc || "0").replace("%", "")) || 0);
-			}, 0)
-			.toFixed(1),
-	);
-	const memoryPercent = Number(
-		statsRows
-			.reduce((sum, row) => {
-				return sum + (Number.parseFloat((row.MemPerc || "0").replace("%", "")) || 0);
-			}, 0)
-			.toFixed(1),
-	);
-
-	const enrichedContainers = containers.map((row) => {
-		const status = row.Status || "";
-		let healthStatus: string | null = null;
-		const healthMatch = status.match(/\((healthy|unhealthy|health: starting)\)/i);
-		if (healthMatch) {
-			const raw = healthMatch[1].toLowerCase();
-			healthStatus = raw === "health: starting" ? "starting" : raw;
-		}
-		return { ...row, HealthStatus: healthStatus };
-	});
-
-	return {
-		host: {
-			hostname:
-				process.platform === "win32" ? process.env.COMPUTERNAME || "unknown" : os.hostname(),
-			platform: `${os.platform()} ${os.release()}`,
-			architecture: os.arch(),
-			dockerVersion: version.stdout.trim() || "unknown",
-			cpus: os.cpus().length,
-			totalMemoryGb: Number((os.totalmem() / 1024 / 1024 / 1024).toFixed(1)),
-			freeMemoryGb: Number((os.freemem() / 1024 / 1024 / 1024).toFixed(1)),
-		},
-		containers: enrichedContainers,
-		images: imageRows,
-		volumes: volumeRows,
-		networks: networkRows,
-		counts: {
-			containers: containers.length,
-			runningContainers: containers.filter((row) => row.State === "running").length,
-			images: imageRows.length,
-			volumes: volumeRows.length,
-			networks: networkRows.length,
-		},
-		usage: {
-			cpuPercent,
-			memoryPercent,
-		},
-		containerStats: statsRows,
-	};
-}
 
 export async function getContainerDetails(containerId: string) {
 	const [inspectResult, logsResult, statsResult] = await Promise.all([
@@ -301,70 +229,4 @@ export async function createContainer(input: CreateContainerInput) {
 	}
 
 	return { ok: result.ok, output };
-}
-
-export async function getImageDetails(imageRef: string) {
-	const result = await runDockerCommand(["image", "inspect", imageRef]);
-	return parseJsonValue<Record<string, unknown>[]>(result.stdout)?.[0] ?? null;
-}
-
-export async function listImages() {
-	const result = await runDockerCommand(["images", "--digests", "--format", "{{json .}}"]);
-	return parseJsonLines<Record<string, string>>(result.stdout);
-}
-
-export async function pullImage(imageRef: string) {
-	return runDockerCommand(["pull", imageRef], "image.pull");
-}
-
-export async function removeImage(imageRef: string) {
-	return runDockerCommand(["image", "rm", "-f", imageRef]);
-}
-
-export async function pruneImages(options?: { all?: boolean }) {
-	return runDockerCommand(["image", "prune", "-f", ...(options?.all ? ["-a"] : [])], "prune");
-}
-
-export async function getVolumeDetails(volumeName: string) {
-	const result = await runDockerCommand(["volume", "inspect", volumeName]);
-	return parseJsonValue<Record<string, unknown>[]>(result.stdout)?.[0] ?? null;
-}
-
-export async function listVolumes() {
-	const result = await runDockerCommand(["volume", "ls", "--format", "{{json .}}"]);
-	return parseJsonLines<Record<string, string>>(result.stdout);
-}
-
-export async function createVolume(name: string, driver = "local") {
-	return runDockerCommand(["volume", "create", "--driver", driver, name]);
-}
-
-export async function removeVolume(name: string) {
-	return runDockerCommand(["volume", "rm", "-f", name]);
-}
-
-export async function pruneVolumes() {
-	return runDockerCommand(["volume", "prune", "-f"], "prune");
-}
-
-export async function getNetworkDetails(networkName: string) {
-	const result = await runDockerCommand(["network", "inspect", networkName]);
-	return parseJsonValue<Record<string, unknown>[]>(result.stdout)?.[0] ?? null;
-}
-
-export async function listNetworks() {
-	const result = await runDockerCommand(["network", "ls", "--format", "{{json .}}"]);
-	return parseJsonLines<Record<string, string>>(result.stdout);
-}
-
-export async function createNetwork(name: string, driver = "bridge") {
-	return runDockerCommand(["network", "create", "--driver", driver, name]);
-}
-
-export async function removeNetwork(name: string) {
-	return runDockerCommand(["network", "rm", name]);
-}
-
-export async function pruneNetworks() {
-	return runDockerCommand(["network", "prune", "-f"], "prune");
 }
