@@ -102,26 +102,29 @@ const ALL_COLUMNS: ColumnDef[] = [
 
 const STORAGE_KEY = "dockroot:containers:columns";
 
-function getInitialColumns(): Set<ColumnId> {
-	if (typeof window !== "undefined") {
-		try {
-			const stored = localStorage.getItem(STORAGE_KEY);
-			if (stored) {
-				const parsed = JSON.parse(stored) as ColumnId[];
-				if (Array.isArray(parsed) && parsed.length > 0) {
-					const set = new Set(parsed);
-					// Always ensure required columns
-					for (const col of ALL_COLUMNS) {
-						if (col.alwaysVisible) set.add(col.id);
-					}
-					return set;
+const DEFAULT_COLUMNS = new Set(ALL_COLUMNS.filter((c) => c.defaultVisible).map((c) => c.id));
+
+function getDefaultColumns(): Set<ColumnId> {
+	return new Set(DEFAULT_COLUMNS);
+}
+
+function loadStoredColumns(): Set<ColumnId> | null {
+	try {
+		const stored = localStorage.getItem(STORAGE_KEY);
+		if (stored) {
+			const parsed = JSON.parse(stored) as ColumnId[];
+			if (Array.isArray(parsed) && parsed.length > 0) {
+				const set = new Set(parsed);
+				for (const col of ALL_COLUMNS) {
+					if (col.alwaysVisible) set.add(col.id);
 				}
+				return set;
 			}
-		} catch {
-			/* ignore */
 		}
+	} catch {
+		/* ignore */
 	}
-	return new Set(ALL_COLUMNS.filter((c) => c.defaultVisible).map((c) => c.id));
+	return null;
 }
 
 function summarizeComposeProject(labels: string | undefined) {
@@ -275,9 +278,15 @@ export function ContainersTableWorkspace({
 	const [selectedIds, setSelectedIds] = useState<Record<string, boolean>>({});
 	const [watchStackId, setWatchStackId] = useState(initialWatchStackId || "");
 	const [logDockOpen, setLogDockOpen] = useState(Boolean(initialWatchStackId));
-	const [visibleColumns, setVisibleColumns] = useState<Set<ColumnId>>(getInitialColumns);
+	const [visibleColumns, setVisibleColumns] = useState<Set<ColumnId>>(getDefaultColumns);
 	const [columnMenuOpen, setColumnMenuOpen] = useState(false);
 	const columnMenuRef = useRef<HTMLDivElement>(null);
+
+	// Load column preferences from localStorage after hydration
+	useEffect(() => {
+		const stored = loadStoredColumns();
+		if (stored) setVisibleColumns(stored);
+	}, []);
 
 	// Per-container live stats from socket — use ref to avoid losing data on re-renders
 	const [containerStats, setContainerStats] = useState<Record<string, ContainerStats>>({});
