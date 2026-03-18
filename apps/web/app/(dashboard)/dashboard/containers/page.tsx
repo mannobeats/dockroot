@@ -123,6 +123,7 @@ export default async function ContainersPage({
 			<ContainersPageWorkspace
 				containers={containers as Array<Record<string, string>>}
 				environmentId={environment.id}
+				environmentKind={environment.kind}
 				managerUrl={runtimeUrl}
 				controlContainerAction={controlContainerAction}
 				bulkControlContainerAction={bulkControlContainerAction}

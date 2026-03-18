@@ -84,6 +84,13 @@ let shutdownPromise = null;
 let shuttingDown = false;
 let lastLocalMetricsPersistAt = 0;
 
+// ── Streaming docker stats state ─────────────────────────────────────────────
+let dockerStatsProcess = null;
+let latestContainerStats = []; // latest parsed stats rows from streaming docker stats
+let latestResourceCounts = null; // latest counts from docker ps/images/volumes/networks
+let lastResourceCountsFetchAt = 0;
+const RESOURCE_COUNTS_INTERVAL_MS = 15_000; // refresh counts every 15s (not every tick)
+
 function getSocketRuntimeMetrics() {
 	let authenticatedConnections = 0;
 	for (const socket of io.of("/").sockets.values()) {
@@ -665,23 +672,163 @@ async function canAccessContainer(userId, role, containerId) {
 	return ownedSlugs.has(composeProject);
 }
 
-function emitRuntimeMetrics() {
-	return async () => {
-		const metrics = await getRuntimeMetrics();
-		await persistLocalRuntimeSamples(metrics);
-		const ws = getSocketRuntimeMetrics();
+// ── Streaming docker stats ───────────────────────────────────────────────────
+function startDockerStatsStream() {
+	if (dockerStatsProcess) {
+		return; // already running
+	}
 
-		for (const [socketId, socket] of io.of("/").sockets) {
-			if (socket.data?.role && isPrivilegedRole(socket.data.role)) {
-				io.to(socketId).emit("runtime:metrics", {
-					at: Date.now(),
-					containers: metrics.containers,
-					host: metrics.host,
-					ws,
-				});
+	const args = ["stats", "--format", "{{json .}}", "--no-trunc"];
+	const proc = spawn(dockerBinary, args, {
+		stdio: ["ignore", "pipe", "ignore"],
+	});
+	dockerStatsProcess = proc;
+
+	let buffer = "";
+
+	proc.stdout.on("data", (chunk) => {
+		buffer += chunk.toString();
+		const lines = buffer.split("\n");
+		// Keep last incomplete line in buffer
+		buffer = lines.pop() || "";
+
+		// Docker stats streaming outputs a complete set separated by blank-ish lines.
+		// Each flush is a full snapshot of all containers.
+		const rows = [];
+		for (const line of lines) {
+			const trimmed = line.trim();
+			if (!trimmed) continue;
+			try {
+				rows.push(JSON.parse(trimmed));
+			} catch {
+				// skip malformed lines
 			}
 		}
+
+		if (rows.length > 0) {
+			latestContainerStats = rows;
+			void broadcastMetrics();
+		}
+	});
+
+	proc.on("exit", (code) => {
+		dockerStatsProcess = null;
+		if (!shuttingDown) {
+			// Restart after a brief delay
+			setTimeout(() => startDockerStatsStream(), 3000);
+		}
+	});
+
+	proc.on("error", () => {
+		dockerStatsProcess = null;
+		if (!shuttingDown) {
+			setTimeout(() => startDockerStatsStream(), 5000);
+		}
+	});
+}
+
+function stopDockerStatsStream() {
+	if (dockerStatsProcess) {
+		dockerStatsProcess.kill("SIGTERM");
+		dockerStatsProcess = null;
+	}
+}
+
+async function refreshResourceCounts() {
+	const now = Date.now();
+	if (latestResourceCounts && now - lastResourceCountsFetchAt < RESOURCE_COUNTS_INTERVAL_MS) {
+		return latestResourceCounts;
+	}
+
+	try {
+		const [psResult, imagesResult, volumesResult, networksResult, versionResult] =
+			await Promise.all([
+				execFileAsync(dockerBinary, ["ps", "-a", "--format", "{{json .}}"], {
+					maxBuffer: 1024 * 1024 * 8,
+				}),
+				execFileAsync(dockerBinary, ["images", "--digests", "--format", "{{json .}}"], {
+					maxBuffer: 1024 * 1024 * 8,
+				}),
+				execFileAsync(dockerBinary, ["volume", "ls", "--format", "{{json .}}"], {
+					maxBuffer: 1024 * 1024 * 4,
+				}),
+				execFileAsync(dockerBinary, ["network", "ls", "--format", "{{json .}}"], {
+					maxBuffer: 1024 * 1024 * 4,
+				}),
+				execFileAsync(dockerBinary, ["version", "--format", "{{.Server.Version}}"], {
+					maxBuffer: 1024 * 256,
+				}),
+			]);
+
+		const containers = parseJsonLines(psResult.stdout);
+		const images = parseJsonLines(imagesResult.stdout);
+		const volumes = parseJsonLines(volumesResult.stdout);
+		const networks = parseJsonLines(networksResult.stdout);
+
+		latestResourceCounts = {
+			containerRows: containers,
+			dockerVersion: versionResult.stdout.trim() || "unknown",
+			counts: {
+				containers: containers.length,
+				runningContainers: containers.filter((row) => row.State === "running").length,
+				images: images.length,
+				volumes: volumes.length,
+				networks: networks.length,
+			},
+		};
+		lastResourceCountsFetchAt = now;
+	} catch {
+		// Keep stale counts if Docker CLI fails
+	}
+
+	return latestResourceCounts;
+}
+
+async function broadcastMetrics() {
+	const statsRows = latestContainerStats;
+	const resourceCounts = await refreshResourceCounts();
+
+	const cpuPercent = clampPercent(
+		statsRows.reduce((sum, row) => sum + (parsePercent(row.CPUPerc) || 0), 0),
+	);
+	const memoryPercent = clampPercent(
+		statsRows.reduce((sum, row) => sum + (parsePercent(row.MemPerc) || 0), 0),
+	);
+
+	const host = {
+		source: "native",
+		cpuPercent,
+		memoryPercent,
+		hostname: os.hostname(),
+		platform: `${os.platform()} ${os.release()}`,
+		architecture: os.arch(),
+		dockerVersion: resourceCounts?.dockerVersion || "unknown",
+		cpus: os.cpus().length,
+		totalMemoryGb: Number((os.totalmem() / 1024 / 1024 / 1024).toFixed(1)),
+		freeMemoryGb: Number((os.freemem() / 1024 / 1024 / 1024).toFixed(1)),
+		counts: resourceCounts?.counts || { containers: 0, runningContainers: 0, images: 0, volumes: 0, networks: 0 },
+		containerStats: statsRows,
+		containerRows: resourceCounts?.containerRows || [],
 	};
+
+	const metrics = { containers: statsRows, host };
+	const ws = getSocketRuntimeMetrics();
+
+	// Broadcast immediately to all privileged users (local environment scope)
+	for (const [socketId, socket] of io.of("/").sockets) {
+		if (socket.data?.role && isPrivilegedRole(socket.data.role)) {
+			io.to(socketId).emit("runtime:metrics", {
+				environmentId: "local",
+				at: Date.now(),
+				containers: statsRows,
+				host,
+				ws,
+			});
+		}
+	}
+
+	// Persist to DB on a slower cadence (every 15s, handled inside persistLocalRuntimeSamples)
+	void persistLocalRuntimeSamples(metrics);
 }
 
 function clampPercent(value) {
@@ -774,76 +921,36 @@ function toTenths(value) {
 	return Math.round(Number(value) * 10);
 }
 
-async function getDockerRuntimeMetrics() {
-	try {
-		const [psResult, imagesResult, volumesResult, networksResult, statsResult, versionResult] =
-			await Promise.all([
-				execFileAsync(dockerBinary, ["ps", "-a", "--size", "--format", "{{json .}}"], {
-					maxBuffer: 1024 * 1024 * 8,
-				}),
-				execFileAsync(dockerBinary, ["images", "--digests", "--format", "{{json .}}"], {
-					maxBuffer: 1024 * 1024 * 8,
-				}),
-				execFileAsync(dockerBinary, ["volume", "ls", "--format", "{{json .}}"], {
-					maxBuffer: 1024 * 1024 * 4,
-				}),
-				execFileAsync(dockerBinary, ["network", "ls", "--format", "{{json .}}"], {
-					maxBuffer: 1024 * 1024 * 4,
-				}),
-				execFileAsync(dockerBinary, ["stats", "--no-stream", "--format", "{{json .}}"], {
-					maxBuffer: 1024 * 1024 * 4,
-				}),
-				execFileAsync(dockerBinary, ["version", "--format", "{{.Server.Version}}"], {
-					maxBuffer: 1024 * 256,
-				}),
-			]);
-
-		const containers = parseJsonLines(psResult.stdout);
-		const images = parseJsonLines(imagesResult.stdout);
-		const volumes = parseJsonLines(volumesResult.stdout);
-		const networks = parseJsonLines(networksResult.stdout);
-		const statsRows = parseJsonLines(statsResult.stdout);
-		const cpuPercent = clampPercent(
-			statsRows.reduce((sum, row) => sum + (parsePercent(row.CPUPerc) || 0), 0),
-		);
-		const memoryPercent = clampPercent(
-			statsRows.reduce((sum, row) => sum + (parsePercent(row.MemPerc) || 0), 0),
-		);
-
-		return {
-			containers: statsRows,
-			host: {
-				source: "native",
-				cpuPercent,
-				memoryPercent,
-				hostname: os.hostname(),
-				platform: `${os.platform()} ${os.release()}`,
-				architecture: os.arch(),
-				dockerVersion: versionResult.stdout.trim() || "unknown",
-				cpus: os.cpus().length,
-				totalMemoryGb: Number((os.totalmem() / 1024 / 1024 / 1024).toFixed(1)),
-				freeMemoryGb: Number((os.freemem() / 1024 / 1024 / 1024).toFixed(1)),
-				counts: {
-					containers: containers.length,
-					runningContainers: containers.filter((row) => row.State === "running").length,
-					images: images.length,
-					volumes: volumes.length,
-					networks: networks.length,
-				},
-				containerStats: statsRows,
-				containerRows: containers,
-			},
-		};
-	} catch {
-		return {
-			containers: [],
-			host: null,
-		};
-	}
-}
-
+// getRuntimeMetrics is used as a one-shot fallback (e.g. for the /internal/ws-metrics endpoint)
 async function getRuntimeMetrics() {
-	return getDockerRuntimeMetrics();
+	const statsRows = latestContainerStats;
+	const resourceCounts = await refreshResourceCounts();
+
+	const cpuPercent = clampPercent(
+		statsRows.reduce((sum, row) => sum + (parsePercent(row.CPUPerc) || 0), 0),
+	);
+	const memoryPercent = clampPercent(
+		statsRows.reduce((sum, row) => sum + (parsePercent(row.MemPerc) || 0), 0),
+	);
+
+	return {
+		containers: statsRows,
+		host: {
+			source: "native",
+			cpuPercent,
+			memoryPercent,
+			hostname: os.hostname(),
+			platform: `${os.platform()} ${os.release()}`,
+			architecture: os.arch(),
+			dockerVersion: resourceCounts?.dockerVersion || "unknown",
+			cpus: os.cpus().length,
+			totalMemoryGb: Number((os.totalmem() / 1024 / 1024 / 1024).toFixed(1)),
+			freeMemoryGb: Number((os.freemem() / 1024 / 1024 / 1024).toFixed(1)),
+			counts: resourceCounts?.counts || { containers: 0, runningContainers: 0, images: 0, volumes: 0, networks: 0 },
+			containerStats: statsRows,
+			containerRows: resourceCounts?.containerRows || [],
+		},
+	};
 }
 
 async function persistLocalRuntimeSamples(metrics) {
@@ -1726,6 +1833,7 @@ async function shutdownServer(signal) {
 	shuttingDown = true;
 	console.log(`[shutdown] Received ${signal}; draining Dockroot runtime services...`);
 	shutdownPromise = (async () => {
+		stopDockerStatsStream();
 		if (runtimeMetricsInterval) {
 			clearInterval(runtimeMetricsInterval);
 			runtimeMetricsInterval = null;
@@ -1776,7 +1884,11 @@ async function shutdownServer(signal) {
 	return shutdownPromise;
 }
 
-runtimeMetricsInterval = setInterval(emitRuntimeMetrics(), 5000);
+// Start streaming docker stats (replaces polling interval for stats)
+startDockerStatsStream();
+
+// Periodic resource counts refresh as a fallback (the streaming broadcast also triggers this)
+runtimeMetricsInterval = setInterval(() => void refreshResourceCounts(), RESOURCE_COUNTS_INTERVAL_MS);
 runtimeMetricsInterval.unref?.();
 
 const updateSchedulerWorkerId = `dockroot-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;

@@ -12,6 +12,7 @@ type ContainerRow = Record<string, string>;
 export function ContainersPageWorkspace({
 	containers,
 	environmentId,
+	environmentKind = "local",
 	managerUrl,
 	controlContainerAction,
 	bulkControlContainerAction,
@@ -29,6 +30,7 @@ export function ContainersPageWorkspace({
 }: {
 	containers: ContainerRow[];
 	environmentId: string;
+	environmentKind?: "local" | "agent";
 	managerUrl?: string;
 	controlContainerAction: FormAction;
 	bulkControlContainerAction: FormAction;
@@ -120,6 +122,7 @@ export function ContainersPageWorkspace({
 			<ContainersTableWorkspace
 				containers={filteredContainers}
 				environmentId={environmentId}
+				environmentKind={environmentKind}
 				managerUrl={managerUrl}
 				controlContainerAction={controlContainerAction}
 				bulkControlContainerAction={bulkControlContainerAction}

@@ -52,6 +52,7 @@ type ContainerStats = {
 };
 
 type RuntimePayload = {
+	environmentId?: string;
 	at: number;
 	containers: Array<{
 		Name?: string;
@@ -221,6 +222,7 @@ function MemoryBar({ usage, percent }: { usage: string; percent: number }) {
 export function ContainersTableWorkspace({
 	containers,
 	environmentId,
+	environmentKind = "local",
 	managerUrl,
 	controlContainerAction,
 	bulkControlContainerAction,
@@ -237,6 +239,7 @@ export function ContainersTableWorkspace({
 }: {
 	containers: ContainerRow[];
 	environmentId: string;
+	environmentKind?: "local" | "agent";
 	managerUrl?: string;
 	controlContainerAction: FormAction;
 	bulkControlContainerAction: FormAction;
@@ -276,8 +279,9 @@ export function ContainersTableWorkspace({
 	const [columnMenuOpen, setColumnMenuOpen] = useState(false);
 	const columnMenuRef = useRef<HTMLDivElement>(null);
 
-	// Per-container live stats from socket
+	// Per-container live stats from socket — use ref to avoid losing data on re-renders
 	const [containerStats, setContainerStats] = useState<Record<string, ContainerStats>>({});
+	const statsRef = useRef<Record<string, ContainerStats>>({});
 
 	const protectedSet = useMemo(() => new Set(protectedContainerIds), [protectedContainerIds]);
 	const selectableIds = useMemo(
@@ -335,12 +339,20 @@ export function ContainersTableWorkspace({
 		const client = getSocket();
 
 		const onMetrics = (payload: RuntimePayload) => {
-			const statsMap: Record<string, ContainerStats> = {};
+			// Filter by environment: local broadcasts have environmentId "local",
+			// agent broadcasts have the actual environment ID
+			if (payload.environmentId) {
+				const isMatch =
+					(environmentKind === "local" && payload.environmentId === "local") ||
+					payload.environmentId === environmentId;
+				if (!isMatch) return;
+			}
+
+			const next: Record<string, ContainerStats> = {};
 			for (const c of payload.containers) {
 				if (c.Name) {
-					// Docker stats name may have leading slash or compose suffix
 					const name = c.Name.replace(/^\//, "");
-					statsMap[name] = {
+					next[name] = {
 						CPUPerc: c.CPUPerc,
 						MemPerc: c.MemPerc,
 						MemUsage: c.MemUsage,
@@ -350,7 +362,8 @@ export function ContainersTableWorkspace({
 					};
 				}
 			}
-			setContainerStats(statsMap);
+			statsRef.current = next;
+			setContainerStats(next);
 		};
 
 		const onDeploymentUpdate = (event: { stackId?: string; status?: string }) => {

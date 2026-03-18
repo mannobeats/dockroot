@@ -252,7 +252,34 @@ function buildSeries<T extends { sampledAt: Date }>(
 		.filter((point) => point.value !== null) as Array<{ time: string; value: number }>;
 }
 
-export async function getEnvironmentMetricsSeries(environmentId: string) {
+type MetricsSeriesResult = {
+	available: boolean;
+	cpuPercent: number | null;
+	memoryPercent: number | null;
+	runningContainers: number | null;
+	containerCount: number | null;
+	imageCount: number | null;
+	memoryUsedBytes: number | null;
+	memoryTotalBytes: number | null;
+	cpuSeries: Array<{ time: string; value: number }>;
+	memorySeries: Array<{ time: string; value: number }>;
+};
+
+const metricsSeriesCache = new Map<
+	string,
+	{ data: MetricsSeriesResult; expiresAt: number }
+>();
+const METRICS_CACHE_TTL_MS = 10_000; // 10s — matches the broadcast cadence
+
+export async function getEnvironmentMetricsSeries(
+	environmentId: string,
+): Promise<MetricsSeriesResult> {
+	const now = Date.now();
+	const cached = metricsSeriesCache.get(environmentId);
+	if (cached && now < cached.expiresAt) {
+		return cached.data;
+	}
+
 	const rows = await db.query.environmentMetricSamples.findMany({
 		where: and(
 			eq(environmentMetricSamples.environmentId, environmentId),
@@ -263,7 +290,7 @@ export async function getEnvironmentMetricsSeries(environmentId: string) {
 
 	const latest = rows.at(-1) || null;
 
-	return {
+	const result: MetricsSeriesResult = {
 		available: rows.length > 0,
 		cpuPercent: fromTenths(latest?.cpuPercentTenths ?? null),
 		memoryPercent: fromTenths(latest?.memoryPercentTenths ?? null),
@@ -275,6 +302,13 @@ export async function getEnvironmentMetricsSeries(environmentId: string) {
 		cpuSeries: buildSeries(rows, (row) => fromTenths(row.cpuPercentTenths)),
 		memorySeries: buildSeries(rows, (row) => fromTenths(row.memoryPercentTenths)),
 	};
+
+	metricsSeriesCache.set(environmentId, {
+		data: result,
+		expiresAt: now + METRICS_CACHE_TTL_MS,
+	});
+
+	return result;
 }
 
 export async function getRuntimeCollectorHealth(

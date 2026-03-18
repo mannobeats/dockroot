@@ -34,6 +34,65 @@ const metrics = {
 	jobsFailed: 0,
 };
 
+// ── Streaming docker stats for agent ─────────────────────────────
+let agentDockerStatsProcess = null;
+let agentLatestContainerStats = [];
+let agentShuttingDown = false;
+
+function startAgentDockerStatsStream() {
+	if (agentDockerStatsProcess) return;
+
+	const proc = spawn("docker", ["stats", "--format", "{{json .}}", "--no-trunc"], {
+		stdio: ["ignore", "pipe", "ignore"],
+	});
+	agentDockerStatsProcess = proc;
+
+	let buffer = "";
+
+	proc.stdout.on("data", (chunk) => {
+		buffer += chunk.toString();
+		const lines = buffer.split("\n");
+		buffer = lines.pop() || "";
+
+		const rows = [];
+		for (const line of lines) {
+			const trimmed = line.trim();
+			if (!trimmed) continue;
+			try {
+				rows.push(JSON.parse(trimmed));
+			} catch {
+				// skip
+			}
+		}
+
+		if (rows.length > 0) {
+			agentLatestContainerStats = rows;
+		}
+	});
+
+	proc.on("exit", () => {
+		agentDockerStatsProcess = null;
+		if (!agentShuttingDown) {
+			setTimeout(() => startAgentDockerStatsStream(), 3000);
+		}
+	});
+
+	proc.on("error", () => {
+		agentDockerStatsProcess = null;
+		if (!agentShuttingDown) {
+			setTimeout(() => startAgentDockerStatsStream(), 5000);
+		}
+	});
+}
+
+function stopAgentDockerStatsStream() {
+	agentShuttingDown = true;
+	if (agentDockerStatsProcess) {
+		agentDockerStatsProcess.kill("SIGTERM");
+		agentDockerStatsProcess = null;
+	}
+}
+
 function getAdvertisedAgentUrl() {
 	const explicitUrl = (process.env.DOCKROOT_AGENT_URL || "").trim();
 	if (explicitUrl) {
@@ -765,18 +824,20 @@ function enrichContainerHealth(row) {
 }
 
 async function getSnapshot() {
-	const [containers, images, volumes, networks, stats] = await Promise.all([
+	const [containers, images, volumes, networks] = await Promise.all([
 		runDocker(["ps", "-a", "--size", "--format", "{{json .}}"]),
 		runDocker(["images", "--digests", "--format", "{{json .}}"]),
 		runDocker(["volume", "ls", "--format", "{{json .}}"]),
 		runDocker(["network", "ls", "--format", "{{json .}}"]),
-		runDocker(["stats", "--no-stream", "--format", "{{json .}}"], "container.stats"),
 	]);
 	const containerRows = parseJsonLines(containers.stdout).map(enrichContainerHealth);
 	const imageRows = parseJsonLines(images.stdout);
 	const volumeRows = parseJsonLines(volumes.stdout);
 	const networkRows = parseJsonLines(networks.stdout);
-	const statsRows = parseJsonLines(stats.stdout);
+	// Use cached streaming stats instead of spawning docker stats --no-stream
+	const statsRows = agentLatestContainerStats.length > 0
+		? agentLatestContainerStats
+		: parseJsonLines((await runDocker(["stats", "--no-stream", "--format", "{{json .}}"], "container.stats")).stdout);
 	const cpuPercent = Number(
 		statsRows
 			.reduce((sum, row) => {
@@ -1544,6 +1605,9 @@ function startDockerEventStream(state) {
 async function loop() {
 	let state = await loadState();
 
+	// Start streaming docker stats early for instant metrics
+	startAgentDockerStatsStream();
+
 	while (true) {
 		try {
 			state = await ensureRegistered(state);
@@ -1575,4 +1639,13 @@ async function loop() {
 
 await ensureDirectories();
 startHttpServer();
+
+for (const signal of ["SIGINT", "SIGTERM"]) {
+	process.once(signal, () => {
+		console.log(`[agent] Received ${signal}, shutting down...`);
+		stopAgentDockerStatsStream();
+		process.exit(0);
+	});
+}
+
 await loop();
