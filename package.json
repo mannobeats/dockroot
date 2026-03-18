@@ -17,6 +17,7 @@
 		"env:check:prod": "node scripts/runtime-env.mjs --production --compose",
 		"secrets:rotate": "node scripts/rotate-runtime-secrets.mjs",
 		"start": "node scripts/with-runtime-env.mjs -- node server.mjs",
+		"typecheck": "pnpm exec tsc --noEmit -p tsconfig.json && pnpm --filter @dockroot/web run typecheck",
 		"lint": "biome check .",
 		"lint:fix": "biome check --write .",
 		"format": "biome format --write .",
