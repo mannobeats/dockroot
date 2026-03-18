@@ -7,6 +7,13 @@ import {
 	getValues,
 	requireDestructiveConfirmation,
 } from "@/app/(dashboard)/actions/utils/form-data";
+import { recordVolumeAuditEvent } from "@/app/(dashboard)/actions/utils/volume-audit";
+import {
+	createVolumeBackupRecord,
+	markVolumeBackupCompleted,
+	markVolumeBackupFailed,
+	removeVolumeBackupRecord,
+} from "@/app/(dashboard)/actions/utils/volume-backups";
 import { requirePrivilegedSession, requireUserSession } from "@/lib/authorization";
 import {
 	createVolumeForEnvironment,
@@ -26,8 +33,7 @@ export async function createVolumeAction(formData: FormData) {
 	}
 
 	await createVolumeForEnvironment(auth.userId, name, driver, environmentId);
-	const { recordAuditEvent } = await import("@/lib/platform");
-	await recordAuditEvent({
+	await recordVolumeAuditEvent({
 		environmentId,
 		userId: auth.userId,
 		actionType: "volume.create",
@@ -48,8 +54,7 @@ export async function removeVolumeAction(formData: FormData) {
 
 	try {
 		await removeVolumeForEnvironment(auth.userId, name, environmentId);
-		const { recordAuditEvent } = await import("@/lib/platform");
-		await recordAuditEvent({
+		await recordVolumeAuditEvent({
 			environmentId,
 			userId: auth.userId,
 			actionType: "volume.remove",
@@ -70,19 +75,19 @@ export async function bulkRemoveVolumesAction(formData: FormData) {
 		throw new Error("At least one volume is required.");
 	}
 
-	for (const name of Array.from(new Set(names))) {
+	const uniqueNames = Array.from(new Set(names));
+	for (const name of uniqueNames) {
 		try {
 			await removeVolumeForEnvironment(auth.userId, name, environmentId);
 		} catch (error) {
 			throw normalizeInUseDeleteError("volume", name, error);
 		}
 	}
-	const { recordAuditEvent } = await import("@/lib/platform");
-	await recordAuditEvent({
+	await recordVolumeAuditEvent({
 		environmentId,
 		userId: auth.userId,
 		actionType: "volume.remove.bulk",
-		details: { volumeNames: Array.from(new Set(names)) },
+		details: { volumeNames: uniqueNames },
 	});
 	revalidatePath("/dashboard/volumes");
 }
@@ -92,8 +97,7 @@ export async function pruneVolumesAction(formData: FormData) {
 	const auth = await requirePrivilegedSession();
 	const environmentId = getValue(formData, "environmentId") || undefined;
 	await pruneVolumesForEnvironment(auth.userId, environmentId);
-	const { recordAuditEvent } = await import("@/lib/platform");
-	await recordAuditEvent({
+	await recordVolumeAuditEvent({
 		environmentId,
 		userId: auth.userId,
 		actionType: "volume.prune",
@@ -111,19 +115,13 @@ export async function backupVolumeAction(formData: FormData) {
 	}
 
 	const environment = await resolveRuntimeEnvironment(auth.userId, environmentId);
-	const { randomUUID } = await import("node:crypto");
-	const backupId = randomUUID();
-	const createdAt = new Date();
+	const backupId = crypto.randomUUID();
 
-	const { db: dbClient, volumeBackups } = await import("@dockroot/db");
-	await dbClient.insert(volumeBackups).values({
-		id: backupId,
+	await createVolumeBackupRecord({
+		backupId,
 		environmentId: environment.id,
 		volumeName,
-		fileName: `${backupId}.tar.gz`,
-		status: "in_progress",
-		createdByUserId: auth.userId,
-		createdAt,
+		userId: auth.userId,
 	});
 
 	try {
@@ -135,26 +133,18 @@ export async function backupVolumeAction(formData: FormData) {
 			environmentId,
 		);
 		if (!result.ok) {
-			const { eq } = await import("drizzle-orm");
-			await dbClient
-				.update(volumeBackups)
-				.set({
-					status: "failed",
-					error: result.output || "Backup failed.",
-					completedAt: new Date(),
-				})
-				.where(eq(volumeBackups.id, backupId));
+			await markVolumeBackupFailed({
+				backupId,
+				errorMessage: result.output || "Backup failed.",
+			});
 			throw new Error(`Backup failed: ${result.output}`);
 		}
 
-		const sizeBytes = result.sizeBytes;
-		const { eq } = await import("drizzle-orm");
-		await dbClient
-			.update(volumeBackups)
-			.set({ status: "completed", sizeBytes: sizeBytes ?? undefined, completedAt: new Date() })
-			.where(eq(volumeBackups.id, backupId));
-		const { recordAuditEvent } = await import("@/lib/platform");
-		await recordAuditEvent({
+		await markVolumeBackupCompleted({
+			backupId,
+			sizeBytes: result.sizeBytes ?? null,
+		});
+		await recordVolumeAuditEvent({
 			environmentId: environment.id,
 			userId: auth.userId,
 			actionType: "volume.backup.create",
@@ -162,19 +152,14 @@ export async function backupVolumeAction(formData: FormData) {
 				volumeName,
 				backupId,
 				fileName: result.fileName,
-				sizeBytes: sizeBytes ?? null,
+				sizeBytes: result.sizeBytes ?? null,
 			},
 		});
 	} catch (error) {
-		const { eq } = await import("drizzle-orm");
-		await dbClient
-			.update(volumeBackups)
-			.set({
-				status: "failed",
-				error: error instanceof Error ? error.message : "Backup failed.",
-				completedAt: new Date(),
-			})
-			.where(eq(volumeBackups.id, backupId));
+		await markVolumeBackupFailed({
+			backupId,
+			errorMessage: error instanceof Error ? error.message : "Backup failed.",
+		});
 		throw error;
 	}
 
@@ -202,8 +187,7 @@ export async function restoreVolumeAction(formData: FormData) {
 	if (!result.ok) {
 		throw new Error(`Restore failed: ${result.output}`);
 	}
-	const { recordAuditEvent } = await import("@/lib/platform");
-	await recordAuditEvent({
+	await recordVolumeAuditEvent({
 		environmentId,
 		userId: auth.userId,
 		actionType: "volume.backup.restore",
@@ -225,12 +209,8 @@ export async function deleteVolumeBackupAction(formData: FormData) {
 
 	const { deleteVolumeBackupForEnvironment } = await import("@/lib/environment-runtime");
 	await deleteVolumeBackupForEnvironment(auth.userId, backupId, environmentId);
-
-	const { db: dbClient, volumeBackups } = await import("@dockroot/db");
-	const { eq } = await import("drizzle-orm");
-	await dbClient.delete(volumeBackups).where(eq(volumeBackups.id, backupId));
-	const { recordAuditEvent } = await import("@/lib/platform");
-	await recordAuditEvent({
+	await removeVolumeBackupRecord(backupId);
+	await recordVolumeAuditEvent({
 		environmentId,
 		userId: auth.userId,
 		actionType: "volume.backup.delete",

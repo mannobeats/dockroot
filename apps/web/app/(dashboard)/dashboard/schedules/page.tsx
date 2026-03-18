@@ -1,30 +1,14 @@
-import {
-	runContainerUpdateApplyNowAction,
-	runContainerUpdateCheckNowAction,
-	updateContainerUpdateScheduleAction,
-} from "@/app/(dashboard)/actions";
-import { FormSubmitButton } from "@/components/form-submit-button";
 import { PageHeader } from "@/components/page-header";
-import { Badge } from "@/components/ui/badge";
-import {
-	DataTable,
-	DataTableBody,
-	DataTableCell,
-	DataTableEmpty,
-	DataTableHead,
-	DataTableHeader,
-	DataTableRow,
-} from "@/components/ui/data-table";
-import { Field, FieldHint, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import { Panel } from "@/components/ui/panel";
-import { Select } from "@/components/ui/select";
 import { requirePrivilegedPageSession } from "@/lib/authorization";
 import {
 	getOrCreateContainerUpdateSchedule,
 	listContainerUpdateRuns,
 } from "@/lib/container-updates";
 import { listEnvironments } from "@/lib/platform";
+import { SchedulePageActions } from "./schedule-actions";
+import { ScheduleConfigurationPanel } from "./schedule-configuration-panel";
+import { ScheduleRunsPanel } from "./schedule-runs-panel";
 
 export default async function SchedulesPage({
 	searchParams,
@@ -63,197 +47,11 @@ export default async function SchedulesPage({
 			<PageHeader
 				title="Schedules"
 				description={`${selectedEnvironment?.name || "Environment"} · recurring update checks and deployments`}
-				actions={
-					<div className="flex items-center gap-2">
-						<form action={runContainerUpdateCheckNowAction}>
-							<input type="hidden" name="environmentId" value={selectedEnvironmentId} />
-							<FormSubmitButton
-								label="Check now"
-								pendingLabel="Checking..."
-								size="xs"
-								variant="outline"
-							/>
-						</form>
-						<form action={runContainerUpdateApplyNowAction}>
-							<input type="hidden" name="environmentId" value={selectedEnvironmentId} />
-							<FormSubmitButton label="Update now" pendingLabel="Queueing..." size="xs" />
-						</form>
-					</div>
-				}
+				actions={<SchedulePageActions environmentId={selectedEnvironmentId} />}
 			/>
 
-			<Panel>
-				<div className="border-b border-default/8 px-4 py-3">
-					<p className="text-sm font-semibold tracking-tight">Configuration</p>
-					<p className="mt-0.5 text-xs text-muted">
-						Manage automated check and update behavior for this environment.
-					</p>
-				</div>
-				<div className="p-4">
-					<form action={updateContainerUpdateScheduleAction} className="space-y-5">
-						<input type="hidden" name="environmentId" value={selectedEnvironmentId} />
-
-						<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-							<Field>
-								<FieldLabel htmlFor="checkMode">Check mode</FieldLabel>
-								<Select id="checkMode" name="checkMode" defaultValue={schedule.checkMode}>
-									<option value="same_tag">Same tag only</option>
-									<option value="include_major">Include newer major</option>
-								</Select>
-								<FieldHint>
-									Major checks surface recommendations, but auto-update still only applies same-tag
-									updates.
-								</FieldHint>
-							</Field>
-							<Field>
-								<FieldLabel htmlFor="autoCheckEnabled">Auto check</FieldLabel>
-								<Select
-									id="autoCheckEnabled"
-									name="autoCheckEnabled"
-									defaultValue={String(schedule.autoCheckEnabled)}
-								>
-									<option value="true">Enabled</option>
-									<option value="false">Disabled</option>
-								</Select>
-								<FieldHint>Run periodic update checks for opted-in containers.</FieldHint>
-							</Field>
-							<Field>
-								<FieldLabel htmlFor="checkIntervalMinutes">Check interval (minutes)</FieldLabel>
-								<Input
-									id="checkIntervalMinutes"
-									name="checkIntervalMinutes"
-									type="number"
-									min={5}
-									max={1440}
-									defaultValue={String(schedule.checkIntervalMinutes)}
-									required
-								/>
-							</Field>
-							<Field>
-								<FieldLabel htmlFor="autoUpdateEnabled">Auto update</FieldLabel>
-								<Select
-									id="autoUpdateEnabled"
-									name="autoUpdateEnabled"
-									defaultValue={String(schedule.autoUpdateEnabled)}
-								>
-									<option value="true">Enabled</option>
-									<option value="false">Disabled</option>
-								</Select>
-								<FieldHint>Queue stack redeploys for containers with updates available.</FieldHint>
-							</Field>
-						</div>
-
-						<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-							<Field>
-								<FieldLabel htmlFor="updateIntervalMinutes">Update interval (minutes)</FieldLabel>
-								<Input
-									id="updateIntervalMinutes"
-									name="updateIntervalMinutes"
-									type="number"
-									min={5}
-									max={1440}
-									defaultValue={String(schedule.updateIntervalMinutes)}
-									required
-								/>
-							</Field>
-							<Field>
-								<FieldLabel htmlFor="pullBeforeCheck">Pull image before check</FieldLabel>
-								<Select
-									id="pullBeforeCheck"
-									name="pullBeforeCheck"
-									defaultValue={String(schedule.pullBeforeCheck)}
-								>
-									<option value="true">Enabled</option>
-									<option value="false">Disabled</option>
-								</Select>
-								<FieldHint>
-									Ensures checks compare against the newest registry image metadata.
-								</FieldHint>
-							</Field>
-							<Field>
-								<FieldLabel htmlFor="updateOnlyRunning">Update only running containers</FieldLabel>
-								<Select
-									id="updateOnlyRunning"
-									name="updateOnlyRunning"
-									defaultValue={String(schedule.updateOnlyRunning)}
-								>
-									<option value="true">Enabled</option>
-									<option value="false">Disabled</option>
-								</Select>
-								<FieldHint>Prevents scheduling updates for stopped workloads.</FieldHint>
-							</Field>
-						</div>
-
-						<div className="flex items-center gap-2 border-t border-default/8 pt-4">
-							<FormSubmitButton label="Save schedule" pendingLabel="Saving..." size="sm" />
-							{schedule.lastCheckAt ? (
-								<Badge variant="default">Last check {schedule.lastCheckAt.toLocaleString()}</Badge>
-							) : null}
-							{schedule.lastUpdateAt ? (
-								<Badge variant="default">
-									Last update {schedule.lastUpdateAt.toLocaleString()}
-								</Badge>
-							) : null}
-						</div>
-					</form>
-				</div>
-			</Panel>
-
-			<Panel>
-				<div className="border-b border-default/8 px-4 py-3">
-					<p className="text-sm font-semibold tracking-tight">Recent runs</p>
-					<p className="mt-0.5 text-xs text-muted">
-						Check and update executions for this environment.
-					</p>
-				</div>
-				<DataTable>
-					<DataTableHeader>
-						<tr>
-							<DataTableHead>Started</DataTableHead>
-							<DataTableHead>Type</DataTableHead>
-							<DataTableHead>Status</DataTableHead>
-							<DataTableHead>Totals</DataTableHead>
-							<DataTableHead>Summary</DataTableHead>
-						</tr>
-					</DataTableHeader>
-					<DataTableBody>
-						{runs.length ? (
-							runs.map((run) => (
-								<DataTableRow key={run.id}>
-									<DataTableCell className="text-xs text-muted">
-										{run.startedAt.toLocaleString()}
-									</DataTableCell>
-									<DataTableCell>
-										<Badge variant="default">{run.runType}</Badge>
-									</DataTableCell>
-									<DataTableCell>
-										<Badge
-											variant={
-												run.status === "failed"
-													? "danger"
-													: run.status === "running"
-														? "warning"
-														: "success"
-											}
-										>
-											{run.status}
-										</Badge>
-									</DataTableCell>
-									<DataTableCell className="text-xs text-muted">
-										{run.totalContainers} containers · {run.queuedStacks} stacks queued ·{" "}
-										{run.failedContainers} failed
-									</DataTableCell>
-									<DataTableCell className="text-xs text-muted">
-										{run.summary || (run.error ? `Error: ${run.error}` : "—")}
-									</DataTableCell>
-								</DataTableRow>
-							))
-						) : (
-							<DataTableEmpty colSpan={5}>No schedule runs yet.</DataTableEmpty>
-						)}
-					</DataTableBody>
-				</DataTable>
-			</Panel>
+			<ScheduleConfigurationPanel environmentId={selectedEnvironmentId} schedule={schedule} />
+			<ScheduleRunsPanel runs={runs} />
 		</div>
 	);
 }

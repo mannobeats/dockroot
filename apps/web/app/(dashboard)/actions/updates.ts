@@ -2,6 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import {
+	extractContainerName,
+	findContainerById,
+	getUniqueContainerNamesByIds,
+	loadAccessibleContainers,
+	revalidateContainerUpdateApplyPages,
+	revalidateContainerUpdatePages,
+} from "@/app/(dashboard)/actions/utils/container-updates";
 import { getBoolValue, getValue, getValues } from "@/app/(dashboard)/actions/utils/form-data";
 import { requirePrivilegedSession, requireUserSession } from "@/lib/authorization";
 import {
@@ -11,12 +19,7 @@ import {
 	setContainerUpdatePolicy,
 	updateContainerUpdateSchedule,
 } from "@/lib/container-updates";
-import { resolveRuntimeEnvironment } from "@/lib/environment-runtime";
-import { listContainers } from "@/lib/platform/docker";
-import {
-	listAccessibleContainersForUser,
-	requireAccessibleContainerForUser,
-} from "@/lib/runtime-access";
+import { requireAccessibleContainerForUser } from "@/lib/runtime-access";
 
 export async function setContainerUpdatePolicyAction(formData: FormData) {
 	const auth = await requireUserSession();
@@ -37,8 +40,7 @@ export async function setContainerUpdatePolicyAction(formData: FormData) {
 		updateEnabled: mode === "update" ? enabled : undefined,
 	});
 
-	revalidatePath("/dashboard/containers");
-	revalidatePath("/dashboard/schedules");
+	revalidateContainerUpdatePages();
 }
 
 export async function checkContainerUpdatesAction(formData: FormData) {
@@ -56,30 +58,29 @@ export async function checkContainerUpdatesAction(formData: FormData) {
 		role: auth.role,
 		environmentId,
 	});
-	const environment = await resolveRuntimeEnvironment(auth.userId, environmentId);
-	const sourceContainers =
-		environment.kind === "local"
-			? await listContainers()
-			: await listAccessibleContainersForUser(auth.userId, auth.role, environment.id);
-	const container = sourceContainers.find(
-		(entry: Record<string, string>) => entry.ID === containerId,
-	);
+
+	const { environment, sourceContainers } = await loadAccessibleContainers({
+		userId: auth.userId,
+		role: auth.role,
+		environmentId,
+	});
+	const container = findContainerById(sourceContainers, containerId);
 	if (!container) {
 		throw new Error("Container not found.");
 	}
+
 	const schedule = await getOrCreateContainerUpdateSchedule(auth.userId, environment.id);
 
 	await runContainerUpdateCheck({
 		userId: auth.userId,
 		environmentId: environment.id,
-		containerNames: [container.Names || container.Name || ""],
+		containerNames: [extractContainerName(container)],
 		respectPolicies: false,
 		pullBeforeCheck: schedule.pullBeforeCheck,
 		includeMajorVersions: schedule.checkMode === "include_major",
 	});
 
-	revalidatePath("/dashboard/containers");
-	revalidatePath("/dashboard/schedules");
+	revalidateContainerUpdatePages();
 }
 
 export async function bulkCheckContainerUpdatesAction(formData: FormData) {
@@ -91,25 +92,17 @@ export async function bulkCheckContainerUpdatesAction(formData: FormData) {
 		throw new Error("At least one container is required.");
 	}
 
-	const environment = await resolveRuntimeEnvironment(auth.userId, environmentId);
-	const sourceContainers =
-		environment.kind === "local"
-			? await listContainers()
-			: await listAccessibleContainersForUser(auth.userId, auth.role, environment.id);
-	const allowedIds = new Set(sourceContainers.map((entry: Record<string, string>) => entry.ID));
-	const containerNames = Array.from(new Set(containerIds))
-		.filter((containerId) => allowedIds.has(containerId))
-		.map((containerId) => {
-			const container = sourceContainers.find(
-				(entry: Record<string, string>) => entry.ID === containerId,
-			);
-			return container?.Names || container?.Name || "";
-		})
-		.filter(Boolean);
+	const { environment, sourceContainers } = await loadAccessibleContainers({
+		userId: auth.userId,
+		role: auth.role,
+		environmentId,
+	});
+	const containerNames = getUniqueContainerNamesByIds(sourceContainers, containerIds);
 
 	if (!containerNames.length) {
 		throw new Error("No accessible containers selected.");
 	}
+
 	const schedule = await getOrCreateContainerUpdateSchedule(auth.userId, environment.id);
 
 	await runContainerUpdateCheck({
@@ -121,8 +114,7 @@ export async function bulkCheckContainerUpdatesAction(formData: FormData) {
 		includeMajorVersions: schedule.checkMode === "include_major",
 	});
 
-	revalidatePath("/dashboard/containers");
-	revalidatePath("/dashboard/schedules");
+	revalidateContainerUpdatePages();
 }
 
 export async function applyContainerUpdatesAction(formData: FormData) {
@@ -140,14 +132,13 @@ export async function applyContainerUpdatesAction(formData: FormData) {
 		role: auth.role,
 		environmentId,
 	});
-	const environment = await resolveRuntimeEnvironment(auth.userId, environmentId);
-	const sourceContainers =
-		environment.kind === "local"
-			? await listContainers()
-			: await listAccessibleContainersForUser(auth.userId, auth.role, environment.id);
-	const container = sourceContainers.find(
-		(entry: Record<string, string>) => entry.ID === containerId,
-	);
+
+	const { environment, sourceContainers } = await loadAccessibleContainers({
+		userId: auth.userId,
+		role: auth.role,
+		environmentId,
+	});
+	const container = findContainerById(sourceContainers, containerId);
 	if (!container) {
 		throw new Error("Container not found.");
 	}
@@ -155,7 +146,7 @@ export async function applyContainerUpdatesAction(formData: FormData) {
 	const result = await runContainerUpdateApply({
 		userId: auth.userId,
 		environmentId: environment.id,
-		containerNames: [container.Names || container.Name || ""],
+		containerNames: [extractContainerName(container)],
 		respectPolicies: false,
 		updateOnlyRunning: getBoolValue(formData, "updateOnlyRunning"),
 	});
@@ -164,10 +155,7 @@ export async function applyContainerUpdatesAction(formData: FormData) {
 			`/dashboard/containers?environment=${encodeURIComponent(environment.id)}&watchStackId=${encodeURIComponent(result.queuedStackIds[0])}`,
 		);
 	}
-
-	revalidatePath("/dashboard/containers");
-	revalidatePath("/dashboard/stacks");
-	revalidatePath("/dashboard/schedules");
+	revalidateContainerUpdateApplyPages();
 }
 
 export async function bulkApplyContainerUpdatesAction(formData: FormData) {
@@ -179,21 +167,12 @@ export async function bulkApplyContainerUpdatesAction(formData: FormData) {
 		throw new Error("At least one container is required.");
 	}
 
-	const environment = await resolveRuntimeEnvironment(auth.userId, environmentId);
-	const sourceContainers =
-		environment.kind === "local"
-			? await listContainers()
-			: await listAccessibleContainersForUser(auth.userId, auth.role, environment.id);
-	const allowedIds = new Set(sourceContainers.map((entry: Record<string, string>) => entry.ID));
-	const containerNames = Array.from(new Set(containerIds))
-		.filter((containerId) => allowedIds.has(containerId))
-		.map((containerId) => {
-			const container = sourceContainers.find(
-				(entry: Record<string, string>) => entry.ID === containerId,
-			);
-			return container?.Names || container?.Name || "";
-		})
-		.filter(Boolean);
+	const { environment, sourceContainers } = await loadAccessibleContainers({
+		userId: auth.userId,
+		role: auth.role,
+		environmentId,
+	});
+	const containerNames = getUniqueContainerNamesByIds(sourceContainers, containerIds);
 
 	if (!containerNames.length) {
 		throw new Error("No accessible containers selected.");
@@ -212,9 +191,7 @@ export async function bulkApplyContainerUpdatesAction(formData: FormData) {
 		);
 	}
 
-	revalidatePath("/dashboard/containers");
-	revalidatePath("/dashboard/stacks");
-	revalidatePath("/dashboard/schedules");
+	revalidateContainerUpdateApplyPages();
 }
 
 export async function runContainerUpdateCheckNowAction(formData: FormData) {
@@ -228,8 +205,7 @@ export async function runContainerUpdateCheckNowAction(formData: FormData) {
 		pullBeforeCheck: schedule.pullBeforeCheck,
 		includeMajorVersions: schedule.checkMode === "include_major",
 	});
-	revalidatePath("/dashboard/containers");
-	revalidatePath("/dashboard/schedules");
+	revalidateContainerUpdatePages();
 }
 
 export async function runContainerUpdateApplyNowAction(formData: FormData) {
@@ -246,9 +222,7 @@ export async function runContainerUpdateApplyNowAction(formData: FormData) {
 			`/dashboard/stacks?environment=${encodeURIComponent(result.environment.id)}&watchStackId=${encodeURIComponent(result.queuedStackIds[0])}`,
 		);
 	}
-	revalidatePath("/dashboard/containers");
-	revalidatePath("/dashboard/stacks");
-	revalidatePath("/dashboard/schedules");
+	revalidateContainerUpdateApplyPages();
 }
 
 export async function updateContainerUpdateScheduleAction(formData: FormData) {
