@@ -1,5 +1,7 @@
 import "server-only";
 
+import { getEnvironmentRecord } from "@/lib/environment-runtime/environment";
+import { fetchAgent, fetchAgentJson } from "@/lib/environment-runtime/remote-agent";
 import {
 	getImageDetails,
 	listImages,
@@ -7,8 +9,9 @@ import {
 	pullImage,
 	removeImage,
 } from "@/lib/platform/docker";
-import { getEnvironmentRecord } from "@/lib/environment-runtime/environment";
-import { fetchAgent, fetchAgentJson } from "@/lib/environment-runtime/remote-agent";
+
+type ImageList = Awaited<ReturnType<typeof listImages>>;
+type ImageDetails = Awaited<ReturnType<typeof getImageDetails>>;
 
 export async function listImagesForEnvironment(userId: string, environmentId?: string) {
 	const environment = await getEnvironmentRecord(environmentId, userId);
@@ -21,7 +24,7 @@ export async function listImagesForEnvironment(userId: string, environmentId?: s
 
 	return {
 		environment,
-		images: await fetchAgentJson(environment, "/images"),
+		images: await fetchAgentJson<ImageList>(environment, "/images"),
 	};
 }
 
@@ -40,7 +43,10 @@ export async function getImageDetailsForEnvironment(
 
 	return {
 		environment,
-		image: await fetchAgentJson(environment, `/images/${encodeURIComponent(imageRef)}`),
+		image: await fetchAgentJson<ImageDetails>(
+			environment,
+			`/images/${encodeURIComponent(imageRef)}`,
+		),
 	};
 }
 

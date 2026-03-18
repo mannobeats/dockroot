@@ -1,6 +1,8 @@
 import "server-only";
 
-import type { CreateContainerInput } from "@/lib/platform/docker";
+import { getEnvironmentRecord } from "@/lib/environment-runtime/environment";
+import { fetchAgent, fetchAgentJson, fetchAgentText } from "@/lib/environment-runtime/remote-agent";
+import type { ContainerBrowserResult, CreateContainerInput } from "@/lib/platform/docker";
 import {
 	browseContainerPath,
 	controlContainer,
@@ -13,8 +15,13 @@ import {
 	uploadContainerFile,
 	writeContainerFile,
 } from "@/lib/platform/docker";
-import { getEnvironmentRecord } from "@/lib/environment-runtime/environment";
-import { fetchAgent, fetchAgentJson, fetchAgentText } from "@/lib/environment-runtime/remote-agent";
+
+type RuntimeSnapshot = Awaited<ReturnType<typeof getLocalDockerSnapshot>>;
+type ContainerList = Awaited<ReturnType<typeof listContainers>>;
+type ContainerDetails = Awaited<ReturnType<typeof getContainerDetails>>;
+type ContainerFileWriteResult = Awaited<ReturnType<typeof writeContainerFile>>;
+type ContainerFileUploadResult = Awaited<ReturnType<typeof uploadContainerFile>>;
+type ContainerFileDeleteResult = Awaited<ReturnType<typeof deleteContainerPath>>;
 
 export async function getRuntimeSnapshotForEnvironment(userId: string, environmentId?: string) {
 	const environment = await getEnvironmentRecord(environmentId, userId);
@@ -28,7 +35,7 @@ export async function getRuntimeSnapshotForEnvironment(userId: string, environme
 
 	return {
 		environment,
-		snapshot: await fetchAgentJson(environment, "/snapshot"),
+		snapshot: await fetchAgentJson<RuntimeSnapshot>(environment, "/snapshot"),
 	};
 }
 
@@ -43,7 +50,7 @@ export async function listContainersForEnvironment(userId: string, environmentId
 
 	return {
 		environment,
-		containers: await fetchAgentJson(environment, "/containers"),
+		containers: await fetchAgentJson<ContainerList>(environment, "/containers"),
 	};
 }
 
@@ -62,7 +69,10 @@ export async function getContainerDetailsForEnvironment(
 
 	return {
 		environment,
-		details: await fetchAgentJson(environment, `/containers/${encodeURIComponent(containerId)}`),
+		details: await fetchAgentJson<ContainerDetails>(
+			environment,
+			`/containers/${encodeURIComponent(containerId)}`,
+		),
 	};
 }
 
@@ -151,7 +161,7 @@ export async function browseContainerPathForEnvironment(
 
 	return {
 		environment,
-		browser: await fetchAgentJson(
+		browser: await fetchAgentJson<ContainerBrowserResult>(
 			environment,
 			`/containers/${encodeURIComponent(containerId)}/files?path=${encodeURIComponent(targetPath)}`,
 		),
@@ -170,13 +180,17 @@ export async function writeContainerFileForEnvironment(
 		return writeContainerFile(containerId, targetPath, content);
 	}
 
-	return fetchAgentJson(environment, `/containers/${encodeURIComponent(containerId)}/files`, {
-		method: "PUT",
-		headers: {
-			"content-type": "application/json",
+	return fetchAgentJson<ContainerFileWriteResult>(
+		environment,
+		`/containers/${encodeURIComponent(containerId)}/files`,
+		{
+			method: "PUT",
+			headers: {
+				"content-type": "application/json",
+			},
+			body: JSON.stringify({ path: targetPath, content }),
 		},
-		body: JSON.stringify({ path: targetPath, content }),
-	});
+	);
 }
 
 export async function uploadContainerFileForEnvironment(
@@ -192,17 +206,21 @@ export async function uploadContainerFileForEnvironment(
 		return uploadContainerFile(containerId, targetDirectory, fileName, content);
 	}
 
-	return fetchAgentJson(environment, `/containers/${encodeURIComponent(containerId)}/files`, {
-		method: "POST",
-		headers: {
-			"content-type": "application/json",
+	return fetchAgentJson<ContainerFileUploadResult>(
+		environment,
+		`/containers/${encodeURIComponent(containerId)}/files`,
+		{
+			method: "POST",
+			headers: {
+				"content-type": "application/json",
+			},
+			body: JSON.stringify({
+				path: targetDirectory,
+				fileName,
+				contentBase64: content.toString("base64"),
+			}),
 		},
-		body: JSON.stringify({
-			path: targetDirectory,
-			fileName,
-			contentBase64: content.toString("base64"),
-		}),
-	});
+	);
 }
 
 export async function deleteContainerPathForEnvironment(
@@ -216,11 +234,15 @@ export async function deleteContainerPathForEnvironment(
 		return deleteContainerPath(containerId, targetPath);
 	}
 
-	return fetchAgentJson(environment, `/containers/${encodeURIComponent(containerId)}/files`, {
-		method: "DELETE",
-		headers: {
-			"content-type": "application/json",
+	return fetchAgentJson<ContainerFileDeleteResult>(
+		environment,
+		`/containers/${encodeURIComponent(containerId)}/files`,
+		{
+			method: "DELETE",
+			headers: {
+				"content-type": "application/json",
+			},
+			body: JSON.stringify({ path: targetPath }),
 		},
-		body: JSON.stringify({ path: targetPath }),
-	});
+	);
 }

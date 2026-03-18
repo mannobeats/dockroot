@@ -1,7 +1,7 @@
 import "server-only";
 
-import { fetchAgent, fetchAgentJson } from "@/lib/environment-runtime/remote-agent";
 import { getEnvironmentRecord } from "@/lib/environment-runtime/environment";
+import { fetchAgentJson } from "@/lib/environment-runtime/remote-agent";
 
 async function fetchLocalTerminal(userId: string, path: string, init?: RequestInit) {
 	const response = await fetch(`http://127.0.0.1:${process.env.PORT || 3080}${path}`, {

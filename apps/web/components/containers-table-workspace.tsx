@@ -389,7 +389,7 @@ export function ContainersTableWorkspace({
 			client.off("runtime:metrics", onMetrics);
 			client.off("deployment:update", onDeploymentUpdate);
 		};
-	}, []);
+	}, [environmentId, environmentKind]);
 
 	const isVisible = (id: ColumnId) => visibleColumns.has(id);
 	const visibleCount = ALL_COLUMNS.filter((c) => visibleColumns.has(c.id)).length + 1; // +1 for checkbox

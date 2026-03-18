@@ -1,7 +1,7 @@
 import "server-only";
 
+import type { getEnvironmentRecord } from "@/lib/environment-runtime/environment";
 import { RuntimeConnectionError } from "@/lib/environment-runtime/types";
-import { getEnvironmentRecord } from "@/lib/environment-runtime/environment";
 
 export type RuntimeEnvironment = Awaited<ReturnType<typeof getEnvironmentRecord>>;
 

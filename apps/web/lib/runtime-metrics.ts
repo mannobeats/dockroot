@@ -265,10 +265,7 @@ type MetricsSeriesResult = {
 	memorySeries: Array<{ time: string; value: number }>;
 };
 
-const metricsSeriesCache = new Map<
-	string,
-	{ data: MetricsSeriesResult; expiresAt: number }
->();
+const metricsSeriesCache = new Map<string, { data: MetricsSeriesResult; expiresAt: number }>();
 const METRICS_CACHE_TTL_MS = 10_000; // 10s — matches the broadcast cadence
 
 export async function getEnvironmentMetricsSeries(

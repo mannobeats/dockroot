@@ -1,5 +1,7 @@
 import "server-only";
 
+import { getEnvironmentRecord } from "@/lib/environment-runtime/environment";
+import { fetchAgent, fetchAgentJson } from "@/lib/environment-runtime/remote-agent";
 import {
 	createNetwork,
 	getNetworkDetails,
@@ -7,8 +9,9 @@ import {
 	pruneNetworks,
 	removeNetwork,
 } from "@/lib/platform/docker";
-import { getEnvironmentRecord } from "@/lib/environment-runtime/environment";
-import { fetchAgent, fetchAgentJson } from "@/lib/environment-runtime/remote-agent";
+
+type NetworkList = Awaited<ReturnType<typeof listNetworks>>;
+type NetworkDetails = Awaited<ReturnType<typeof getNetworkDetails>>;
 
 export async function listNetworksForEnvironment(userId: string, environmentId?: string) {
 	const environment = await getEnvironmentRecord(environmentId, userId);
@@ -21,7 +24,7 @@ export async function listNetworksForEnvironment(userId: string, environmentId?:
 
 	return {
 		environment,
-		networks: await fetchAgentJson(environment, "/networks"),
+		networks: await fetchAgentJson<NetworkList>(environment, "/networks"),
 	};
 }
 
@@ -40,7 +43,10 @@ export async function getNetworkDetailsForEnvironment(
 
 	return {
 		environment,
-		network: await fetchAgentJson(environment, `/networks/${encodeURIComponent(networkName)}`),
+		network: await fetchAgentJson<NetworkDetails>(
+			environment,
+			`/networks/${encodeURIComponent(networkName)}`,
+		),
 	};
 }
 

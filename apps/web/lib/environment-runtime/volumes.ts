@@ -1,5 +1,7 @@
 import "server-only";
 
+import { getEnvironmentRecord } from "@/lib/environment-runtime/environment";
+import { fetchAgent, fetchAgentJson } from "@/lib/environment-runtime/remote-agent";
 import {
 	createVolume,
 	getBackupFileSize,
@@ -8,8 +10,9 @@ import {
 	pruneVolumes,
 	removeVolume,
 } from "@/lib/platform/docker";
-import { getEnvironmentRecord } from "@/lib/environment-runtime/environment";
-import { fetchAgent, fetchAgentJson } from "@/lib/environment-runtime/remote-agent";
+
+type VolumeList = Awaited<ReturnType<typeof listVolumes>>;
+type VolumeDetails = Awaited<ReturnType<typeof getVolumeDetails>>;
 
 export async function listVolumesForEnvironment(userId: string, environmentId?: string) {
 	const environment = await getEnvironmentRecord(environmentId, userId);
@@ -22,7 +25,7 @@ export async function listVolumesForEnvironment(userId: string, environmentId?: 
 
 	return {
 		environment,
-		volumes: await fetchAgentJson(environment, "/volumes"),
+		volumes: await fetchAgentJson<VolumeList>(environment, "/volumes"),
 	};
 }
 
@@ -41,7 +44,10 @@ export async function getVolumeDetailsForEnvironment(
 
 	return {
 		environment,
-		volume: await fetchAgentJson(environment, `/volumes/${encodeURIComponent(volumeName)}`),
+		volume: await fetchAgentJson<VolumeDetails>(
+			environment,
+			`/volumes/${encodeURIComponent(volumeName)}`,
+		),
 	};
 }
 
@@ -109,15 +115,16 @@ export async function backupVolumeForEnvironment(
 		return { ...result, sizeBytes };
 	}
 
-	return fetchAgentJson<{ ok: boolean; fileName: string; sizeBytes: number | null; output: string }>(
-		environment,
-		`/volumes/${encodeURIComponent(volumeName)}/backup`,
-		{
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ backupId }),
-		},
-	);
+	return fetchAgentJson<{
+		ok: boolean;
+		fileName: string;
+		sizeBytes: number | null;
+		output: string;
+	}>(environment, `/volumes/${encodeURIComponent(volumeName)}/backup`, {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify({ backupId }),
+	});
 }
 
 export async function restoreVolumeForEnvironment(

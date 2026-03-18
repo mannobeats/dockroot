@@ -835,9 +835,13 @@ async function getSnapshot() {
 	const volumeRows = parseJsonLines(volumes.stdout);
 	const networkRows = parseJsonLines(networks.stdout);
 	// Use cached streaming stats instead of spawning docker stats --no-stream
-	const statsRows = agentLatestContainerStats.length > 0
-		? agentLatestContainerStats
-		: parseJsonLines((await runDocker(["stats", "--no-stream", "--format", "{{json .}}"], "container.stats")).stdout);
+	const statsRows =
+		agentLatestContainerStats.length > 0
+			? agentLatestContainerStats
+			: parseJsonLines(
+					(await runDocker(["stats", "--no-stream", "--format", "{{json .}}"], "container.stats"))
+						.stdout,
+				);
 	const cpuPercent = Number(
 		statsRows
 			.reduce((sum, row) => {
