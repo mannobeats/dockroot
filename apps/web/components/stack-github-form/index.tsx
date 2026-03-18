@@ -4,6 +4,9 @@ import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 import type { GitHubProviderOption, InstallationOption } from "@/components/github-types";
 import { StackGitHubConfigureForm } from "@/components/stack-github-form/configure-form";
 import { StackGitHubEmptyInstallations } from "@/components/stack-github-form/empty-installations";
+import { useComposePathSuggestions } from "@/components/stack-github-form/hooks/use-compose-path-suggestions";
+import { useGitHubInstallationData } from "@/components/stack-github-form/hooks/use-github-installation-data";
+import { useLoadRepositoryFiles } from "@/components/stack-github-form/hooks/use-load-repository-files";
 import { StackGitHubSourceStep } from "@/components/stack-github-form/source-step";
 import { StackGitHubStepIndicator } from "@/components/stack-github-form/step-indicator";
 
@@ -26,13 +29,17 @@ export function StackGitHubForm({
 }) {
 	const editorHeight = "min(70vh, 800px)";
 	const [step, setStep] = useState<WizardStep>("source");
-	const [installationOptions, setInstallationOptions] = useState(installations);
-	const [_installationState, setInstallationState] = useState<
-		"idle" | "refreshing" | "ready" | "error"
-	>(installations.length ? "ready" : "idle");
-	const [installationStateMessage, setInstallationStateMessage] = useState("");
-	const [providerOptions, setProviderOptions] = useState(providers);
-	const [installationId, setInstallationId] = useState(installations[0]?.id || "");
+	const {
+		installationId,
+		installationOptions,
+		installationStateMessage,
+		providerOptions,
+		setInstallationId,
+	} = useGitHubInstallationData({
+		appConfigured,
+		installations,
+		providers,
+	});
 	const [repositoryQuery, setRepositoryQuery] = useState("");
 	const [repositoryId, setRepositoryId] = useState("");
 	const [stackName, setStackName] = useState("");
@@ -45,7 +52,6 @@ export function StackGitHubForm({
 	const [autoDeployEnabled, setAutoDeployEnabled] = useState(true);
 	const [autoDeployPaths, setAutoDeployPaths] = useState("");
 	const [loadError, setLoadError] = useState("");
-	const [pathSuggestions, setPathSuggestions] = useState<string[]>([]);
 	const [headSha, setHeadSha] = useState("");
 	const [isLoaded, setIsLoaded] = useState(false);
 	const [isPending, startTransition] = useTransition();
@@ -95,7 +101,7 @@ export function StackGitHubForm({
 			setRepositoryId("");
 			resetLoadedSourceFields();
 		},
-		[resetLoadedSourceFields],
+		[resetLoadedSourceFields, setInstallationId],
 	);
 
 	const handleRepositorySelect = useCallback(
@@ -108,150 +114,21 @@ export function StackGitHubForm({
 		[resetLoadedSourceFields],
 	);
 
-	const refreshInstallations = useCallback(async () => {
-		if (!appConfigured) {
-			return;
-		}
-
-		setInstallationState("refreshing");
-		setInstallationStateMessage("");
-
-		try {
-			const response = await fetch("/api/github/installations", {
-				cache: "no-store",
-			});
-			const payload = (await response.json()) as {
-				error?: string;
-				installations?: InstallationOption[];
-			};
-
-			if (!response.ok) {
-				throw new Error(payload.error || "Unable to refresh GitHub installations.");
-			}
-
-			const nextInstallations = payload.installations || [];
-			setInstallationOptions(nextInstallations);
-			setInstallationId((current) => {
-				if (current && nextInstallations.some((installation) => installation.id === current)) {
-					return current;
-				}
-				return nextInstallations[0]?.id || "";
-			});
-			setInstallationState("ready");
-			setInstallationStateMessage(
-				nextInstallations.length
-					? "GitHub access refreshed."
-					: "No GitHub App installations connected yet.",
-			);
-		} catch (error) {
-			setInstallationState("error");
-			setInstallationStateMessage(
-				error instanceof Error ? error.message : "Unable to refresh GitHub installations.",
-			);
-		}
-	}, [appConfigured]);
-
-	const refreshProviders = useCallback(async () => {
-		if (!appConfigured) {
-			return;
-		}
-
-		try {
-			const response = await fetch("/api/github/providers", {
-				cache: "no-store",
-			});
-			const payload = (await response.json()) as {
-				error?: string;
-				providers?: GitHubProviderOption[];
-			};
-			if (!response.ok) {
-				throw new Error(payload.error || "Unable to refresh GitHub Apps.");
-			}
-
-			const nextProviders = payload.providers || [];
-			setProviderOptions(nextProviders);
-		} catch {
-			// keep existing provider state on transient failures
-		}
-	}, [appConfigured]);
-
-	async function loadRepositoryFiles(nextComposePath?: string) {
-		if (!selectedRepository || !installationId || !branch || !(nextComposePath || composePath)) {
-			return;
-		}
-
-		const resolvedComposePath = (nextComposePath || composePath).trim();
-
-		setLoadError("");
-		startTransition(async () => {
-			try {
-				const params = new URLSearchParams({
-					installationId,
-					owner: selectedRepository.owner.login,
-					repository: selectedRepository.name,
-					branch,
-					composePath: resolvedComposePath,
-				});
-
-				if (envPath.trim()) {
-					params.set("envPath", envPath.trim());
-				}
-
-				const response = await fetch(`/api/github/file?${params.toString()}`, {
-					cache: "no-store",
-				});
-				const payload = (await response.json()) as {
-					composeYaml?: string;
-					envFileContent?: string;
-					headSha?: string;
-					error?: string;
-				};
-
-				if (!response.ok) {
-					throw new Error(payload.error || "Unable to load repository files.");
-				}
-
-				setComposePath(resolvedComposePath);
-				setComposeYaml(payload.composeYaml || "");
-				setEnvFileContent(payload.envFileContent || "");
-				setHeadSha(payload.headSha || "");
-				setIsLoaded(true);
-				setShowEditor(true);
-			} catch (error) {
-				setLoadError(error instanceof Error ? error.message : "Unable to load repository files.");
-				setIsLoaded(false);
-			}
-		});
-	}
-
-	useEffect(() => {
-		setInstallationOptions(installations);
-		setInstallationId((current) => current || installations[0]?.id || "");
-	}, [installations]);
-
-	useEffect(() => {
-		setProviderOptions(providers);
-	}, [providers]);
-
-	useEffect(() => {
-		void refreshProviders();
-		void refreshInstallations();
-	}, [refreshInstallations, refreshProviders]);
-
-	useEffect(() => {
-		function refreshOnFocus() {
-			void refreshProviders();
-			void refreshInstallations();
-		}
-
-		window.addEventListener("focus", refreshOnFocus);
-		document.addEventListener("visibilitychange", refreshOnFocus);
-
-		return () => {
-			window.removeEventListener("focus", refreshOnFocus);
-			document.removeEventListener("visibilitychange", refreshOnFocus);
-		};
-	}, [refreshInstallations, refreshProviders]);
+	const loadRepositoryFiles = useLoadRepositoryFiles({
+		selectedRepository,
+		installationId,
+		branch,
+		composePath,
+		envPath,
+		startTransition,
+		setComposePath,
+		setComposeYaml,
+		setEnvFileContent,
+		setHeadSha,
+		setIsLoaded,
+		setShowEditor,
+		setLoadError,
+	});
 
 	useEffect(() => {
 		const nextRepositoryId = repositories[0] ? String(repositories[0].id) : "";
@@ -286,47 +163,13 @@ export function StackGitHubForm({
 		setIsLoaded(false);
 	}, [selectedRepository]);
 
-	useEffect(() => {
-		if (!selectedRepository || !installationId || !branch) {
-			setPathSuggestions([]);
-			return;
-		}
-
-		let cancelled = false;
-
-		void (async () => {
-			try {
-				const params = new URLSearchParams({
-					installationId,
-					owner: selectedRepository.owner.login,
-					repository: selectedRepository.name,
-					branch,
-				});
-				const response = await fetch(`/api/github/compose-paths?${params.toString()}`, {
-					cache: "no-store",
-				});
-				const payload = (await response.json()) as {
-					suggestions?: string[];
-				};
-
-				if (!cancelled && response.ok) {
-					const suggestions = payload.suggestions || [];
-					setPathSuggestions(suggestions);
-					if (!composePath && suggestions[0]) {
-						setComposePath(suggestions[0]);
-					}
-				}
-			} catch {
-				if (!cancelled) {
-					setPathSuggestions([]);
-				}
-			}
-		})();
-
-		return () => {
-			cancelled = true;
-		};
-	}, [branch, composePath, installationId, selectedRepository]);
+	const pathSuggestions = useComposePathSuggestions({
+		branch,
+		composePath,
+		installationId,
+		selectedRepository,
+		onDefaultComposePath: setComposePath,
+	});
 
 	if (!installationOptions.length) {
 		return (

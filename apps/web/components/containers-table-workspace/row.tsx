@@ -1,17 +1,8 @@
 "use client";
 
-import {
-	ArrowUpCircle,
-	ExternalLink,
-	Lock,
-	Logs as LogsIcon,
-	Play,
-	RefreshCw,
-	Square,
-	SquareTerminal,
-	Trash2,
-} from "lucide-react";
+import { Lock } from "lucide-react";
 import Link from "next/link";
+import { ContainersActionsCell } from "@/components/containers-table-workspace/actions-cell";
 import type {
 	ColumnId,
 	ContainerRow,
@@ -20,6 +11,7 @@ import type {
 	UpdatePolicyRecord,
 	UpdateStateRecord,
 } from "@/components/containers-table-workspace/types";
+import { ContainersUpdatesCell } from "@/components/containers-table-workspace/updates-cell";
 import {
 	CpuBar,
 	extractUptime,
@@ -29,14 +21,10 @@ import {
 	summarizeComposeProject,
 	tagFromImageRef,
 } from "@/components/containers-table-workspace/utils";
-import { DestructiveActionModal } from "@/components/destructive-action-modal";
-import { FormSubmitButton } from "@/components/form-submit-button";
 import { RuntimePortLinks } from "@/components/runtime-port-links";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { DataTableCell, DataTableRow } from "@/components/ui/data-table";
-import { LinkButton } from "@/components/ui/link-button";
-import { PopoverCard } from "@/components/ui/popover-card";
 
 type ContainersTableRowProps = {
 	container: ContainerRow;
@@ -182,233 +170,34 @@ export function ContainersTableRow({
 			) : null}
 
 			{isVisible("updates") ? (
-				<DataTableCell>
-					<div className="space-y-1 text-[11px]">
-						<div className="flex items-center gap-1">
-							<form action={setContainerUpdatePolicyAction}>
-								<input type="hidden" name="environmentId" value={environmentId} />
-								<input type="hidden" name="containerName" value={containerName} />
-								<input type="hidden" name="mode" value="check" />
-								<input type="hidden" name="enabled" value={checkEnabled ? "false" : "true"} />
-								<FormSubmitButton
-									label={checkEnabled ? "Check off" : "Check on"}
-									pendingLabel="..."
-									size="xs"
-									variant="ghost"
-									className="h-6 px-2"
-									disabled={isProtected}
-								/>
-							</form>
-							<form action={setContainerUpdatePolicyAction}>
-								<input type="hidden" name="environmentId" value={environmentId} />
-								<input type="hidden" name="containerName" value={containerName} />
-								<input type="hidden" name="mode" value="update" />
-								<input type="hidden" name="enabled" value={updateEnabled ? "false" : "true"} />
-								<FormSubmitButton
-									label={updateEnabled ? "Auto off" : "Auto on"}
-									pendingLabel="..."
-									size="xs"
-									variant="ghost"
-									className="h-6 px-2"
-									disabled={isProtected}
-								/>
-							</form>
-						</div>
-						<div className="flex items-center gap-1">
-							{checkFailed ? (
-								<PopoverCard
-									trigger={
-										<Badge variant="danger" className="text-[10px]">
-											Check failed
-										</Badge>
-									}
-								>
-									<div className="space-y-2 text-[11px]">
-										<p className="font-medium text-danger">Update check failed</p>
-										<p className="text-muted">
-											{updateState?.lastError || "Unable to inspect latest image state."}
-										</p>
-									</div>
-								</PopoverCard>
-							) : updateAvailable ? (
-								<Badge variant="warning" className="text-[10px]">
-									Patch/minor available
-								</Badge>
-							) : majorUpdateAvailable ? (
-								<PopoverCard
-									trigger={
-										<Badge variant="warning" className="text-[10px]">
-											Major available
-										</Badge>
-									}
-								>
-									<div className="space-y-2 text-[11px]">
-										<p className="font-medium text-warning">Major upgrade available</p>
-										<p className="text-muted">
-											Current:{" "}
-											<span className="font-mono text-foreground">
-												{container.Image || "unknown"}
-											</span>
-										</p>
-										<p className="text-muted">
-											Target:{" "}
-											<span className="font-mono text-foreground">
-												{majorTargetImageRef || "latest"}
-											</span>{" "}
-											({majorTargetTag})
-										</p>
-									</div>
-								</PopoverCard>
-							) : (
-								<Badge variant="default" className="text-[10px]">
-									Up to date
-								</Badge>
-							)}
-						</div>
-					</div>
-				</DataTableCell>
+				<ContainersUpdatesCell
+					containerName={containerName}
+					containerImage={container.Image || ""}
+					environmentId={environmentId}
+					isProtected={isProtected}
+					checkEnabled={checkEnabled}
+					updateEnabled={updateEnabled}
+					checkFailed={checkFailed}
+					updateAvailable={updateAvailable}
+					majorUpdateAvailable={majorUpdateAvailable}
+					majorTargetImageRef={majorTargetImageRef || ""}
+					majorTargetTag={majorTargetTag}
+					updateErrorMessage={updateState?.lastError}
+					setContainerUpdatePolicyAction={setContainerUpdatePolicyAction}
+				/>
 			) : null}
 
 			{isVisible("actions") ? (
-				<DataTableCell>
-					<div className="flex items-center justify-end gap-0.5">
-						<form action={checkContainerUpdatesAction}>
-							<input type="hidden" name="containerId" value={container.ID} />
-							<input type="hidden" name="environmentId" value={environmentId} />
-							<FormSubmitButton
-								label=""
-								pendingLabel=""
-								disabled={isProtected}
-								variant="ghost"
-								size="xs"
-								title="Check updates"
-								className="h-7 w-7 p-0"
-							>
-								<RefreshCw className="h-3.5 w-3.5" />
-							</FormSubmitButton>
-						</form>
-						<form action={applyContainerUpdatesAction}>
-							<input type="hidden" name="containerId" value={container.ID} />
-							<input type="hidden" name="environmentId" value={environmentId} />
-							<input type="hidden" name="updateOnlyRunning" value="true" />
-							<FormSubmitButton
-								label=""
-								pendingLabel=""
-								disabled={isProtected || !updateAvailable}
-								variant="ghost"
-								size="xs"
-								title="Queue update"
-								className="h-7 w-7 p-0"
-							>
-								<ArrowUpCircle className="h-3.5 w-3.5" />
-							</FormSubmitButton>
-						</form>
-						{isRunning ? (
-							<>
-								<form action={controlContainerAction}>
-									<input type="hidden" name="containerId" value={container.ID} />
-									<input type="hidden" name="action" value="stop" />
-									<input type="hidden" name="environmentId" value={environmentId} />
-									<FormSubmitButton
-										label=""
-										pendingLabel=""
-										disabled={isProtected}
-										variant="ghost"
-										size="xs"
-										title="Stop"
-										className="h-7 w-7 p-0"
-									>
-										<Square className="h-3.5 w-3.5" />
-									</FormSubmitButton>
-								</form>
-								<form action={controlContainerAction}>
-									<input type="hidden" name="containerId" value={container.ID} />
-									<input type="hidden" name="action" value="restart" />
-									<input type="hidden" name="environmentId" value={environmentId} />
-									<FormSubmitButton
-										label=""
-										pendingLabel=""
-										disabled={isProtected}
-										variant="ghost"
-										size="xs"
-										title="Restart"
-										className="h-7 w-7 p-0"
-									>
-										<RefreshCw className="h-3.5 w-3.5" />
-									</FormSubmitButton>
-								</form>
-							</>
-						) : (
-							<>
-								<form action={controlContainerAction}>
-									<input type="hidden" name="containerId" value={container.ID} />
-									<input type="hidden" name="action" value="start" />
-									<input type="hidden" name="environmentId" value={environmentId} />
-									<FormSubmitButton
-										label=""
-										pendingLabel=""
-										disabled={isProtected}
-										variant="ghost"
-										size="xs"
-										title="Start"
-										className="h-7 w-7 p-0"
-									>
-										<Play className="h-3.5 w-3.5" />
-									</FormSubmitButton>
-								</form>
-								<DestructiveActionModal
-									action={controlContainerAction}
-									title={`Remove container ${container.Names}`}
-									description="This permanently removes the container."
-									triggerLabel=""
-									confirmLabel="Remove"
-									pendingLabel="Removing..."
-									triggerVariant="ghost"
-									triggerSize="xs"
-									disabled={isProtected}
-									hiddenFields={{
-										containerId: container.ID,
-										action: "remove",
-										environmentId,
-									}}
-									triggerClassName="h-7 w-7 p-0 text-muted hover:text-danger"
-									triggerIcon={<Trash2 className="h-3.5 w-3.5" />}
-									options={[
-										{
-											name: "removeVolumes",
-											label: "Remove anonymous volumes",
-											description: "Data in attached anonymous volumes will be lost.",
-										},
-									]}
-								/>
-							</>
-						)}
-						<LinkButton
-							href={`/dashboard/shell?target=container&containerId=${container.ID}&environment=${environmentId}`}
-							variant="ghost"
-							size="icon-xs"
-							title="Shell"
-						>
-							<SquareTerminal className="h-3.5 w-3.5" />
-						</LinkButton>
-						<LinkButton
-							href={`/dashboard/logs?mode=single&container=${container.ID}&environment=${environmentId}`}
-							variant="ghost"
-							size="icon-xs"
-							title="Logs"
-						>
-							<LogsIcon className="h-3.5 w-3.5" />
-						</LinkButton>
-						<LinkButton
-							href={`/dashboard/containers/${container.ID}?environment=${environmentId}`}
-							variant="ghost"
-							size="icon-xs"
-							title="Details"
-						>
-							<ExternalLink className="h-3.5 w-3.5" />
-						</LinkButton>
-					</div>
-				</DataTableCell>
+				<ContainersActionsCell
+					container={container}
+					environmentId={environmentId}
+					isProtected={isProtected}
+					isRunning={isRunning}
+					updateAvailable={updateAvailable}
+					controlContainerAction={controlContainerAction}
+					checkContainerUpdatesAction={checkContainerUpdatesAction}
+					applyContainerUpdatesAction={applyContainerUpdatesAction}
+				/>
 			) : null}
 		</DataTableRow>
 	);
