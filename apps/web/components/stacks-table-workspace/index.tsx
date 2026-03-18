@@ -5,23 +5,32 @@ import {
 	ChevronRight,
 	ExternalLink,
 	Lock,
-	PanelRightClose,
-	PanelRightOpen,
 	Play,
 	RefreshCw,
 	RotateCcw,
 	Square,
-	TerminalSquare,
 	Trash2,
 	Upload,
-	X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { DestructiveActionModal } from "@/components/destructive-action-modal";
 import { FormSubmitButton } from "@/components/form-submit-button";
 import { InstantFilterToolbar } from "@/components/instant-filter-toolbar";
-import { LiveStackFeed } from "@/components/live-stack-feed";
+import { StacksBulkActions } from "@/components/stacks-table-workspace/bulk-actions";
+import { StacksLiveConsoleDock } from "@/components/stacks-table-workspace/live-console-dock";
+import type {
+	StacksTableWorkspaceProps,
+	TrackedStackRow,
+	UntrackedStackRow,
+} from "@/components/stacks-table-workspace/types";
+import {
+	getContainerImage,
+	getContainerName,
+	getContainerState,
+	isRunningStack,
+	normalizeStatus,
+} from "@/components/stacks-table-workspace/utils";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -39,63 +48,6 @@ import { getProtectedStackLabel } from "@/lib/runtime-protection";
 import { matchesSearchQuery } from "@/lib/search";
 import { getSocket } from "@/lib/socket-client";
 
-type FormAction = (formData: FormData) => void | Promise<void>;
-
-type StackContainer = Record<string, string>;
-
-type TrackedStackRow = {
-	type: "tracked";
-	slug: string;
-	name: string;
-	status: string;
-	stackId: string;
-	environmentName: string;
-	sourceType: string;
-	containerCount: number;
-	runningCount: number;
-	containers: StackContainer[];
-	lastDeployment: { id: string; status: string; log?: string | null } | null;
-	isProtected: boolean;
-};
-
-type UntrackedStackRow = {
-	type: "untracked";
-	slug: string;
-	name: string;
-	status: string;
-	stackId: null;
-	environmentName: string;
-	sourceType: "external";
-	containerCount: number;
-	runningCount: number;
-	containers: StackContainer[];
-	configFiles: string[];
-	lastDeployment: null;
-	isProtected: boolean;
-};
-
-type StackRow = TrackedStackRow | UntrackedStackRow;
-
-function normalizeStatus(status: string) {
-	return status.split("(")[0]?.trim().toLowerCase() || "unknown";
-}
-
-function isRunningStack(status: string, runningCount: number) {
-	return runningCount > 0 || normalizeStatus(status).includes("running");
-}
-
-function getContainerName(container: StackContainer) {
-	return container.Names || container.Name || container.ID?.slice(0, 12) || "container";
-}
-
-function getContainerState(container: StackContainer) {
-	return container.State || container.Status || "unknown";
-}
-
-function getContainerImage(container: StackContainer) {
-	return container.Image || "unknown image";
-}
-
 export function StacksTableWorkspace({
 	stacks,
 	includeUntracked,
@@ -109,20 +61,7 @@ export function StacksTableWorkspace({
 	bulkStopStacksAction,
 	bulkDestroyStacksAction,
 	bulkRemoveStacksAction,
-}: {
-	stacks: StackRow[];
-	includeUntracked: boolean;
-	environmentId?: string;
-	initialWatchStackId?: string;
-	deployStackAction: FormAction;
-	destroyStackAction: FormAction;
-	adoptComposeProjectAction: FormAction;
-	controlComposeProjectAction: FormAction;
-	bulkRestartStacksAction: FormAction;
-	bulkStopStacksAction: FormAction;
-	bulkDestroyStacksAction: FormAction;
-	bulkRemoveStacksAction: FormAction;
-}) {
+}: StacksTableWorkspaceProps) {
 	const router = useRouter();
 	const [search, setSearch] = useState("");
 	const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
@@ -206,6 +145,15 @@ export function StacksTableWorkspace({
 	const liveTargetStack = watchedStack || fallbackWatchedStack;
 	const allSelectableSelected =
 		selectableRowKeys.length > 0 && selectableRowKeys.every((rowKey) => selectedRowKeys[rowKey]);
+	const firstTrackedId = selectedTracked[0]?.stackId;
+
+	const handleAfterRuntimeAction = (stackId?: string) => {
+		setSelectedRowKeys({});
+		if (stackId) {
+			setWatchedStackId(stackId);
+			setLogDockOpen(true);
+		}
+	};
 
 	return (
 		<Panel>
@@ -218,122 +166,22 @@ export function StacksTableWorkspace({
 				totalCount={stacks.length}
 				onReset={() => setSearch("")}
 			/>
-			<div className="flex min-h-12 flex-wrap items-center gap-1.5 border-b border-default/8 px-3 py-2">
-				<p className="mr-2 text-xs text-muted">
-					{selectedCount ? `${selectedCount} selected` : "Select one or more stacks"}
-				</p>
-				<form
-					action={bulkRestartStacksAction}
-					onSubmit={() => {
-						setSelectedRowKeys({});
-						if (selectedTracked[0]?.stackId) {
-							setWatchedStackId(selectedTracked[0].stackId);
-							setLogDockOpen(true);
-						}
-					}}
-				>
-					{selectedTrackedIds.map((stackId) => (
-						<input
-							key={`restart-tracked-${stackId}`}
-							type="hidden"
-							name="stackIds"
-							value={stackId}
-						/>
-					))}
-					<input type="hidden" name="projects" value={selectedUntrackedPayload} />
-					<FormSubmitButton
-						label={`Restart${selectedCount ? ` (${selectedCount})` : ""}`}
-						pendingLabel="Restarting..."
-						size="xs"
-						variant="outline"
-						disabled={!selectedCount}
-					/>
-				</form>
-				<form
-					action={bulkStopStacksAction}
-					onSubmit={() => {
-						setSelectedRowKeys({});
-						if (selectedTracked[0]?.stackId) {
-							setWatchedStackId(selectedTracked[0].stackId);
-							setLogDockOpen(true);
-						}
-					}}
-				>
-					{selectedTrackedIds.map((stackId) => (
-						<input key={`stop-tracked-${stackId}`} type="hidden" name="stackIds" value={stackId} />
-					))}
-					<input type="hidden" name="projects" value={selectedUntrackedPayload} />
-					<FormSubmitButton
-						label={`Stop${selectedCount ? ` (${selectedCount})` : ""}`}
-						pendingLabel="Stopping..."
-						size="xs"
-						variant="outline"
-						disabled={!selectedCount}
-					/>
-				</form>
-				<DestructiveActionModal
-					action={bulkDestroyStacksAction}
-					onConfirm={() => {
-						setSelectedRowKeys({});
-						if (selectedTracked[0]?.stackId) {
-							setWatchedStackId(selectedTracked[0].stackId);
-							setLogDockOpen(true);
-						}
-					}}
-					title={`Destroy ${selectedCount} stack(s)`}
-					description="This stops and destroys runtime resources for the selected stacks."
-					triggerLabel={`Destroy${selectedCount ? ` (${selectedCount})` : ""}`}
-					confirmLabel="Destroy"
-					pendingLabel="Destroying..."
-					triggerVariant="danger"
-					triggerSize="xs"
-					disabled={!selectedCount}
-					hiddenFields={{
-						stackIds: selectedTrackedIds,
-						projects: selectedUntrackedPayload,
-					}}
-				/>
-				<DestructiveActionModal
-					action={bulkRemoveStacksAction}
-					onConfirm={() => {
-						setSelectedRowKeys({});
-					}}
-					title={`Remove ${selectedCount} stack(s)`}
-					description="Tracked stacks are removed from Dockroot. Compose stacks are fully removed with containers, volumes, and local images."
-					triggerLabel={`Remove${selectedCount ? ` (${selectedCount})` : ""}`}
-					confirmLabel="Remove"
-					pendingLabel="Removing..."
-					triggerVariant="warning"
-					triggerSize="xs"
-					disabled={!selectedCount}
-					hiddenFields={{
-						stackIds: selectedTrackedIds,
-						projects: selectedUntrackedPayload,
-					}}
-				/>
-				<button
-					type="button"
-					onClick={() => setSelectedRowKeys({})}
-					disabled={!selectedCount}
-					className="ml-auto text-xs text-muted transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-				>
-					Clear
-				</button>
-				<button
-					type="button"
-					onClick={() => setLogDockOpen((open) => !open)}
-					disabled={!liveTargetStack}
-					className="inline-flex h-7 items-center gap-1.5 rounded-md border border-default/15 px-2.5 text-xs text-muted transition-colors hover:border-default/25 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-					title="Toggle live deploy console"
-				>
-					{logDockOpen ? (
-						<PanelRightClose className="h-3.5 w-3.5" />
-					) : (
-						<PanelRightOpen className="h-3.5 w-3.5" />
-					)}
-					Console
-				</button>
-			</div>
+			<StacksBulkActions
+				selectedCount={selectedCount}
+				selectedTrackedIds={selectedTrackedIds}
+				selectedUntrackedPayload={selectedUntrackedPayload}
+				firstTrackedId={firstTrackedId}
+				bulkRestartStacksAction={bulkRestartStacksAction}
+				bulkStopStacksAction={bulkStopStacksAction}
+				bulkDestroyStacksAction={bulkDestroyStacksAction}
+				bulkRemoveStacksAction={bulkRemoveStacksAction}
+				onAfterRuntimeAction={handleAfterRuntimeAction}
+				onAfterRemoveAction={() => setSelectedRowKeys({})}
+				onClearSelection={() => setSelectedRowKeys({})}
+				liveTargetAvailable={Boolean(liveTargetStack)}
+				logDockOpen={logDockOpen}
+				onToggleLogDock={() => setLogDockOpen((open) => !open)}
+			/>
 
 			<DataTable>
 				<DataTableHeader>
@@ -693,41 +541,11 @@ export function StacksTableWorkspace({
 			</DataTable>
 
 			{logDockOpen && liveTargetStack ? (
-				<div className="fixed inset-y-4 right-4 z-40 w-[min(44rem,92vw)] max-w-xl rounded-xl border border-default/12 bg-surface/95 shadow-[var(--shadow-lg)] backdrop-blur-sm">
-					<div className="flex items-center justify-between border-b border-default/10 px-4 py-3">
-						<div className="min-w-0">
-							<p className="text-xs font-semibold uppercase tracking-wide text-muted/75">
-								Live Deploy Console
-							</p>
-							<p className="truncate text-sm font-medium">{liveTargetStack.name}</p>
-						</div>
-						<div className="flex items-center gap-1.5">
-							<LinkButton
-								href={`/dashboard/stacks/${liveTargetStack.stackId}${environmentId ? `?environment=${environmentId}` : ""}`}
-								variant="ghost"
-								size="icon-xs"
-								title="Open stack workspace"
-							>
-								<TerminalSquare className="h-3.5 w-3.5" />
-							</LinkButton>
-							<button
-								type="button"
-								onClick={() => setLogDockOpen(false)}
-								className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-foreground/[0.05] hover:text-foreground"
-								aria-label="Close deploy console"
-							>
-								<X className="h-3.5 w-3.5" />
-							</button>
-						</div>
-					</div>
-					<div className="p-3">
-						<LiveStackFeed
-							stackId={liveTargetStack.stackId}
-							initialLog={liveTargetStack.lastDeployment?.log}
-							height="min(72vh, 760px)"
-						/>
-					</div>
-				</div>
+				<StacksLiveConsoleDock
+					stack={liveTargetStack}
+					environmentId={environmentId}
+					onClose={() => setLogDockOpen(false)}
+				/>
 			) : null}
 		</Panel>
 	);

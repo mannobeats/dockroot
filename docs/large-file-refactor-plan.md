@@ -2,6 +2,32 @@
 
 Generated on 2026-03-18 after scanning source files and reviewing the modules over 800 LOC.
 
+## Progress Snapshot (Updated 2026-03-18)
+
+Completed in codebase:
+
+1. Removed all `file.ts` + `folder/` duplicate entrypoint collisions in `apps/web` by switching to canonical folder entrypoints.
+2. Kept compatibility import paths while replacing legacy shim files with `index.ts` / `index.tsx` entries.
+3. Split `stack-github-form.tsx` into focused submodules:
+   - `stack-github-form/index.tsx`
+   - `stack-github-form/configure-form.tsx`
+   - `stack-github-form/empty-installations.tsx`
+   - `stack-github-form/step-indicator.tsx`
+4. Split `stacks-table-workspace.tsx` into focused submodules:
+   - `stacks-table-workspace/index.tsx`
+   - `stacks-table-workspace/types.ts`
+   - `stacks-table-workspace/utils.ts`
+   - `stacks-table-workspace/bulk-actions.tsx`
+   - `stacks-table-workspace/live-console-dock.tsx`
+5. Split `lib/github-app.ts` by responsibility:
+   - `lib/github-app.ts` (API orchestration facade)
+   - `lib/github-app-provider.ts` (provider persistence/config resolution)
+   - `lib/github-app-state.ts` (state signing/verification helpers)
+6. TypeScript verification now runs in the correct scope (root + web) with passing checks.
+7. Production build (`pnpm run build`) passes after refactor.
+
+Current largest first-party TS/TSX files are now all under 600 LOC (excluding generated `.next` files).
+
 ## Scope
 
 Files currently above the 800 line threshold:
