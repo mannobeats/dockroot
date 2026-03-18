@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
-import type { GitHubProviderConfig } from "@/lib/github-app-provider";
-import { getRequiredGitHubProviderConfig } from "@/lib/github-app-provider";
-import { encodeBase64Url } from "@/lib/github-app-state";
+import type { GitHubProviderConfig } from "./provider";
+import { getRequiredGitHubProviderConfig } from "./provider";
+import { encodeBase64Url } from "./state";
 
 export const GITHUB_API_BASE = "https://api.github.com";
 

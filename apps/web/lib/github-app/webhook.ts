@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { listGitHubProviderConfigs } from "@/lib/github-app-provider";
+import { listGitHubProviderConfigs } from "./provider";
 
 export async function verifyGitHubWebhookSignature(
 	rawBody: string,

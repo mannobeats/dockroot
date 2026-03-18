@@ -4,9 +4,9 @@ import { emitRealtime } from "@/lib/realtime";
 import { now } from "../shared";
 import { heartbeatAgent } from "./auth";
 
-export * from "./jobs-complete";
-export * from "./jobs-logs";
-export * from "./jobs-source";
+export { completeDeployment } from "./jobs-complete";
+export { appendDeploymentLogEvents } from "./jobs-logs";
+export { getDeploymentSourceArchive } from "./jobs-source";
 
 export async function claimNextDeployment(accessToken: string) {
 	const agent = await heartbeatAgent(accessToken);

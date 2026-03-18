@@ -1,6 +1,6 @@
-import type { GitHubProviderConfig } from "@/lib/github-app-provider";
 import { GITHUB_API_BASE, githubRequest } from "./client";
 import { createInstallationAccessToken } from "./installations";
+import type { GitHubProviderConfig } from "./provider";
 
 export async function fetchRepositoryTextFile(input: {
 	installationId: string;

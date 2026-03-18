@@ -1,20 +1,5 @@
 import "server-only";
 
-export type { GitHubProviderConfig } from "@/lib/github-app-provider";
-export {
-	getActiveGitHubProviderConfig,
-	getGitHubProviderConfigById,
-	getInstallationProviderConfigByGitHubInstallationId,
-	getInstallationProviderConfigByInternalInstallationId,
-	isGitHubAppConfigured,
-	listGitHubProviderConfigs,
-	upsertGitHubProviderFromManifest,
-} from "@/lib/github-app-provider";
-export {
-	signGitHubAppState,
-	signGitHubManifestState,
-	verifyGitHubAppState,
-} from "@/lib/github-app-state";
 export { createGitHubAppJwt } from "./client";
 export {
 	createInstallationAccessToken,
@@ -24,6 +9,16 @@ export {
 	listInstallationRepositories,
 } from "./installations";
 export { exchangeGitHubManifestCode, getGitHubAppInstallUrl } from "./manifest";
+export type { GitHubProviderConfig } from "./provider";
+export {
+	getActiveGitHubProviderConfig,
+	getGitHubProviderConfigById,
+	getInstallationProviderConfigByGitHubInstallationId,
+	getInstallationProviderConfigByInternalInstallationId,
+	isGitHubAppConfigured,
+	listGitHubProviderConfigs,
+	upsertGitHubProviderFromManifest,
+} from "./provider";
 export {
 	downloadRepositoryTarball,
 	fetchRepositoryTextFile,
@@ -31,4 +26,9 @@ export {
 	listChangedFilesForCompare,
 	listRepositoryTreePaths,
 } from "./repositories";
+export {
+	signGitHubAppState,
+	signGitHubManifestState,
+	verifyGitHubAppState,
+} from "./state";
 export { verifyGitHubWebhookSignature } from "./webhook";

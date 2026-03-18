@@ -7,9 +7,12 @@ apps/
 └── web/                    # Next.js app
     ├── app/                # App Router routes
     ├── components/         # Web-only UI components
-    ├── lib/                # Web helpers and client wrappers
+    ├── lib/                # Web domain modules and helpers
     ├── public/             # Static assets
     └── next.config.ts      # App-specific Next config
+server/
+├── runtime/                # Runtime metrics/events/action journaling services
+└── socket/                 # Socket auth, rate-limits, terminal/log services
 packages/
 ├── auth/                   # Better Auth server configuration
 │   └── src/
@@ -53,8 +56,8 @@ Two-part layout (icon rail + expandable panel):
 - **Auto-closes** on route navigation
 - On `md+`, sidebar is always visible in its sticky position (no overlay)
 
-To add nav items, edit the `navItems` array in `sidebar.tsx`.
-To customize the panel content, edit the filter/tag sections in the expandable panel JSX.
+To add nav items, edit `SIDEBAR_NAV_ITEMS` in `apps/web/components/sidebar/constants.ts`.
+To customize the panel composition, edit files under `apps/web/components/sidebar/`.
 
 ## Deployment Architecture
 
@@ -85,14 +88,20 @@ make prod-up    # Full Docker deployment
 ### Migration Flow
 
 1. `packages/db/src/migrate.ts` — Programmatic migration script (bundled to `migrate.mjs` at build time)
-2. `scripts/start.sh` — Container entrypoint: runs `migrate.mjs` then `apps/web/server.js`
+2. `scripts/start.sh` — Container entrypoint: runs `migrate.mjs` then `server.mjs`
 3. `packages/db/drizzle/` — SQL migration files (committed to git, generated via `pnpm run db:generate`)
 
 ## Adding a New Dashboard Page
 
 1. Create `apps/web/app/(dashboard)/dashboard/<page>/page.tsx`
-2. Add a nav entry in `apps/web/components/sidebar.tsx` → `navItems` array
+2. Add a nav entry in `apps/web/components/sidebar/constants.ts` → `SIDEBAR_NAV_ITEMS`
 3. The sidebar + topbar layout is automatic — no extra wiring needed
+
+## Structure Guardrails
+
+- `pnpm run lint` runs Biome checks and structure conventions checks.
+- Structure conventions are defined in `docs/codebase-structure-conventions.md`.
+- Current enforcement script: `scripts/check-structure-conventions.mjs`.
 
 ## Adding a New Public Page
 

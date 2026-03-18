@@ -1,8 +1,5 @@
-import {
-	type GitHubProviderConfig,
-	getRequiredGitHubProviderConfig,
-} from "@/lib/github-app-provider";
 import { createGitHubAppJwt, GITHUB_API_BASE, githubRequest } from "./client";
+import { type GitHubProviderConfig, getRequiredGitHubProviderConfig } from "./provider";
 
 export async function getGitHubInstallation(
 	installationId: string,

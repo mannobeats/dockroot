@@ -21,7 +21,10 @@ packages/
   auth/       Better Auth configuration and role-aware session logic
   db/         Drizzle schema, migrations, and shared database client
 scripts/      Runtime helpers and container entrypoint scripts
-server.mjs    Custom Next.js + Socket.IO server for live logs and terminal sessions
+server.mjs    Custom Next.js + Socket.IO orchestration entrypoint
+server/
+  runtime/    Runtime metrics/events/action services
+  socket/     Socket auth/rate-limit/access/terminal/log services
 ```
 
 Core runtime pieces:
@@ -221,14 +224,14 @@ Useful commands:
 | Command | Description |
 | --- | --- |
 | `make dev-lite` | Host app + PostgreSQL only |
-| `make dev-full` | Host app + PostgreSQL + monitoring stack |
+| `make dev-full` | Host app + full local infra (PostgreSQL) |
 | `make prod-up` | Full Docker deployment |
 | `make prod-down` | Stop the Docker deployment |
 | `make prod-logs` | Tail Docker deployment logs |
 | `pnpm dev` | Run Dockroot locally through `server.mjs` |
 | `pnpm build` | Create the production build |
 | `pnpm start` | Start the production server with bootstrapped local runtime config |
-| `pnpm lint` | Run Biome checks |
+| `pnpm lint` | Run Biome + structure convention checks |
 | `pnpm lint:fix` | Apply Biome fixes |
 | `pnpm db:generate` | Generate Drizzle migrations |
 | `pnpm db:migrate` | Run Drizzle migrations |

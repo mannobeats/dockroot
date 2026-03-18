@@ -1,10 +1,10 @@
+import { GITHUB_API_BASE } from "./client";
 import {
 	type GitHubProviderConfig,
 	getGitHubProviderConfigById,
 	getRequiredGitHubProviderConfig,
-} from "@/lib/github-app-provider";
-import { encodeBase64Url } from "@/lib/github-app-state";
-import { GITHUB_API_BASE } from "./client";
+} from "./provider";
+import { encodeBase64Url } from "./state";
 
 export async function getGitHubAppInstallUrl(state: string, providerId?: string | null) {
 	const provider =
