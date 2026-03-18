@@ -38,7 +38,7 @@ if (envErrors.length > 0) {
 const dev = process.env.NODE_ENV !== "production";
 const hostname = process.env.HOSTNAME || "0.0.0.0";
 const port = Number(process.env.PORT || 3080);
-const app = next({ dev, dir: "./apps/web", hostname, port });
+const app = /** @type {any} */ (next)({ dev, dir: "./apps/web", hostname, port });
 const handle = app.getRequestHandler();
 const execFileAsync = promisify(execFile);
 const sql = postgres(getDatabaseUrl(), { max: 5 });

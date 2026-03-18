@@ -232,6 +232,9 @@ Useful commands:
 | `pnpm build` | Create the production build |
 | `pnpm start` | Start the production server with bootstrapped local runtime config |
 | `pnpm lint` | Run Biome + structure convention checks |
+| `pnpm typecheck` | Run project TS checks + JS `checkJs` + Node syntax checks |
+| `pnpm typecheck:js` | Type-check runtime JavaScript (`.mjs`) with TypeScript `checkJs` |
+| `pnpm check:js:syntax` | Parse-check Node runtime JavaScript with `node --check` |
 | `pnpm lint:fix` | Apply Biome fixes |
 | `pnpm db:generate` | Generate Drizzle migrations |
 | `pnpm db:migrate` | Run Drizzle migrations |

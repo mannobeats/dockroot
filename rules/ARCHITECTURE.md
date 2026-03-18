@@ -100,6 +100,11 @@ make prod-up    # Full Docker deployment
 ## Structure Guardrails
 
 - `pnpm run lint` runs Biome checks and structure conventions checks.
+- `pnpm run typecheck` now includes:
+  - TypeScript project checks
+  - JavaScript `checkJs` checks for runtime `.mjs` files
+  - Node syntax checks (`node --check`) for runtime entrypoints
+- `.github/workflows/quality-gates.yml` enforces `pnpm lint` and `pnpm typecheck` on PRs and `main` pushes.
 - Structure conventions are defined in `docs/codebase-structure-conventions.md`.
 - Current enforcement script: `scripts/check-structure-conventions.mjs`.
 

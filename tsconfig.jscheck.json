@@ -1,0 +1,26 @@
+{
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"allowJs": true,
+		"checkJs": true,
+		"noEmit": true,
+		"target": "ES2022",
+		"lib": ["ES2022"],
+		"module": "nodenext",
+		"moduleResolution": "nodenext",
+		"types": ["node"],
+		"strict": false,
+		"skipLibCheck": true,
+		"esModuleInterop": true,
+		"allowSyntheticDefaultImports": true,
+		"resolveJsonModule": true
+	},
+	"include": [
+		"server.mjs",
+		"local-terminal.mjs",
+		"scripts/**/*.mjs",
+		"server/**/*.mjs",
+		"apps/web/postcss.config.mjs"
+	],
+	"exclude": ["node_modules", ".next", "apps/web/.next"]
+}

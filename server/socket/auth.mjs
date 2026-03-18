@@ -15,7 +15,9 @@ async function getSessionFromSocket(socket, getAppBaseUrl) {
 		return null;
 	}
 
-	const payload = await response.json().catch(() => null);
+	const payloadUnknown = await response.json().catch(() => null);
+	/** @type {{ user?: { id?: string; role?: string } } | null} */
+	const payload = payloadUnknown;
 	if (!payload?.user?.id) {
 		return null;
 	}
