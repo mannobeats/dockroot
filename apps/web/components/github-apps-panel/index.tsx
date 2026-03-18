@@ -1,23 +1,16 @@
 "use client";
 
-import {
-	AlertCircle,
-	ArrowUpRight,
-	CheckCircle2,
-	Github,
-	Loader2,
-	Plus,
-	RefreshCw,
-	Shield,
-	Trash2,
-} from "lucide-react";
+import { Github, Loader2, Plus, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { GitHubCreateAppForm } from "@/components/github-apps-panel/create-app-form";
+import { GitHubProvidersList } from "@/components/github-apps-panel/providers-list";
+import { statusCopy } from "@/components/github-apps-panel/status";
+import { GitHubAppsStatusBanner } from "@/components/github-apps-panel/status-banner";
+import type { GithubStatus, GroupedProvider } from "@/components/github-apps-panel/types";
 import type { GitHubProviderOption, InstallationOption } from "@/components/github-types";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Input } from "@/components/ui/input";
 import {
 	Panel,
 	PanelContent,
@@ -25,68 +18,6 @@ import {
 	PanelHeader,
 	PanelTitle,
 } from "@/components/ui/panel";
-
-type GithubStatus =
-	| ""
-	| "manifest-ready"
-	| "connected"
-	| "manifest-missing"
-	| "manifest-denied"
-	| "manifest-error"
-	| "provider-missing"
-	| "missing"
-	| "denied"
-	| string;
-
-function statusCopy(status: GithubStatus, error: string) {
-	switch (status) {
-		case "manifest-ready":
-			return {
-				tone: "accent" as const,
-				title: "GitHub App created",
-				detail:
-					"Install it on GitHub and Dockroot will pick up the new installation automatically.",
-			};
-		case "connected":
-			return {
-				tone: "success" as const,
-				title: "Installation detected",
-				detail: "Your GitHub installation is connected and ready to use for new tracked stacks.",
-			};
-		case "manifest-error":
-			return {
-				tone: "danger" as const,
-				title: "GitHub setup failed",
-				detail: error || "Something went wrong while creating the GitHub App manifest.",
-			};
-		case "provider-missing":
-		case "missing":
-		case "manifest-missing":
-		case "denied":
-		case "manifest-denied":
-			return {
-				tone: "warning" as const,
-				title: "GitHub setup needs attention",
-				detail: error || "The GitHub flow did not complete cleanly. Try again from this panel.",
-			};
-		default:
-			return null;
-	}
-}
-
-function formatUpdatedAt(value: string | Date) {
-	const date = value instanceof Date ? value : new Date(value);
-	if (Number.isNaN(date.getTime())) {
-		return "Unknown";
-	}
-
-	return new Intl.DateTimeFormat("en-US", {
-		month: "short",
-		day: "numeric",
-		hour: "numeric",
-		minute: "2-digit",
-	}).format(date);
-}
 
 export function GitHubAppsPanel({
 	initialProviders,
@@ -115,7 +46,7 @@ export function GitHubAppsPanel({
 		initialStatus === "manifest-ready" || initialStatus === "connected" ? "waiting" : "idle",
 	);
 
-	const groupedProviders = useMemo(() => {
+	const groupedProviders = useMemo<GroupedProvider[]>(() => {
 		return providers.map((provider) => {
 			const providerInstallations = installations.filter(
 				(installation) => (installation.providerId || "") === provider.id,
@@ -310,63 +241,6 @@ export function GitHubAppsPanel({
 
 	const statusSummary = statusCopy(initialStatus, initialError);
 
-	/* ── Status banner (shown when there's an active status) ── */
-	const statusBanner = statusSummary ? (
-		<div className="flex items-start gap-3 rounded-lg border border-default/10 bg-surface-raised px-4 py-3">
-			<div className="mt-0.5">
-				{statusSummary.tone === "danger" ? (
-					<AlertCircle className="h-4 w-4 text-danger" />
-				) : statusSummary.tone === "warning" ? (
-					<Shield className="h-4 w-4 text-warning" />
-				) : (
-					<CheckCircle2 className="h-4 w-4 text-success" />
-				)}
-			</div>
-			<div>
-				<p className="text-sm font-semibold">{statusSummary.title}</p>
-				<p className="mt-0.5 text-xs text-muted">{message || statusSummary.detail}</p>
-			</div>
-		</div>
-	) : message ? (
-		<div className="flex items-start gap-3 rounded-lg border border-default/10 bg-surface-raised px-4 py-3">
-			<CheckCircle2 className="mt-0.5 h-4 w-4 text-success" />
-			<p className="text-xs text-muted">{message}</p>
-		</div>
-	) : null;
-
-	/* ── Create app form (inline) ── */
-	const createAppForm = (
-		<div className="space-y-3">
-			<div className="grid gap-3 sm:grid-cols-2">
-				<label htmlFor="github-app-name" className="grid gap-1">
-					<span className="text-xs font-medium">App name</span>
-					<Input
-						id="github-app-name"
-						value={manifestName}
-						onChange={(event) => setManifestName(event.target.value)}
-						placeholder="Dockroot GitHub App"
-						inputSize="sm"
-					/>
-				</label>
-				<label htmlFor="github-app-owner" className="grid gap-1">
-					<span className="text-xs font-medium">Organization (optional)</span>
-					<Input
-						id="github-app-owner"
-						value={manifestOwner}
-						onChange={(event) => setManifestOwner(event.target.value)}
-						placeholder="my-org"
-						inputSize="sm"
-					/>
-				</label>
-			</div>
-			{manifestError ? <p className="text-xs text-danger">{manifestError}</p> : null}
-			<Button size="sm" onClick={startManifestFlow}>
-				<Plus className="h-3.5 w-3.5" />
-				Create GitHub App
-			</Button>
-		</div>
-	);
-
 	return (
 		<Panel tone="subtle" className="overflow-hidden">
 			<PanelHeader className="border-b border-default/10">
@@ -411,105 +285,31 @@ export function GitHubAppsPanel({
 			</PanelHeader>
 
 			<PanelContent className="space-y-4">
-				{statusBanner}
+				<GitHubAppsStatusBanner summary={statusSummary} message={message} />
 
-				{/* Inline create form (shown via + button when providers exist) */}
 				{showCreateForm && groupedProviders.length ? (
 					<div className="rounded-lg border border-default/10 bg-surface-raised p-4">
 						<p className="mb-3 text-xs font-semibold">Register a new GitHub App</p>
-						{createAppForm}
+						<GitHubCreateAppForm
+							manifestName={manifestName}
+							manifestOwner={manifestOwner}
+							manifestError={manifestError}
+							onManifestNameChange={setManifestName}
+							onManifestOwnerChange={setManifestOwner}
+							onSubmit={startManifestFlow}
+						/>
 					</div>
 				) : null}
 
 				{groupedProviders.length ? (
-					<div className="divide-y divide-default/8 overflow-hidden rounded-lg border border-default/10">
-						{groupedProviders.map(
-							({ provider, installations: providerInstallations, repositoryCount, hasErrors }) => {
-								const installCount = providerInstallations.length;
-								const removing = pendingProviderId === provider.id;
-								return (
-									<div key={provider.id} className="bg-surface-raised">
-										{/* Provider row */}
-										<div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-											<div className="flex items-center gap-3 min-w-0">
-												<div>
-													<div className="flex items-center gap-2">
-														<p className="text-sm font-semibold">{provider.name}</p>
-														<Badge
-															variant={
-																installCount ? (hasErrors ? "warning" : "success") : "default"
-															}
-														>
-															{installCount
-																? `${installCount} install${installCount === 1 ? "" : "s"}`
-																: "Not installed"}
-														</Badge>
-														<Badge variant="accent">{repositoryCount} repos</Badge>
-													</div>
-													<p className="mt-0.5 text-xs text-muted">
-														Updated {formatUpdatedAt(provider.updatedAt)}
-													</p>
-												</div>
-											</div>
-											<div className="flex items-center gap-1.5">
-												<Button
-													size="xs"
-													variant={installCount ? "outline" : "primary"}
-													onClick={() => beginInstall(provider.id)}
-													disabled={Boolean(pendingProviderId)}
-												>
-													<ArrowUpRight className="h-3 w-3" />
-													{installCount ? "Add" : "Install"}
-												</Button>
-												<Button
-													size="xs"
-													variant="ghost"
-													onClick={() => void refreshData()}
-													disabled={isRefreshing || Boolean(pendingProviderId)}
-													title="Sync installations"
-												>
-													<RefreshCw className={`h-3 w-3 ${isRefreshing ? "animate-spin" : ""}`} />
-												</Button>
-												<Button
-													size="xs"
-													variant="ghost"
-													onClick={() => void deleteProvider(provider.id)}
-													disabled={Boolean(pendingProviderId)}
-													title="Remove app"
-													className="text-muted hover:text-danger"
-												>
-													{removing ? (
-														<Loader2 className="h-3 w-3 animate-spin" />
-													) : (
-														<Trash2 className="h-3 w-3" />
-													)}
-												</Button>
-											</div>
-										</div>
-
-										{/* Installations (compact) */}
-										{providerInstallations.length ? (
-											<div className="border-t border-default/6 bg-surface px-4 py-2.5">
-												<div className="flex flex-wrap items-center gap-3">
-													{providerInstallations.map((installation) => (
-														<div key={installation.id} className="flex items-center gap-2 text-xs">
-															<span className="font-medium">{installation.accountLogin}</span>
-															<Badge variant={installation.repositoryError ? "warning" : "success"}>
-																{installation.repositoryError ? "Needs sync" : "Healthy"}
-															</Badge>
-															<span className="text-muted">
-																{installation.repositories.length} repos
-															</span>
-														</div>
-													))}
-												</div>
-											</div>
-										) : null}
-									</div>
-								);
-							},
-						)}
-					</div>
+					<GitHubProvidersList
+						groupedProviders={groupedProviders}
+						pendingProviderId={pendingProviderId}
+						isRefreshing={isRefreshing}
+						onBeginInstall={beginInstall}
+						onRefresh={() => void refreshData()}
+						onDeleteProvider={(providerId) => void deleteProvider(providerId)}
+					/>
 				) : (
 					<div className="space-y-5">
 						<EmptyState
@@ -519,7 +319,14 @@ export function GitHubAppsPanel({
 						/>
 						<div className="rounded-lg border border-default/10 bg-surface-raised p-4">
 							<p className="mb-3 text-xs font-semibold">Create your first GitHub App</p>
-							{createAppForm}
+							<GitHubCreateAppForm
+								manifestName={manifestName}
+								manifestOwner={manifestOwner}
+								manifestError={manifestError}
+								onManifestNameChange={setManifestName}
+								onManifestOwnerChange={setManifestOwner}
+								onSubmit={startManifestFlow}
+							/>
 						</div>
 					</div>
 				)}
