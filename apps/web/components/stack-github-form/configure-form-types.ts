@@ -1,0 +1,42 @@
+import type { InstallationRepository } from "@/components/github-types";
+
+export interface StackGitHubConfigureValues {
+	action: (formData: FormData) => void | Promise<void>;
+	installationId: string;
+	repositoryId: string;
+	selectedRepository?: InstallationRepository;
+	stackName: string;
+	description: string;
+	branch: string;
+	composePath: string;
+	envPath: string;
+	composeYaml: string;
+	envFileContent: string;
+	autoDeployEnabled: boolean;
+	autoDeployPaths: string;
+	stepIndicator: React.ReactNode;
+	isLoaded: boolean;
+	headSha: string;
+	environments: Array<{ id: string; name: string; kind: string }>;
+	defaultEnvironmentId?: string;
+	pathSuggestions: string[];
+	loadRepositoryFiles: (nextComposePath?: string) => Promise<void>;
+	isPending: boolean;
+	loadError: string;
+	showEditor: boolean;
+	setStackName: (value: string) => void;
+	setDescription: (value: string) => void;
+	setBranch: (value: string) => void;
+	setComposePath: (value: string) => void;
+	setEnvPath: (value: string) => void;
+	setComposeYaml: (value: string) => void;
+	setEnvFileContent: (value: string) => void;
+	setAutoDeployEnabled: (value: boolean) => void;
+	setAutoDeployPaths: (value: string) => void;
+	setShowEditor: (value: boolean) => void;
+	setIsLoaded: (value: boolean) => void;
+	setLoadError: (value: string) => void;
+	onBack: () => void;
+	canCreateStack: boolean;
+	editorHeight: string;
+}
