@@ -2,39 +2,59 @@ import "server-only";
 
 import { containerUpdatePolicies, db } from "@dockroot/db";
 import { and, eq } from "drizzle-orm";
-import {
-	digestSetFromImageInspect,
-	hasContainerImageUpdate,
-	latestImageReferenceForMajorCheck,
-	normalizeDigest,
-	parseImageReference,
-} from "@/lib/container-updates/image-ref";
+import { checkContainerUpdate } from "@/lib/container-updates/check-container";
 import { ensurePoliciesForContainers } from "@/lib/container-updates/policy";
-import {
-	fetchRegistryManifestDigest,
-	findDockerHubMajorTargetTag,
-} from "@/lib/container-updates/registry";
 import { completeUpdateRun, createUpdateRun } from "@/lib/container-updates/runs";
-import {
-	containerNameOf,
-	imageIdOf,
-	imageRefOf,
-	now,
-	runningImageIdOf,
-} from "@/lib/container-updates/shared";
-import { upsertContainerUpdateState } from "@/lib/container-updates/state";
+import { containerNameOf } from "@/lib/container-updates/shared";
 import type {
 	ContainerUpdateCheckSummary,
 	ContainerUpdatePolicyMap,
 } from "@/lib/container-updates/types";
-import {
-	getContainerDetailsForEnvironment,
-	getImageDetailsForEnvironment,
-	listContainersForEnvironment,
-	pullImageForEnvironment,
-	resolveRuntimeEnvironment,
-} from "@/lib/environment-runtime";
-import { isProtectedManagerContainer } from "@/lib/runtime-protection";
+import { listContainersForEnvironment, resolveRuntimeEnvironment } from "@/lib/environment-runtime";
+
+function filterTargetContainers(
+	containers: Record<string, string>[],
+	containerNames: string[] | undefined,
+) {
+	const requested = new Set((containerNames || []).map((name) => name.trim()).filter(Boolean));
+
+	return containers.filter((container) => {
+		const containerName = containerNameOf(container);
+		if (!containerName) {
+			return false;
+		}
+		return !requested.size || requested.has(containerName);
+	});
+}
+
+async function loadPolicyMap(
+	userId: string,
+	environmentId: string,
+): Promise<ContainerUpdatePolicyMap> {
+	const policyRows = await db.query.containerUpdatePolicies.findMany({
+		where: and(
+			eq(containerUpdatePolicies.environmentId, environmentId),
+			eq(containerUpdatePolicies.createdByUserId, userId),
+		),
+	});
+
+	return new Map(
+		policyRows.map((row) => [
+			row.containerName,
+			{ id: row.id, checkEnabled: row.checkEnabled, updateEnabled: row.updateEnabled },
+		]),
+	);
+}
+
+function emptyCheckSummary(totalContainers: number): ContainerUpdateCheckSummary {
+	return {
+		totalContainers: totalContainers,
+		checkedContainers: 0,
+		availableContainers: 0,
+		skippedContainers: 0,
+		failedContainers: 0,
+	};
+}
 
 export async function runContainerUpdateCheck(input: {
 	userId: string;
@@ -64,39 +84,9 @@ export async function runContainerUpdateCheck(input: {
 			containers,
 		});
 
-		const requested = new Set(
-			(input.containerNames || []).map((name) => name.trim()).filter(Boolean),
-		);
-		const targetContainers = containers.filter((container: Record<string, string>) => {
-			const containerName = containerNameOf(container);
-			if (!containerName) {
-				return false;
-			}
-			if (!requested.size) {
-				return true;
-			}
-			return requested.has(containerName);
-		});
-		const policyRows = await db.query.containerUpdatePolicies.findMany({
-			where: and(
-				eq(containerUpdatePolicies.environmentId, environment.id),
-				eq(containerUpdatePolicies.createdByUserId, input.userId),
-			),
-		});
-		const policies: ContainerUpdatePolicyMap = new Map(
-			policyRows.map((row) => [
-				row.containerName,
-				{ id: row.id, checkEnabled: row.checkEnabled, updateEnabled: row.updateEnabled },
-			]),
-		);
-
-		const summary: ContainerUpdateCheckSummary = {
-			totalContainers: targetContainers.length,
-			checkedContainers: 0,
-			availableContainers: 0,
-			skippedContainers: 0,
-			failedContainers: 0,
-		};
+		const targetContainers = filterTargetContainers(containers, input.containerNames);
+		const policies = await loadPolicyMap(input.userId, environment.id);
+		const summary = emptyCheckSummary(targetContainers.length);
 
 		for (const container of targetContainers) {
 			const containerName = containerNameOf(container);
@@ -106,206 +96,31 @@ export async function runContainerUpdateCheck(input: {
 			}
 
 			const policy = policies.get(containerName);
-			if (respectPolicies && policy && !policy.checkEnabled) {
-				summary.skippedContainers += 1;
-				continue;
-			}
-			if (environment.kind === "local" && isProtectedManagerContainer(container)) {
-				await upsertContainerUpdateState({
-					userId: input.userId,
-					environmentId: environment.id,
-					containerName,
-					containerId: container.ID,
-					imageRef: container.Image || null,
-					runningImageId: null,
-					latestImageId: null,
-					majorTargetImageRef: null,
-					majorTargetTag: null,
-					updateAvailable: false,
-					majorUpdateAvailable: false,
-					lastResult: "skipped",
-					lastError: null,
-					checkedAt: now(),
-				});
-				summary.skippedContainers += 1;
-				continue;
-			}
+			const outcome = await checkContainerUpdate({
+				userId: input.userId,
+				environment,
+				container,
+				containerName,
+				pullBeforeCheck,
+				includeMajorVersions,
+				policyCheckEnabled: policy?.checkEnabled ?? true,
+				respectPolicies,
+			});
 
-			try {
-				const details = await getContainerDetailsForEnvironment(
-					input.userId,
-					container.ID,
-					environment.id,
-				);
-				const inspect = (details.details?.inspect || null) as Record<string, unknown> | null;
-				const imageRef = imageRefOf(container, inspect);
-				const runningImageId = runningImageIdOf(inspect);
-				if (!imageRef) {
-					await upsertContainerUpdateState({
-						userId: input.userId,
-						environmentId: environment.id,
-						containerName,
-						containerId: container.ID,
-						imageRef: null,
-						runningImageId,
-						latestImageId: null,
-						majorTargetImageRef: null,
-						majorTargetTag: null,
-						updateAvailable: false,
-						majorUpdateAvailable: false,
-						lastResult: "skipped",
-						lastError: "Container has no image reference.",
-						checkedAt: now(),
-					});
-					summary.skippedContainers += 1;
-					continue;
-				}
-
-				if (pullBeforeCheck) {
-					await pullImageForEnvironment(input.userId, imageRef, environment.id);
-				}
-				let runningImageInspect: Record<string, unknown> | null = null;
-				if (runningImageId) {
-					try {
-						const runningImage = await getImageDetailsForEnvironment(
-							input.userId,
-							runningImageId,
-							environment.id,
-						);
-						runningImageInspect = (runningImage.image || null) as Record<string, unknown> | null;
-					} catch {
-						runningImageInspect = null;
-					}
-				}
-				let latestImageId: string | null = null;
-				let latestImageInspect: Record<string, unknown> | null = null;
-				let updateAvailable = false;
-				if (!pullBeforeCheck) {
-					const remoteDigest = await fetchRegistryManifestDigest(imageRef);
-					if (remoteDigest) {
-						latestImageId = remoteDigest;
-						const runningDigests = digestSetFromImageInspect(runningImageInspect);
-						const normalizedRunningImageId = normalizeDigest(runningImageId || "");
-						if (normalizedRunningImageId) {
-							runningDigests.add(normalizedRunningImageId);
-						}
-						updateAvailable = !runningDigests.has(remoteDigest);
-					}
-				}
-				if (!latestImageId) {
-					const latestImage = await getImageDetailsForEnvironment(
-						input.userId,
-						imageRef,
-						environment.id,
-					);
-					latestImageId = imageIdOf(latestImage.image);
-					latestImageInspect = (latestImage.image || null) as Record<string, unknown> | null;
-					updateAvailable = hasContainerImageUpdate({
-						runningImageId,
-						latestImageId,
-						runningImageInspect,
-						latestImageInspect,
-					});
-				}
-				let majorUpdateAvailable = false;
-				let majorTargetImageRef: string | null = null;
-				let majorTargetTag: string | null = null;
-				if (!updateAvailable && includeMajorVersions && runningImageId) {
-					const latestRef = latestImageReferenceForMajorCheck(imageRef);
-					if (latestRef) {
-						try {
-							majorTargetImageRef = latestRef;
-							if (pullBeforeCheck) {
-								await pullImageForEnvironment(input.userId, latestRef, environment.id);
-								const majorCandidate = await getImageDetailsForEnvironment(
-									input.userId,
-									latestRef,
-									environment.id,
-								);
-								const majorCandidateId = imageIdOf(majorCandidate.image);
-								const majorCandidateInspect = (majorCandidate.image || null) as Record<
-									string,
-									unknown
-								> | null;
-								majorUpdateAvailable = hasContainerImageUpdate({
-									runningImageId,
-									latestImageId: majorCandidateId,
-									runningImageInspect,
-									latestImageInspect: majorCandidateInspect,
-								});
-							} else {
-								const remoteDigest = await fetchRegistryManifestDigest(latestRef);
-								if (remoteDigest) {
-									const runningDigests = digestSetFromImageInspect(runningImageInspect);
-									const normalizedRunningImageId = normalizeDigest(runningImageId || "");
-									if (normalizedRunningImageId) {
-										runningDigests.add(normalizedRunningImageId);
-									}
-									majorUpdateAvailable = !runningDigests.has(remoteDigest);
-								}
-							}
-							if (majorUpdateAvailable) {
-								const candidateTag = await findDockerHubMajorTargetTag(imageRef);
-								if (candidateTag) {
-									const parsedTarget = parseImageReference(imageRef);
-									if (parsedTarget) {
-										majorTargetTag = candidateTag;
-										majorTargetImageRef = `${parsedTarget.repository}:${candidateTag}`;
-									}
-								}
-							}
-						} catch {
-							majorUpdateAvailable = false;
-							majorTargetImageRef = null;
-							majorTargetTag = null;
-						}
-					}
-				}
-				const lastResult = updateAvailable
-					? "available"
-					: majorUpdateAvailable
-						? "major_available"
-						: "not_available";
-
-				await upsertContainerUpdateState({
-					userId: input.userId,
-					environmentId: environment.id,
-					containerName,
-					containerId: container.ID,
-					imageRef,
-					runningImageId,
-					latestImageId,
-					majorTargetImageRef,
-					majorTargetTag,
-					updateAvailable,
-					majorUpdateAvailable,
-					lastResult,
-					lastError: null,
-					checkedAt: now(),
-				});
-
-				summary.checkedContainers += 1;
-				if (updateAvailable) {
+			switch (outcome) {
+				case "available":
 					summary.availableContainers += 1;
-				}
-			} catch (error) {
-				await upsertContainerUpdateState({
-					userId: input.userId,
-					environmentId: environment.id,
-					containerName,
-					containerId: container.ID,
-					imageRef: container.Image || null,
-					runningImageId: null,
-					latestImageId: null,
-					majorTargetImageRef: null,
-					majorTargetTag: null,
-					updateAvailable: false,
-					majorUpdateAvailable: false,
-					lastResult: "check_failed",
-					lastError: error instanceof Error ? error.message : "Check failed.",
-					checkedAt: now(),
-				});
-				summary.failedContainers += 1;
+					summary.checkedContainers += 1;
+					break;
+				case "checked":
+					summary.checkedContainers += 1;
+					break;
+				case "skipped":
+					summary.skippedContainers += 1;
+					break;
+				case "failed":
+					summary.failedContainers += 1;
+					break;
 			}
 		}
 
