@@ -233,6 +233,7 @@ export async function updateEnvironmentAction(formData: FormData) {
 	const environmentId = getValue(formData, "environmentId");
 	const name = getValue(formData, "name");
 	const description = getValue(formData, "description");
+	const agentUrl = getValue(formData, "agentUrl");
 
 	if (!environmentId || !name) {
 		throw new Error("Environment and name are required");
@@ -243,6 +244,7 @@ export async function updateEnvironmentAction(formData: FormData) {
 		userId,
 		name,
 		description,
+		agentUrl,
 	});
 
 	const { recordAuditEvent } = await import("@/lib/platform");
@@ -250,7 +252,12 @@ export async function updateEnvironmentAction(formData: FormData) {
 		environmentId,
 		userId,
 		actionType: "environment.update",
-		details: { environmentId, environmentName: name, description: description || null },
+		details: {
+			environmentId,
+			environmentName: name,
+			description: description || null,
+			agentUrl: agentUrl || null,
+		},
 	});
 
 	redirect(`/dashboard/environments/${environmentId}`);

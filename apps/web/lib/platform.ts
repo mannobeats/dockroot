@@ -218,6 +218,46 @@ function normalizeManagerUrl(value: string | undefined) {
 	return parsed.toString().replace(/\/$/, "");
 }
 
+function isPrivateIpv4Address(hostname: string) {
+	return (
+		/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname) ||
+		/^192\.168\.\d{1,3}\.\d{1,3}$/.test(hostname) ||
+		/^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$/.test(hostname)
+	);
+}
+
+function looksLikeContainerHostname(value: string | null | undefined) {
+	return /^[a-f0-9]{12,64}$/i.test(String(value || "").trim());
+}
+
+function resolveStoredAgentRuntimeUrl(input: {
+	currentUrl?: string | null;
+	inferredUrl?: string | null;
+	hostname?: string | null;
+}) {
+	const normalizedCurrent = normalizeAgentUrl(input.currentUrl || undefined);
+	const normalizedInferred = normalizeAgentUrl(input.inferredUrl || undefined);
+
+	if (!normalizedCurrent) {
+		return normalizedInferred;
+	}
+
+	if (!normalizedInferred || normalizedInferred === normalizedCurrent) {
+		return normalizedCurrent;
+	}
+
+	try {
+		const currentHost = new URL(normalizedCurrent).hostname;
+		if (isPrivateIpv4Address(currentHost) && looksLikeContainerHostname(input.hostname)) {
+			return normalizedInferred;
+		}
+	} catch {
+		return normalizedInferred;
+	}
+
+	return normalizedCurrent;
+}
+
 function emitEnvironmentUpdate(environmentId: string, status: string) {
 	emitRealtime("environment:update", {
 		environmentId,
@@ -309,6 +349,9 @@ async function findAgentByAccessToken(accessToken: string) {
 	const hashedToken = hashToken(accessToken);
 	return db.query.agents.findFirst({
 		where: or(eq(agents.accessToken, hashedToken), eq(agents.accessToken, accessToken)),
+		with: {
+			environment: true,
+		},
 	});
 }
 
@@ -319,6 +362,7 @@ async function requireOwnedEnvironment(environmentId: string, userId: string) {
 			id: true,
 			slug: true,
 			isDefaultLocal: true,
+			managerUrl: true,
 		},
 	});
 
@@ -521,7 +565,7 @@ export async function getDashboardData(userId: string, options?: { includeRuntim
 		deploymentCount: Number(deploymentCount?.count ?? 0),
 		recentDeployments,
 		recentStacks,
-		runtime: options?.includeRuntime ? await getLocalDockerSnapshot() : null,
+		runtime: null,
 		dataDir: options?.includeRuntime ? getPlatformDataDir() : null,
 	};
 }
@@ -1105,14 +1149,17 @@ export async function updateEnvironment({
 	userId,
 	name,
 	description,
+	agentUrl,
 }: {
 	environmentId: string;
 	userId: string;
 	name: string;
 	description?: string;
+	agentUrl?: string;
 }) {
 	const environment = await requireOwnedEnvironment(environmentId, userId);
 	const updatedAt = now();
+	const normalizedAgentUrl = environment.isDefaultLocal ? null : normalizeAgentUrl(agentUrl);
 
 	await db
 		.update(environments)
@@ -1120,6 +1167,7 @@ export async function updateEnvironment({
 			name,
 			slug: environment.isDefaultLocal ? environment.slug : slugify(name),
 			description: description || null,
+			managerUrl: environment.isDefaultLocal ? environment.managerUrl : normalizedAgentUrl,
 			updatedAt,
 		})
 		.where(eq(environments.id, environment.id));
@@ -1819,7 +1867,11 @@ export async function registerAgent({
 		.update(environments)
 		.set({
 			status: "healthy",
-			managerUrl: agentUrl || agent.environment.managerUrl,
+			managerUrl: resolveStoredAgentRuntimeUrl({
+				currentUrl: agent.environment.managerUrl,
+				inferredUrl: agentUrl,
+				hostname: hostname || agent.hostname,
+			}),
 			updatedAt,
 		})
 		.where(eq(environments.id, agent.environmentId));
@@ -1864,7 +1916,11 @@ export async function heartbeatAgent(
 		.update(environments)
 		.set({
 			status: "healthy",
-			managerUrl: agentUrl ? normalizeAgentUrl(agentUrl) : undefined,
+			managerUrl: resolveStoredAgentRuntimeUrl({
+				currentUrl: agent.environment.managerUrl,
+				inferredUrl: agentUrl,
+				hostname: agent.hostname,
+			}),
 			updatedAt,
 		})
 		.where(eq(environments.id, agent.environmentId));

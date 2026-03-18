@@ -34,48 +34,13 @@ const metrics = {
 	jobsFailed: 0,
 };
 
-function isPrivateIpv4(value) {
-	return (
-		/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(value) ||
-		/^192\.168\.\d{1,3}\.\d{1,3}$/.test(value) ||
-		/^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$/.test(value)
-	);
-}
-
-function getPreferredLanIpv4() {
-	const interfaces = os.networkInterfaces();
-	const privateCandidates = [];
-	const publicCandidates = [];
-
-	for (const entries of Object.values(interfaces)) {
-		for (const entry of entries || []) {
-			if (!entry || entry.internal || entry.family !== "IPv4") {
-				continue;
-			}
-
-			if (isPrivateIpv4(entry.address)) {
-				privateCandidates.push(entry.address);
-			} else {
-				publicCandidates.push(entry.address);
-			}
-		}
-	}
-
-	return privateCandidates[0] || publicCandidates[0] || null;
-}
-
-function getAgentListenUrl() {
+function getAdvertisedAgentUrl() {
 	const explicitUrl = (process.env.DOCKROOT_AGENT_URL || "").trim();
 	if (explicitUrl) {
 		return explicitUrl.replace(/\/$/, "");
 	}
 
-	const host = getPreferredLanIpv4();
-	if (!host) {
-		return null;
-	}
-
-	return `http://${host}:${listenPort}`;
+	return null;
 }
 
 function clampTerminalColumns(value) {
@@ -432,7 +397,7 @@ async function ensureRegistered(state) {
 		operatingSystem: `${os.platform()} ${os.release()}`,
 		architecture: os.arch(),
 		dockerVersion,
-		agentUrl: getAgentListenUrl(),
+		agentUrl: getAdvertisedAgentUrl(),
 	};
 
 	const response = await requestText(`${managerUrl}/api/agent/register`, {
@@ -467,7 +432,7 @@ async function heartbeat(state, snapshot) {
 			Authorization: `Bearer ${state.agentToken}`,
 		},
 		body: JSON.stringify({
-			agentUrl: getAgentListenUrl(),
+			agentUrl: getAdvertisedAgentUrl(),
 			snapshot,
 		}),
 	});

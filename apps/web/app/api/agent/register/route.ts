@@ -19,8 +19,8 @@ export async function POST(request: Request) {
 			architecture: payload.architecture ? String(payload.architecture) : undefined,
 			dockerVersion: payload.dockerVersion ? String(payload.dockerVersion) : undefined,
 			agentUrl:
-				(payload.agentUrl ? String(payload.agentUrl) : null) ||
 				inferAgentUrlFromHeaders(request.headers) ||
+				(payload.agentUrl ? String(payload.agentUrl) : null) ||
 				undefined,
 			managerUrl: inferRequestManagerUrl(request.headers) || undefined,
 		});

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { inferAgentUrlFromHeaders } from "@/lib/manager-url";
 import { heartbeatAgent } from "@/lib/platform";
 
 export const runtime = "nodejs";
@@ -23,7 +24,7 @@ export async function POST(request: Request) {
 		await heartbeatAgent(
 			token,
 			payload?.snapshot || undefined,
-			payload?.agentUrl ? String(payload.agentUrl) : undefined,
+			inferAgentUrlFromHeaders(request.headers) || undefined,
 		);
 		return NextResponse.json({ ok: true });
 	} catch (error) {

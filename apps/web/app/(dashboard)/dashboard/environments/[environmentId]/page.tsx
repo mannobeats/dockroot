@@ -63,7 +63,7 @@ export default async function EnvironmentDetailPage({
 	const runtimeEndpoint =
 		environment.kind === "local"
 			? detectedManagerUrl || environment.managerUrl || "Not configured"
-			: environment.managerUrl || "Will be auto-detected after the agent registers";
+			: environment.managerUrl || "Not configured";
 
 	return (
 		<div className="animate-in space-y-5">
@@ -125,7 +125,7 @@ export default async function EnvironmentDetailPage({
 				</div>
 				<form
 					action={updateEnvironmentAction}
-					className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_auto]"
+					className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.2fr)_auto]"
 				>
 					<input type="hidden" name="environmentId" value={environment.id} />
 					<Field>
@@ -141,6 +141,17 @@ export default async function EnvironmentDetailPage({
 							placeholder="Short description for this environment"
 						/>
 					</Field>
+					{environment.kind === "agent" ? (
+						<Field>
+							<FieldLabel htmlFor="environment-agent-url">Agent URL</FieldLabel>
+							<Input
+								id="environment-agent-url"
+								name="agentUrl"
+								defaultValue={environment.managerUrl || ""}
+								placeholder="http://remote-host:9095"
+							/>
+						</Field>
+					) : null}
 					<div className="flex items-end">
 						<FormSubmitButton label="Save changes" pendingLabel="Saving..." size="sm" />
 					</div>
