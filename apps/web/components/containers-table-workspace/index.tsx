@@ -142,31 +142,35 @@ export function ContainersTableWorkspace({
 				</DataTableHeader>
 				<DataTableBody>
 					{containers.length ? (
-						containers.map((container) => (
-							<ContainersTableRow
-								key={`${container.ID}-${container.Names}`}
-								container={container}
-								environmentId={environmentId}
-								managerUrl={managerUrl}
-								isVisible={isVisible}
-								isProtected={protectedSet.has(container.ID)}
-								protectedLabel={protectedContainerLabels[container.ID]}
-								isSelected={Boolean(selectedIds[container.ID])}
-								onSelectChange={(checked) =>
-									setSelectedIds((current) => ({
-										...current,
-										[container.ID]: checked,
-									}))
-								}
-								controlContainerAction={controlContainerAction}
-								checkContainerUpdatesAction={checkContainerUpdatesAction}
-								applyContainerUpdatesAction={applyContainerUpdatesAction}
-								setContainerUpdatePolicyAction={setContainerUpdatePolicyAction}
-								updatePolicyMap={updatePolicyMap}
-								updateStateMap={updateStateMap}
-								containerStats={containerStats}
-							/>
-						))
+						containers.map((container) => {
+							const containerName = container.Names || container.Name || "";
+							const rowStatsKey = containerName.replace(/^\//, "");
+							return (
+								<ContainersTableRow
+									key={`${container.ID}-${container.Names}`}
+									container={container}
+									environmentId={environmentId}
+									managerUrl={managerUrl}
+									isVisible={isVisible}
+									isProtected={protectedSet.has(container.ID)}
+									protectedLabel={protectedContainerLabels[container.ID]}
+									isSelected={Boolean(selectedIds[container.ID])}
+									onSelectChange={(checked) =>
+										setSelectedIds((current) => ({
+											...current,
+											[container.ID]: checked,
+										}))
+									}
+									controlContainerAction={controlContainerAction}
+									checkContainerUpdatesAction={checkContainerUpdatesAction}
+									applyContainerUpdatesAction={applyContainerUpdatesAction}
+									setContainerUpdatePolicyAction={setContainerUpdatePolicyAction}
+									updatePolicyMap={updatePolicyMap}
+									updateStateMap={updateStateMap}
+									rowStats={containerStats[rowStatsKey]}
+								/>
+							);
+						})
 					) : (
 						<DataTableEmpty colSpan={visibleCount}>
 							No containers matched the current filters.

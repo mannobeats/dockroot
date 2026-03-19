@@ -2,7 +2,13 @@ import "server-only";
 
 import { containerMetricSamples, db, environmentMetricSamples } from "@dockroot/db";
 import { and, asc, desc, eq, gte, or } from "drizzle-orm";
-import { addMinutes, buildSeries, buildThroughputSeries, fromTenths } from "./helpers";
+import {
+	addMinutes,
+	buildSeries,
+	buildThroughputSeries,
+	downsampleSeries,
+	fromTenths,
+} from "./helpers";
 import type { MetricsSeriesResult } from "./types";
 
 const metricsSeriesCache = new Map<string, { data: MetricsSeriesResult; expiresAt: number }>();
@@ -27,6 +33,8 @@ export async function getEnvironmentMetricsSeries(
 
 	const latest = rows.at(-1) || null;
 
+	const MAX_CHART_POINTS = 90;
+
 	const result: MetricsSeriesResult = {
 		available: rows.length > 0,
 		cpuPercent: fromTenths(latest?.cpuPercentTenths ?? null),
@@ -36,8 +44,14 @@ export async function getEnvironmentMetricsSeries(
 		imageCount: latest?.imageCount ?? null,
 		memoryUsedBytes: latest?.memoryUsedBytes ?? null,
 		memoryTotalBytes: latest?.memoryTotalBytes ?? null,
-		cpuSeries: buildSeries(rows, (row) => fromTenths(row.cpuPercentTenths)),
-		memorySeries: buildSeries(rows, (row) => fromTenths(row.memoryPercentTenths)),
+		cpuSeries: downsampleSeries(
+			buildSeries(rows, (row) => fromTenths(row.cpuPercentTenths)),
+			MAX_CHART_POINTS,
+		),
+		memorySeries: downsampleSeries(
+			buildSeries(rows, (row) => fromTenths(row.memoryPercentTenths)),
+			MAX_CHART_POINTS,
+		),
 	};
 
 	metricsSeriesCache.set(environmentId, {
@@ -130,9 +144,10 @@ export async function getContainerRuntimeMetrics(input: {
 		};
 	}
 
+	const MAX_CHART_POINTS = 90;
 	const latest = rows.at(-1) || null;
-	const rxSeries = buildThroughputSeries(rows, "rxBytesTotal");
-	const txSeries = buildThroughputSeries(rows, "txBytesTotal");
+	const rxSeries = downsampleSeries(buildThroughputSeries(rows, "rxBytesTotal"), MAX_CHART_POINTS);
+	const txSeries = downsampleSeries(buildThroughputSeries(rows, "txBytesTotal"), MAX_CHART_POINTS);
 
 	return {
 		available: true,
@@ -141,8 +156,14 @@ export async function getContainerRuntimeMetrics(input: {
 		memoryLimitBytes: latest?.memoryLimitBytes ?? null,
 		rxBytes: rxSeries.at(-1)?.value ?? null,
 		txBytes: txSeries.at(-1)?.value ?? null,
-		cpuSeries: buildSeries(rows, (row) => fromTenths(row.cpuPercentTenths)),
-		memorySeries: buildSeries(rows, (row) => Number(row.memoryUsageBytes ?? 0)),
+		cpuSeries: downsampleSeries(
+			buildSeries(rows, (row) => fromTenths(row.cpuPercentTenths)),
+			MAX_CHART_POINTS,
+		),
+		memorySeries: downsampleSeries(
+			buildSeries(rows, (row) => Number(row.memoryUsageBytes ?? 0)),
+			MAX_CHART_POINTS,
+		),
 		rxSeries,
 		txSeries,
 	};

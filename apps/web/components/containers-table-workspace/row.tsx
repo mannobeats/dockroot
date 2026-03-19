@@ -2,6 +2,7 @@
 
 import { Lock } from "lucide-react";
 import Link from "next/link";
+import { memo } from "react";
 import { ContainersActionsCell } from "@/components/containers-table-workspace/actions-cell";
 import type {
 	ColumnId,
@@ -15,7 +16,6 @@ import { ContainersUpdatesCell } from "@/components/containers-table-workspace/u
 import {
 	CpuBar,
 	extractUptime,
-	getStatsForContainer,
 	latestRefForMajorUpgrade,
 	MemoryBar,
 	summarizeComposeProject,
@@ -41,10 +41,10 @@ type ContainersTableRowProps = {
 	setContainerUpdatePolicyAction: FormAction;
 	updatePolicyMap: UpdatePolicyRecord;
 	updateStateMap: UpdateStateRecord;
-	containerStats: Record<string, ContainerStats>;
+	rowStats: ContainerStats | undefined;
 };
 
-export function ContainersTableRow({
+export const ContainersTableRow = memo(function ContainersTableRow({
 	container,
 	environmentId,
 	managerUrl,
@@ -59,7 +59,7 @@ export function ContainersTableRow({
 	setContainerUpdatePolicyAction,
 	updatePolicyMap,
 	updateStateMap,
-	containerStats,
+	rowStats,
 }: ContainersTableRowProps) {
 	const state = (container.State || "").toLowerCase();
 	const isRunning = state === "running";
@@ -79,7 +79,11 @@ export function ContainersTableRow({
 		(updateState?.majorTargetTag || "").trim() ||
 		tagFromImageRef(majorTargetImageRef || "") ||
 		"latest";
-	const { stats, cpuPercent, memory } = getStatsForContainer(containerName, containerStats);
+	const stats = rowStats || {};
+	const cpuPercent = Number.parseFloat((stats.CPUPerc || "0").replace("%", "")) || 0;
+	const memPercent = Number.parseFloat((stats.MemPerc || "0").replace("%", "")) || 0;
+	const memUsageParts = (stats.MemUsage || "").split("/");
+	const memory = { usage: memUsageParts[0]?.trim() || "—", percent: memPercent };
 	const uptime = isRunning ? extractUptime(container.Status || "") : "—";
 
 	return (
@@ -201,4 +205,4 @@ export function ContainersTableRow({
 			) : null}
 		</DataTableRow>
 	);
-}
+});

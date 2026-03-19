@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ContainerStats, RuntimePayload } from "@/components/containers-table-workspace/types";
-import { getSocket } from "@/lib/socket-client";
+import { getSocket, subscribeMetrics, unsubscribeMetrics } from "@/lib/socket-client";
+
+const THROTTLE_MS = 1_000;
 
 export function useRuntimeMetrics(input: {
 	environmentId: string;
@@ -13,8 +15,22 @@ export function useRuntimeMetrics(input: {
 	const [watchStackId, setWatchStackId] = useState(input.initialWatchStackId || "");
 	const [logDockOpen, setLogDockOpen] = useState(Boolean(input.initialWatchStackId));
 
+	const pendingRef = useRef<Record<string, ContainerStats> | null>(null);
+	const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const lastFlushRef = useRef(0);
+
+	const flushPending = useCallback(() => {
+		timerRef.current = null;
+		if (pendingRef.current) {
+			setContainerStats(pendingRef.current);
+			pendingRef.current = null;
+			lastFlushRef.current = Date.now();
+		}
+	}, []);
+
 	useEffect(() => {
 		const client = getSocket();
+		subscribeMetrics();
 
 		const onMetrics = (payload: RuntimePayload) => {
 			if (payload.environmentId) {
@@ -38,7 +54,15 @@ export function useRuntimeMetrics(input: {
 					};
 				}
 			}
-			setContainerStats(next);
+
+			pendingRef.current = next;
+
+			const elapsed = Date.now() - lastFlushRef.current;
+			if (elapsed >= THROTTLE_MS) {
+				flushPending();
+			} else if (!timerRef.current) {
+				timerRef.current = setTimeout(flushPending, THROTTLE_MS - elapsed);
+			}
 		};
 
 		const onDeploymentUpdate = (event: { stackId?: string; status?: string }) => {
@@ -54,8 +78,13 @@ export function useRuntimeMetrics(input: {
 		return () => {
 			client.off("runtime:metrics", onMetrics);
 			client.off("deployment:update", onDeploymentUpdate);
+			unsubscribeMetrics();
+			if (timerRef.current) {
+				clearTimeout(timerRef.current);
+				timerRef.current = null;
+			}
 		};
-	}, [input.environmentId, input.environmentKind]);
+	}, [input.environmentId, input.environmentKind, flushPending]);
 
 	return {
 		containerStats,

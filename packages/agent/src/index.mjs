@@ -12,6 +12,11 @@ import {
 } from "./jobs.mjs";
 import { startHttpServer } from "./server.mjs";
 import { ensureDirectories, loadState } from "./utils.mjs";
+import {
+	isAgentWebSocketConnected,
+	startAgentWebSocket,
+	stopAgentWebSocket,
+} from "./ws-connection.mjs";
 
 async function loop() {
 	let state = await loadState();
@@ -21,6 +26,13 @@ async function loop() {
 	while (true) {
 		try {
 			state = await ensureRegistered(state);
+
+			// Start WebSocket connection if not already connected
+			if (!isAgentWebSocketConnected()) {
+				startAgentWebSocket(state);
+			}
+
+			// Always send heartbeat via HTTP (keeps agent status healthy in DB)
 			const snapshot = await getSnapshot();
 			await heartbeat(state, snapshot);
 
@@ -53,6 +65,7 @@ for (const signal of ["SIGINT", "SIGTERM"]) {
 	process.once(signal, () => {
 		console.log(`[agent] Received ${signal}, shutting down...`);
 		stopAgentDockerStatsStream();
+		stopAgentWebSocket();
 		process.exit(0);
 	});
 }

@@ -144,3 +144,21 @@ export function buildThroughputSeries(
 	}
 	return points;
 }
+
+/**
+ * Downsample a time series to at most `maxPoints` entries using LTTB-like
+ * selection: keep first, last, and evenly-spaced samples in between.
+ */
+export function downsampleSeries<T>(series: T[], maxPoints: number): T[] {
+	if (series.length <= maxPoints) {
+		return series;
+	}
+
+	const result: T[] = [series[0]];
+	const step = (series.length - 1) / (maxPoints - 1);
+	for (let i = 1; i < maxPoints - 1; i++) {
+		result.push(series[Math.round(i * step)]);
+	}
+	result.push(series[series.length - 1]);
+	return result;
+}

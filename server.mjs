@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import postgres from "postgres";
 import next from "next";
 import { Server as SocketIOServer } from "socket.io";
+import msgpackParser from "socket.io-msgpack-parser";
 import { applyRuntimeBootstrap } from "./scripts/bootstrap-runtime.mjs";
 import {
 	closeLocalTerminalSession,
@@ -20,6 +21,7 @@ import { validateRuntimeEnv } from "./scripts/runtime-env.mjs";
 import { createRuntimeActionJournal } from "./server/runtime/runtime-actions.mjs";
 import { createDockerEventService } from "./server/runtime/docker-events.mjs";
 import { createRuntimeMetricsService } from "./server/runtime/runtime-metrics.mjs";
+import { createAgentSocketRuntime } from "./server/socket/agent-runtime.mjs";
 import { createSocketRuntimeService } from "./server/socket/socket-runtime.mjs";
 
 await applyRuntimeBootstrap();
@@ -320,6 +322,7 @@ const server = createServer(async (req, res) => {
 const io = new SocketIOServer(server, {
 	path: "/socket.io",
 	cors: getCorsConfig(),
+	parser: msgpackParser,
 });
 
 runtimeActionJournal = createRuntimeActionJournal({
@@ -327,6 +330,16 @@ runtimeActionJournal = createRuntimeActionJournal({
 	sql,
 	isPrivilegedRole,
 	maxEvents: MAX_RUNTIME_ACTION_EVENTS,
+});
+
+const runtimeMetricsService = createRuntimeMetricsService({
+	io,
+	sql,
+	dockerBinary,
+	execFileAsync,
+	isPrivilegedRole,
+	getSocketRuntimeMetrics: () => socketRuntimeService?.getSocketRuntimeMetrics?.() || {},
+	isShuttingDown: () => shuttingDown,
 });
 
 socketRuntimeService = createSocketRuntimeService({
@@ -338,22 +351,16 @@ socketRuntimeService = createSocketRuntimeService({
 	isPrivilegedRole,
 	isTrustedOrigin,
 	emitRuntimeAction: runtimeActionJournal.emitRuntimeAction,
+	metricsSubscriptionCallbacks: {
+		addSubscriber: runtimeMetricsService.addMetricsSubscriber,
+		removeSubscriber: runtimeMetricsService.removeMetricsSubscriber,
+	},
 	maxSocketSessionsPerUser: MAX_SOCKET_SESSIONS_PER_USER,
 	maxSocketConnectionsPerUser: MAX_SOCKET_CONNECTIONS_PER_USER,
 	socketIdleTimeoutMs: SOCKET_IDLE_TIMEOUT_MS,
 	logSessionKillTimeoutMs: LOG_SESSION_KILL_TIMEOUT_MS,
 });
 socketRuntimeService.attach();
-
-const runtimeMetricsService = createRuntimeMetricsService({
-	io,
-	sql,
-	dockerBinary,
-	execFileAsync,
-	isPrivilegedRole,
-	getSocketRuntimeMetrics: () => socketRuntimeService.getSocketRuntimeMetrics(),
-	isShuttingDown: () => shuttingDown,
-});
 
 const dockerEventService = createDockerEventService({
 	io,
@@ -362,7 +369,36 @@ const dockerEventService = createDockerEventService({
 	isShuttingDown: () => shuttingDown,
 });
 
+const agentSocketRuntime = createAgentSocketRuntime({
+	io,
+	sql,
+	isShuttingDown: () => shuttingDown,
+	persistRuntimeSnapshotMetrics: async (input) => {
+		// Lazy import to use the Next.js server-side module
+		try {
+			const response = await fetch(`${getAppBaseUrl()}/api/internal/agent-metrics`, {
+				method: "POST",
+				headers: {
+					"content-type": "application/json",
+					"x-dockroot-internal-token": process.env.DOCKROOT_TOKEN_PEPPER || "",
+				},
+				body: JSON.stringify(input),
+			});
+			if (!response.ok) {
+				console.error("[agent:ws] Failed to persist agent metrics via API:", response.status);
+			}
+		} catch (error) {
+			console.error("[agent:ws] Agent metrics persistence error:", error?.message);
+		}
+	},
+	emitRealtime: (event, payload) => {
+		io.emit(event, payload);
+	},
+});
+agentSocketRuntime.attach();
+
 globalThis.__dockroot_io = io;
+globalThis.__dockroot_agent_socket_runtime = agentSocketRuntime;
 globalThis.__dockroot_get_ws_metrics = () => socketRuntimeService.getSocketRuntimeMetrics();
 globalThis.__dockroot_register_action = dockerEventService.registerDockrootAction;
 

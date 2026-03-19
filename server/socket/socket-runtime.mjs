@@ -13,6 +13,7 @@ export function createSocketRuntimeService({
 	isPrivilegedRole,
 	isTrustedOrigin,
 	emitRuntimeAction,
+	metricsSubscriptionCallbacks = null,
 	maxSocketSessionsPerUser = 5,
 	maxSocketConnectionsPerUser = 12,
 	socketIdleTimeoutMs = 10 * 60 * 1000,
@@ -127,6 +128,16 @@ export function createSocketRuntimeService({
 				}
 			});
 
+			socket.on("metrics:subscribe", () => {
+				if (socket.data?.role && isPrivilegedRole(socket.data.role)) {
+					metricsSubscriptionCallbacks?.addSubscriber(socket);
+				}
+			});
+
+			socket.on("metrics:unsubscribe", () => {
+				metricsSubscriptionCallbacks?.removeSubscriber(socket);
+			});
+
 			terminalRuntime.registerSocketHandlers({ socket, authCookie });
 			logRuntime.registerSocketHandlers(socket);
 
@@ -137,6 +148,7 @@ export function createSocketRuntimeService({
 					socketId: socket.id,
 					environmentId: null,
 				});
+				metricsSubscriptionCallbacks?.removeSubscriber(socket);
 				terminalRuntime.closeSocketTerminalSessions(socket.id);
 				logRuntime.closeSocketLogSessions(socket.id);
 			});

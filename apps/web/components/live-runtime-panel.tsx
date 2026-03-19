@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Area, AreaChart, CartesianGrid, Tooltip, XAxis, YAxis } from "recharts";
 import { ChartFrame } from "@/components/chart-frame";
 import { Panel } from "@/components/ui/panel";
-import { getSocket } from "@/lib/socket-client";
+import { getSocket, subscribeMetrics, unsubscribeMetrics } from "@/lib/socket-client";
 
 function parsePercent(value: string | undefined) {
 	return Number.parseFloat((value || "0").replace("%", "")) || 0;
@@ -23,6 +23,8 @@ interface RuntimePayload {
 		memoryPercent?: number | null;
 	};
 }
+
+type HistoryEntry = { time: string; cpu: number; memory: number; source: "native" | "docker" };
 
 type ChartTooltipEntry = {
 	name?: string;
@@ -54,15 +56,30 @@ const CustomTooltip = ({ active, payload, label }: ChartTooltipProps) => {
 	);
 };
 
+const MAX_HISTORY = 60;
+const THROTTLE_MS = 1_000;
+
 export function LiveRuntimePanel() {
 	const [mounted, setMounted] = useState(false);
-	const [history, setHistory] = useState<
-		Array<{ time: string; cpu: number; memory: number; source: "native" | "docker" }>
-	>([]);
+	const [history, setHistory] = useState<HistoryEntry[]>([]);
+	const pendingRef = useRef<HistoryEntry | null>(null);
+	const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const lastFlushRef = useRef(0);
+
+	const flushPending = useCallback(() => {
+		timerRef.current = null;
+		if (pendingRef.current) {
+			const entry = pendingRef.current;
+			pendingRef.current = null;
+			lastFlushRef.current = Date.now();
+			setHistory((current) => [...current.slice(-(MAX_HISTORY - 1)), entry]);
+		}
+	}, []);
 
 	useEffect(() => {
 		setMounted(true);
 		const client = getSocket();
+		subscribeMetrics();
 
 		const onMetrics = (payload: RuntimePayload) => {
 			const fallbackCpu =
@@ -77,26 +94,36 @@ export function LiveRuntimePanel() {
 			const memory = Number.isFinite(hostMemory) ? Number(hostMemory) : fallbackMemory;
 			const source: "native" | "docker" = payload.host?.source === "native" ? "native" : "docker";
 
-			setHistory((current) => [
-				...current.slice(-11),
-				{
-					time: new Date(payload.at).toLocaleTimeString([], {
-						hour: "2-digit",
-						minute: "2-digit",
-					}),
-					cpu: Number(cpu.toFixed(1)),
-					memory: Number(memory.toFixed(1)),
-					source,
-				},
-			]);
+			const entry: HistoryEntry = {
+				time: new Date(payload.at).toLocaleTimeString([], {
+					hour: "2-digit",
+					minute: "2-digit",
+				}),
+				cpu: Number(cpu.toFixed(1)),
+				memory: Number(memory.toFixed(1)),
+				source,
+			};
+
+			pendingRef.current = entry;
+			const elapsed = Date.now() - lastFlushRef.current;
+			if (elapsed >= THROTTLE_MS) {
+				flushPending();
+			} else if (!timerRef.current) {
+				timerRef.current = setTimeout(flushPending, THROTTLE_MS - elapsed);
+			}
 		};
 
 		client.on("runtime:metrics", onMetrics);
 
 		return () => {
 			client.off("runtime:metrics", onMetrics);
+			unsubscribeMetrics();
+			if (timerRef.current) {
+				clearTimeout(timerRef.current);
+				timerRef.current = null;
+			}
 		};
-	}, []);
+	}, [flushPending]);
 
 	const latest = useMemo(() => history.at(-1), [history]);
 

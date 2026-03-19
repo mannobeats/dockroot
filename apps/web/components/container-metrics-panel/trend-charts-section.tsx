@@ -1,3 +1,6 @@
+"use client";
+
+import { useMemo } from "react";
 import { Area, AreaChart, CartesianGrid, Tooltip, XAxis, YAxis } from "recharts";
 import { ChartFrame } from "@/components/chart-frame";
 import { Panel } from "@/components/ui/panel";
@@ -67,6 +70,27 @@ function TrendPanel({
 }
 
 export function ContainerMetricsTrendChartsSection({ metrics }: { metrics: ContainerMetrics }) {
+	const cpuData = useMemo(
+		() => metrics.cpuSeries.map((point) => ({ time: point.time, value: point.value })),
+		[metrics.cpuSeries],
+	);
+
+	const memoryData = useMemo(
+		() =>
+			metrics.memorySeries.map((point) => ({ time: point.time, value: point.value / 1024 / 1024 })),
+		[metrics.memorySeries],
+	);
+
+	const rxData = useMemo(
+		() => metrics.rxSeries.map((point) => ({ time: point.time, value: point.value / 1024 })),
+		[metrics.rxSeries],
+	);
+
+	const txData = useMemo(
+		() => metrics.txSeries.map((point) => ({ time: point.time, value: point.value / 1024 })),
+		[metrics.txSeries],
+	);
+
 	return (
 		<div className="grid gap-5 xl:grid-cols-2">
 			<TrendPanel
@@ -74,10 +98,7 @@ export function ContainerMetricsTrendChartsSection({ metrics }: { metrics: Conta
 				gradientId="container-cpu-fill"
 				strokeColor="var(--foreground)"
 				stopColor="var(--foreground)"
-				data={metrics.cpuSeries.map((point) => ({
-					time: point.time,
-					value: point.value,
-				}))}
+				data={cpuData}
 				valueKey="value"
 				yTickFormatter={(value) => `${value.toFixed(1)}%`}
 				tooltipFormatter={(value) => `${value.toFixed(2)}%`}
@@ -87,10 +108,7 @@ export function ContainerMetricsTrendChartsSection({ metrics }: { metrics: Conta
 				gradientId="container-memory-fill"
 				strokeColor="var(--success)"
 				stopColor="var(--success)"
-				data={metrics.memorySeries.map((point) => ({
-					time: point.time,
-					value: point.value / 1024 / 1024,
-				}))}
+				data={memoryData}
 				valueKey="value"
 				yTickFormatter={(value) => `${value.toFixed(0)} MB`}
 				tooltipFormatter={(value) => `${value.toFixed(1)} MB`}
@@ -100,10 +118,7 @@ export function ContainerMetricsTrendChartsSection({ metrics }: { metrics: Conta
 				gradientId="container-rx-fill"
 				strokeColor="#0ea5e9"
 				stopColor="#0ea5e9"
-				data={metrics.rxSeries.map((point) => ({
-					time: point.time,
-					value: point.value / 1024,
-				}))}
+				data={rxData}
 				valueKey="value"
 				yTickFormatter={(value) => `${value.toFixed(0)} KB/s`}
 				tooltipFormatter={(value) => `${value.toFixed(1)} KB/s`}
@@ -113,10 +128,7 @@ export function ContainerMetricsTrendChartsSection({ metrics }: { metrics: Conta
 				gradientId="container-tx-fill"
 				strokeColor="#f59e0b"
 				stopColor="#f59e0b"
-				data={metrics.txSeries.map((point) => ({
-					time: point.time,
-					value: point.value / 1024,
-				}))}
+				data={txData}
 				valueKey="value"
 				yTickFormatter={(value) => `${value.toFixed(0)} KB/s`}
 				tooltipFormatter={(value) => `${value.toFixed(1)} KB/s`}

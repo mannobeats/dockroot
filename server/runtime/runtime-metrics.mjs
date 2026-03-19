@@ -2,7 +2,9 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import os from "node:os";
 
-const RESOURCE_COUNTS_INTERVAL_MS = 15_000;
+const RESOURCE_COUNTS_INTERVAL_MS = 30_000;
+const BROADCAST_THROTTLE_MS = 2_000;
+const METRICS_ROOM = "metrics:local";
 
 export function createRuntimeMetricsService({
 	io,
@@ -18,6 +20,42 @@ export function createRuntimeMetricsService({
 	let latestContainerStats = [];
 	let latestResourceCounts = null;
 	let lastResourceCountsFetchAt = 0;
+	let subscriberCount = 0;
+	let broadcastTimer = null;
+	let broadcastPending = false;
+
+	// --- Delta tracking for network I/O ---
+	const prevNetIo = new Map();
+
+	function computeNetDeltas(statsRows) {
+		const now = Date.now();
+		const result = [];
+		for (const row of statsRows) {
+			const name = String(row.Name || row.ID || "").replace(/^\//, "");
+			const netIo = parseNetIo(row.NetIO);
+			const prev = prevNetIo.get(name);
+			let rxPerSec = 0;
+			let txPerSec = 0;
+			if (prev && netIo.rxBytesTotal !== null && netIo.txBytesTotal !== null) {
+				const elapsedSec = Math.max((now - prev.at) / 1000, 1);
+				rxPerSec = Math.max(0, (netIo.rxBytesTotal - prev.rx) / elapsedSec);
+				txPerSec = Math.max(0, (netIo.txBytesTotal - prev.tx) / elapsedSec);
+			}
+			if (netIo.rxBytesTotal !== null && netIo.txBytesTotal !== null) {
+				prevNetIo.set(name, {
+					rx: netIo.rxBytesTotal,
+					tx: netIo.txBytesTotal,
+					at: now,
+				});
+			}
+			result.push({
+				name,
+				rxPerSec: Math.round(rxPerSec),
+				txPerSec: Math.round(txPerSec),
+			});
+		}
+		return result;
+	}
 
 	function startDockerStatsStream() {
 		if (dockerStatsProcess) {
@@ -52,7 +90,7 @@ export function createRuntimeMetricsService({
 
 			if (rows.length > 0) {
 				latestContainerStats = rows;
-				void broadcastMetrics();
+				scheduleBroadcast();
 			}
 		});
 
@@ -76,6 +114,37 @@ export function createRuntimeMetricsService({
 			dockerStatsProcess.kill("SIGTERM");
 			dockerStatsProcess = null;
 		}
+		if (broadcastTimer) {
+			clearTimeout(broadcastTimer);
+			broadcastTimer = null;
+		}
+	}
+
+	function scheduleBroadcast() {
+		if (subscriberCount <= 0) {
+			return;
+		}
+		broadcastPending = true;
+		if (!broadcastTimer) {
+			broadcastTimer = setTimeout(() => {
+				broadcastTimer = null;
+				if (broadcastPending) {
+					broadcastPending = false;
+					void broadcastMetrics();
+				}
+			}, BROADCAST_THROTTLE_MS);
+			broadcastTimer.unref?.();
+		}
+	}
+
+	function addMetricsSubscriber(socket) {
+		socket.join(METRICS_ROOM);
+		subscriberCount += 1;
+	}
+
+	function removeMetricsSubscriber(socket) {
+		socket.leave(METRICS_ROOM);
+		subscriberCount = Math.max(0, subscriberCount - 1);
 	}
 
 	async function refreshResourceCounts() {
@@ -128,8 +197,14 @@ export function createRuntimeMetricsService({
 	}
 
 	async function broadcastMetrics() {
+		if (subscriberCount <= 0) {
+			void persistLocalRuntimeSamples({ containers: latestContainerStats, host: null });
+			return;
+		}
+
 		const statsRows = latestContainerStats;
 		const resourceCounts = await refreshResourceCounts();
+		const netDeltas = computeNetDeltas(statsRows);
 
 		const cpuPercent = clampPercent(statsRows.reduce((sum, row) => sum + (parsePercent(row.CPUPerc) || 0), 0));
 		const memoryPercent = clampPercent(
@@ -148,26 +223,21 @@ export function createRuntimeMetricsService({
 			totalMemoryGb: Number((os.totalmem() / 1024 / 1024 / 1024).toFixed(1)),
 			freeMemoryGb: Number((os.freemem() / 1024 / 1024 / 1024).toFixed(1)),
 			counts: resourceCounts?.counts || { containers: 0, runningContainers: 0, images: 0, volumes: 0, networks: 0 },
-			containerStats: statsRows,
 			containerRows: resourceCounts?.containerRows || [],
 		};
 
-		const metrics = { containers: statsRows, host };
 		const ws = getSocketRuntimeMetrics();
 
-		for (const [socketId, socket] of io.of("/").sockets) {
-			if (socket.data?.role && isPrivilegedRole(socket.data.role)) {
-				io.to(socketId).emit("runtime:metrics", {
-					environmentId: "local",
-					at: Date.now(),
-					containers: statsRows,
-					host,
-					ws,
-				});
-			}
-		}
+		io.to(METRICS_ROOM).emit("runtime:metrics", {
+			environmentId: "local",
+			at: Date.now(),
+			containers: statsRows,
+			host,
+			ws,
+			netDeltas,
+		});
 
-		void persistLocalRuntimeSamples(metrics);
+		void persistLocalRuntimeSamples({ containers: statsRows, host, containerRows: resourceCounts?.containerRows });
 	}
 
 	async function getRuntimeMetrics() {
@@ -193,7 +263,6 @@ export function createRuntimeMetricsService({
 				totalMemoryGb: Number((os.totalmem() / 1024 / 1024 / 1024).toFixed(1)),
 				freeMemoryGb: Number((os.freemem() / 1024 / 1024 / 1024).toFixed(1)),
 				counts: resourceCounts?.counts || { containers: 0, runningContainers: 0, images: 0, volumes: 0, networks: 0 },
-				containerStats: statsRows,
 				containerRows: resourceCounts?.containerRows || [],
 			},
 		};
@@ -267,12 +336,12 @@ export function createRuntimeMetricsService({
 					)
 				`;
 
-				for (const statsRow of metrics.host.containerStats || []) {
+				for (const statsRow of metrics.containers || []) {
 					const memory = parseMemoryUsage(statsRow.MemUsage);
 					const netIo = parseNetIo(statsRow.NetIO);
 					const containerName = String(statsRow.Name || statsRow.ID || "").replace(/^\//, "");
 					const containerRow =
-						(metrics.host.containerRows || []).find(
+						(metrics.containerRows || []).find(
 							(row) => row.ID === statsRow.ID || String(row.Names || "").replace(/^\//, "") === containerName,
 						) || {};
 					await sql`
@@ -326,6 +395,9 @@ export function createRuntimeMetricsService({
 		resourceCountsIntervalMs: RESOURCE_COUNTS_INTERVAL_MS,
 		startDockerStatsStream,
 		stopDockerStatsStream,
+		addMetricsSubscriber,
+		removeMetricsSubscriber,
+		metricsRoom: METRICS_ROOM,
 	};
 }
 

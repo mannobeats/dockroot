@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { DashboardAttentionBanner } from "@/app/(dashboard)/dashboard/_components/dashboard-attention-banner";
 import { DashboardHeader } from "@/app/(dashboard)/dashboard/_components/dashboard-header";
 import { DashboardInfrastructurePanel } from "@/app/(dashboard)/dashboard/_components/dashboard-infrastructure-panel";
@@ -11,6 +12,7 @@ import {
 } from "@/app/(dashboard)/dashboard/_lib/dashboard-page-utils";
 import { DashboardStatusPanel } from "@/components/dashboard-status-panel";
 import { RuntimeUnavailablePanel } from "@/components/runtime-unavailable-panel";
+import { Panel } from "@/components/ui/panel";
 import { isPrivilegedRole, requireUserSession } from "@/lib/authorization";
 import {
 	getRuntimeConnectionMessage,
@@ -21,15 +23,37 @@ import {
 import { getDashboardData } from "@/lib/platform";
 import { getEnvironmentMetricsSeries, getRuntimeCollectorHealth } from "@/lib/runtime-metrics";
 
-export default async function DashboardPage({
-	searchParams,
+function MetricsStripSkeleton() {
+	return (
+		<div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+			{Array.from({ length: 5 }, (_, i) => (
+				<Panel key={i} padding="md" className="animate-pulse">
+					<div className="h-3 w-16 rounded bg-foreground/5" />
+					<div className="mt-2 h-6 w-10 rounded bg-foreground/5" />
+				</Panel>
+			))}
+		</div>
+	);
+}
+
+function InfrastructureSkeleton() {
+	return (
+		<Panel padding="md" className="min-w-0 animate-pulse">
+			<div className="h-3 w-24 rounded bg-foreground/5" />
+			<div className="mt-3 h-36 rounded bg-foreground/5" />
+		</Panel>
+	);
+}
+
+async function DashboardInfrastructureSection({
+	userId,
+	includeRuntime,
+	environment,
 }: {
-	searchParams: Promise<{ environment?: string }>;
+	userId: string;
+	includeRuntime: boolean;
+	environment: { id: string; name: string; status: string; kind: "local" | "agent" };
 }) {
-	const { session, userId, role } = await requireUserSession();
-	const params = await searchParams;
-	const includeRuntime = isPrivilegedRole(role);
-	const environment = await resolveRuntimeEnvironment(userId, params.environment);
 	let runtimeIssue: string | null = null;
 	const [data, runtimeResult, metrics, targets] = await Promise.all([
 		getDashboardData(userId, { includeRuntime }),
@@ -123,8 +147,6 @@ export default async function DashboardPage({
 			? Number(((hostTotalMemoryGb * memoryUsedPercent) / 100).toFixed(1))
 			: null;
 
-	const greeting = getDashboardGreeting();
-
 	const attentionItems = buildAttentionItems({
 		recentDeployments: data.recentDeployments,
 		collectorHealth,
@@ -132,21 +154,13 @@ export default async function DashboardPage({
 	});
 
 	const activityLink = `/dashboard/activity?environment=${environment.id}`;
-
 	const serializedDeployments = serializeRecentDeployments(data.recentDeployments);
 
 	const containerCount = includeRuntime && runtime ? runtime.snapshot.counts.containers : null;
 	const imageCount = includeRuntime && runtime ? runtime.snapshot.counts.images : null;
 
 	return (
-		<div className="animate-in space-y-5">
-			<DashboardHeader
-				userName={session.user.name}
-				greeting={greeting}
-				environmentName={environment.name}
-				environmentId={environment.id}
-			/>
-
+		<>
 			<DashboardAttentionBanner items={attentionItems} />
 
 			{runtimeIssue ? (
@@ -164,7 +178,6 @@ export default async function DashboardPage({
 				imageCount={imageCount}
 			/>
 
-			{/* Row 4: Two-column main content */}
 			<div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.9fr)]">
 				<DashboardInfrastructurePanel
 					includeRuntime={includeRuntime}
@@ -175,8 +188,6 @@ export default async function DashboardPage({
 					memoryUsed={memoryUsed}
 					dataDir={data.dataDir}
 				/>
-
-				{/* Right: Status & Activity tabs */}
 				<DashboardStatusPanel
 					recentDeployments={serializedDeployments}
 					deploymentStatus={deploymentStatus}
@@ -187,6 +198,51 @@ export default async function DashboardPage({
 			</div>
 
 			<DashboardRecentStacks stacks={data.recentStacks} environmentId={environment.id} />
+		</>
+	);
+}
+
+export default async function DashboardPage({
+	searchParams,
+}: {
+	searchParams: Promise<{ environment?: string }>;
+}) {
+	const { session, userId, role } = await requireUserSession();
+	const params = await searchParams;
+	const includeRuntime = isPrivilegedRole(role);
+	const environment = await resolveRuntimeEnvironment(userId, params.environment);
+
+	const greeting = getDashboardGreeting();
+
+	return (
+		<div className="animate-in space-y-5">
+			<DashboardHeader
+				userName={session.user.name}
+				greeting={greeting}
+				environmentName={environment.name}
+				environmentId={environment.id}
+			/>
+
+			<Suspense
+				fallback={
+					<>
+						<MetricsStripSkeleton />
+						<div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.9fr)]">
+							<InfrastructureSkeleton />
+							<Panel padding="md" className="animate-pulse">
+								<div className="h-3 w-20 rounded bg-foreground/5" />
+								<div className="mt-3 h-48 rounded bg-foreground/5" />
+							</Panel>
+						</div>
+					</>
+				}
+			>
+				<DashboardInfrastructureSection
+					userId={userId}
+					includeRuntime={includeRuntime}
+					environment={environment}
+				/>
+			</Suspense>
 		</div>
 	);
 }
