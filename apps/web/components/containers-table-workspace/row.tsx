@@ -126,7 +126,7 @@ export const ContainersTableRow = memo(function ContainersTableRow({
 
 			{isVisible("state") ? (
 				<DataTableCell>
-					<div className="space-y-0.5">
+					<div className="flex flex-col items-start gap-0.5">
 						<StatusBadge status={state || "offline"} />
 						{container.HealthStatus ? <StatusBadge status={container.HealthStatus} /> : null}
 					</div>

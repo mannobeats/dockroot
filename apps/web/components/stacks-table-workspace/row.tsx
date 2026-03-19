@@ -110,7 +110,9 @@ export function StacksTableRow({
 					/>
 				</DataTableCell>
 			</DataTableRow>
-			{expanded ? <StackRowServicesPanel stack={stack} rowKey={rowKey} /> : null}
+			{expanded ? (
+				<StackRowServicesPanel stack={stack} rowKey={rowKey} environmentId={environmentId} />
+			) : null}
 		</Fragment>
 	);
 }

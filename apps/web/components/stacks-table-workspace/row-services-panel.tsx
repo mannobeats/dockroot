@@ -8,9 +8,16 @@ import { getContainerImage, getContainerName, getContainerState } from "./utils"
 type StackRowServicesPanelProps = {
 	stack: StackRow;
 	rowKey: string;
+	environmentId?: string;
 };
 
-export function StackRowServicesPanel({ stack, rowKey }: StackRowServicesPanelProps) {
+export function StackRowServicesPanel({
+	stack,
+	rowKey,
+	environmentId,
+}: StackRowServicesPanelProps) {
+	const environmentQuery = environmentId ? `?environment=${encodeURIComponent(environmentId)}` : "";
+
 	return (
 		<DataTableRow>
 			<DataTableCell colSpan={8}>
@@ -38,7 +45,7 @@ export function StackRowServicesPanel({ stack, rowKey }: StackRowServicesPanelPr
 										</p>
 									</div>
 									<LinkButton
-										href={`/dashboard/containers/${container.ID}`}
+										href={`/dashboard/containers/${container.ID}${environmentQuery}`}
 										variant="ghost"
 										size="icon-xs"
 										title="Open container"
