@@ -48,6 +48,7 @@ COPY --from=builder /app/packages/db/drizzle ./packages/db/drizzle
 COPY --from=builder /app/migrate.mjs ./migrate.mjs
 COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/server.mjs ./server.mjs
+COPY --from=builder /app/server ./server
 COPY --from=builder /app/local-terminal.mjs ./local-terminal.mjs
 RUN chmod +x ./scripts/start.sh
 
