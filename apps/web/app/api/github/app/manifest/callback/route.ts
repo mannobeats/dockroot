@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { db, user } from "@dockroot/db";
 import { eq } from "drizzle-orm";
+import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { sanitizeInternalRedirectPath } from "@/lib/authorization";
 import {
@@ -8,8 +9,17 @@ import {
 	upsertGitHubProviderFromManifest,
 	verifyGitHubAppState,
 } from "@/lib/github-app";
+import { resolveRequestOrigin } from "@/lib/manager-url";
+import { getStoredManagerUrl } from "@/lib/platform/queries";
 
 export async function GET(request: Request) {
+	const requestHeaders = await headers();
+	const requestOrigin = resolveRequestOrigin({
+		headersLike: requestHeaders,
+		requestUrl: request.url,
+	});
+	let managerOrigin = requestOrigin;
+
 	const url = new URL(request.url);
 	const code = url.searchParams.get("code");
 	const state = url.searchParams.get("state");
@@ -19,7 +29,7 @@ export async function GET(request: Request) {
 		errorMessage?: string | null,
 	) => {
 		const targetPath = sanitizeInternalRedirectPath(redirectTo || "/dashboard/settings/github");
-		const target = new URL(targetPath, request.url);
+		const target = new URL(targetPath, managerOrigin);
 		target.searchParams.set("github", status);
 		if (errorMessage) {
 			target.searchParams.set("githubError", errorMessage.slice(0, 220));
@@ -33,6 +43,12 @@ export async function GET(request: Request) {
 
 	try {
 		const parsedState = verifyGitHubAppState(state);
+		const configuredManagerUrl = await getStoredManagerUrl(parsedState.userId);
+		managerOrigin = resolveRequestOrigin({
+			headersLike: requestHeaders,
+			requestUrl: request.url,
+			configuredUrl: configuredManagerUrl,
+		});
 		const actor = await db.query.user.findFirst({
 			where: eq(user.id, parsedState.userId),
 			columns: {

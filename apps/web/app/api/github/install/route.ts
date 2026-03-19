@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { sanitizeInternalRedirectPath } from "@/lib/authorization";
 import {
@@ -6,6 +7,7 @@ import {
 	isGitHubAppConfigured,
 	signGitHubAppState,
 } from "@/lib/github-app";
+import { resolveRequestOrigin } from "@/lib/manager-url";
 import { getServerSession } from "@/lib/session";
 
 function shouldUseSecureCookies() {
@@ -15,13 +17,19 @@ function shouldUseSecureCookies() {
 }
 
 export async function GET(request: Request) {
+	const requestHeaders = await headers();
+	const requestOrigin = resolveRequestOrigin({
+		headersLike: requestHeaders,
+		requestUrl: request.url,
+	});
+
 	if (!(await isGitHubAppConfigured())) {
 		return NextResponse.json({ error: "GitHub App is not configured." }, { status: 503 });
 	}
 
 	const session = await getServerSession();
 	if (!session?.user.id) {
-		return NextResponse.redirect(new URL("/sign-in", request.url));
+		return NextResponse.redirect(new URL("/sign-in", requestOrigin));
 	}
 
 	const url = new URL(request.url);

@@ -94,6 +94,34 @@ export function inferRequestManagerUrl(headersLike: Pick<Headers, "get">) {
 	return trimTrailingSlash(parsed.toString());
 }
 
+function toOrigin(value: string | null | undefined) {
+	if (!value) {
+		return null;
+	}
+
+	try {
+		return new URL(value).origin;
+	} catch {
+		return null;
+	}
+}
+
+export function resolveRequestOrigin(input: {
+	headersLike: Pick<Headers, "get">;
+	requestUrl: string;
+	configuredUrl?: string | null;
+}) {
+	const requestManagerUrl = inferRequestManagerUrl(input.headersLike);
+	const resolvedManagerUrl = resolveManagerUrl({
+		configuredUrl: input.configuredUrl || null,
+		requestManagerUrl,
+	});
+
+	return (
+		toOrigin(resolvedManagerUrl) || toOrigin(requestManagerUrl) || new URL(input.requestUrl).origin
+	);
+}
+
 export function resolveManagerUrl(input: {
 	configuredUrl?: string | null;
 	requestManagerUrl?: string | null;

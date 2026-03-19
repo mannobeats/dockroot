@@ -1,15 +1,9 @@
+import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { requirePrivilegedSession, sanitizeInternalRedirectPath } from "@/lib/authorization";
 import { signGitHubManifestState } from "@/lib/github-app";
-
-function inferPublicAppUrl(request: Request) {
-	const explicit =
-		process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || process.env.BETTER_AUTH_URL;
-	if (explicit) {
-		return explicit.replace(/\/$/, "");
-	}
-	return new URL(request.url).origin;
-}
+import { resolveRequestOrigin } from "@/lib/manager-url";
+import { getStoredManagerUrl } from "@/lib/platform/queries";
 
 function isPrivateOrLocalHostname(hostname: string) {
 	const normalized = hostname.trim().toLowerCase();
@@ -20,6 +14,8 @@ function isPrivateOrLocalHostname(hostname: string) {
 		normalized === "localhost" ||
 		normalized === "127.0.0.1" ||
 		normalized === "::1" ||
+		normalized === "0.0.0.0" ||
+		normalized === "[::]" ||
 		normalized.endsWith(".local")
 	) {
 		return true;
@@ -66,13 +62,19 @@ function escapeHtmlAttr(value: string) {
 }
 
 export async function GET(request: Request) {
+	const requestHeaders = await headers();
+	const requestOrigin = resolveRequestOrigin({
+		headersLike: requestHeaders,
+		requestUrl: request.url,
+	});
+
 	let userId = "";
 	try {
 		const auth = await requirePrivilegedSession();
 		userId = auth.userId;
 	} catch {
 		return NextResponse.redirect(
-			new URL("/dashboard/settings/github?github=forbidden", request.url),
+			new URL("/dashboard/settings/github?github=forbidden", requestOrigin),
 		);
 	}
 
@@ -81,7 +83,12 @@ export async function GET(request: Request) {
 	const requestedName = (url.searchParams.get("name") || "Dockroot GitHub App").trim();
 	const providerName = requestedName.slice(0, 120) || "Dockroot GitHub App";
 	const providerOwner = (url.searchParams.get("owner") || "").trim() || null;
-	const appUrl = inferPublicAppUrl(request);
+	const configuredManagerUrl = await getStoredManagerUrl(userId);
+	const appUrl = resolveRequestOrigin({
+		headersLike: requestHeaders,
+		requestUrl: request.url,
+		configuredUrl: configuredManagerUrl,
+	});
 	const webhookCapable = supportsPublicWebhook(appUrl);
 	const state = await signGitHubManifestState({
 		userId,

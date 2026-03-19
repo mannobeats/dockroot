@@ -1,8 +1,10 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { sanitizeInternalRedirectPath } from "@/lib/authorization";
 import { getGitHubProviderConfigById, verifyGitHubAppState } from "@/lib/github-app";
+import { resolveRequestOrigin } from "@/lib/manager-url";
 import { syncGitHubInstallation } from "@/lib/platform";
+import { getStoredManagerUrl } from "@/lib/platform/queries";
 import { getServerSession } from "@/lib/session";
 
 function shouldUseSecureCookies() {
@@ -12,14 +14,26 @@ function shouldUseSecureCookies() {
 }
 
 export async function GET(request: Request) {
+	const requestHeaders = await headers();
+	const requestOrigin = resolveRequestOrigin({
+		headersLike: requestHeaders,
+		requestUrl: request.url,
+	});
 	const session = await getServerSession();
 	if (!session?.user.id) {
 		const currentPath = new URL(request.url);
 		const returnTo = `${currentPath.pathname}${currentPath.search}`;
 		return NextResponse.redirect(
-			new URL(`/sign-in?redirectTo=${encodeURIComponent(returnTo)}`, request.url),
+			new URL(`/sign-in?redirectTo=${encodeURIComponent(returnTo)}`, requestOrigin),
 		);
 	}
+
+	const configuredManagerUrl = await getStoredManagerUrl(session.user.id);
+	const managerOrigin = resolveRequestOrigin({
+		headersLike: requestHeaders,
+		requestUrl: request.url,
+		configuredUrl: configuredManagerUrl,
+	});
 
 	const url = new URL(request.url);
 	const installationId = url.searchParams.get("installation_id");
@@ -30,7 +44,9 @@ export async function GET(request: Request) {
 	const providerIdCookie = cookieStore.get("dockroot_github_provider_id")?.value;
 
 	if (!installationId) {
-		return NextResponse.redirect(new URL("/dashboard/settings/github?github=missing", request.url));
+		return NextResponse.redirect(
+			new URL("/dashboard/settings/github?github=missing", managerOrigin),
+		);
 	}
 
 	let redirectTo = sanitizeInternalRedirectPath(redirectToCookie || "/dashboard/settings/github");
@@ -40,18 +56,20 @@ export async function GET(request: Request) {
 		const parsedState = verifyGitHubAppState(state);
 		if (parsedState.userId !== session.user.id) {
 			return NextResponse.redirect(
-				new URL("/dashboard/settings/github?github=denied", request.url),
+				new URL("/dashboard/settings/github?github=denied", managerOrigin),
 			);
 		}
 		redirectTo = sanitizeInternalRedirectPath(parsedState.redirectTo);
 		providerId = parsedState.providerId?.trim() || providerId;
 	} else if (userIdCookie && userIdCookie !== session.user.id) {
-		return NextResponse.redirect(new URL("/dashboard/settings/github?github=denied", request.url));
+		return NextResponse.redirect(
+			new URL("/dashboard/settings/github?github=denied", managerOrigin),
+		);
 	}
 
 	if (providerId && !(await getGitHubProviderConfigById(providerId))) {
 		return NextResponse.redirect(
-			new URL("/dashboard/settings/github?github=provider-missing", request.url),
+			new URL("/dashboard/settings/github?github=provider-missing", managerOrigin),
 		);
 	}
 
@@ -63,7 +81,7 @@ export async function GET(request: Request) {
 
 	const separator = redirectTo.includes("?") ? "&" : "?";
 	const response = NextResponse.redirect(
-		new URL(`${redirectTo}${separator}github=connected`, request.url),
+		new URL(`${redirectTo}${separator}github=connected`, managerOrigin),
 	);
 	response.cookies.set("dockroot_github_redirect_to", "", {
 		httpOnly: true,
