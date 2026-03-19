@@ -83,7 +83,7 @@ function getTrustedOrigins() {
 		process.env.NEXT_PUBLIC_APP_URL,
 		...(process.env.BETTER_AUTH_TRUSTED_ORIGINS?.split(",") ?? []),
 	]
-		.map((origin) => origin?.trim())
+		.map((origin) => normalizeOrigin(origin))
 		.filter(Boolean)
 		.filter((origin, index, all) => all.indexOf(origin) === index);
 
@@ -94,15 +94,76 @@ function getTrustedOrigins() {
 	return undefined;
 }
 
-function isTrustedOrigin(requestOrigin) {
-	const origin = String(requestOrigin || "").trim();
+function normalizeOrigin(value) {
+	const input = String(value || "").trim();
+	if (!input) {
+		return "";
+	}
+
+	try {
+		return new URL(input).origin;
+	} catch {
+		return "";
+	}
+}
+
+function readHeaderValues(headers, name) {
+	const raw = headers?.[name];
+	if (Array.isArray(raw)) {
+		return raw.flatMap((value) => String(value || "").split(",")).map((value) => value.trim()).filter(Boolean);
+	}
+
+	return String(raw || "")
+		.split(",")
+		.map((value) => value.trim())
+		.filter(Boolean);
+}
+
+function getHeaderOriginCandidates(requestHeaders, defaultProtocol = "http:") {
+	const hosts = [
+		...readHeaderValues(requestHeaders, "x-forwarded-host"),
+		...readHeaderValues(requestHeaders, "host"),
+	];
+	if (hosts.length === 0) {
+		return [];
+	}
+
+	const protocolHints = new Set(
+		readHeaderValues(requestHeaders, "x-forwarded-proto")
+			.map((value) => value.replace(/:$/u, "").toLowerCase())
+			.filter(Boolean),
+	);
+	const fallbackProtocol = String(defaultProtocol || "http:").replace(/:$/u, "").toLowerCase();
+	if (fallbackProtocol) {
+		protocolHints.add(fallbackProtocol);
+	}
+
+	const candidates = [];
+	for (const host of hosts) {
+		for (const protocol of protocolHints) {
+			candidates.push(normalizeOrigin(`${protocol}://${host}`));
+		}
+	}
+
+	return candidates.filter(Boolean).filter((origin, index, all) => all.indexOf(origin) === index);
+}
+
+function isTrustedOrigin(requestOrigin, requestHeaders = undefined) {
+	const origin = normalizeOrigin(requestOrigin);
 	if (!origin) {
 		return dev;
 	}
 
 	const configuredOrigins = getTrustedOrigins();
 	if (configuredOrigins?.length) {
-		return configuredOrigins.includes(origin);
+		if (configuredOrigins.includes(origin)) {
+			return true;
+		}
+	}
+
+	const headerOrigins = getHeaderOriginCandidates(requestHeaders, new URL(origin).protocol);
+	if (headerOrigins.includes(origin)) {
+		return true;
 	}
 
 	if (!dev) {
@@ -119,13 +180,7 @@ function isTrustedOrigin(requestOrigin) {
 
 function getCorsConfig() {
 	return {
-		origin: (requestOrigin, callback) => {
-			if (isTrustedOrigin(requestOrigin)) {
-				callback(null, true);
-				return;
-			}
-			callback(null, false);
-		},
+		origin: true,
 		credentials: true,
 	};
 }

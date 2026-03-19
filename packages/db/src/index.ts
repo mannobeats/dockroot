@@ -5,5 +5,5 @@ import * as schema from "./schema";
 
 const client = postgres(getDatabaseUrl());
 export const db = drizzle(client, { schema });
-export { schema };
 export * from "./schema";
+export { schema };

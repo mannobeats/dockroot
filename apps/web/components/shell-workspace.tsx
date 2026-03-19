@@ -1,6 +1,6 @@
 "use client";
 
-import "xterm/css/xterm.css";
+import "@xterm/xterm/css/xterm.css";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useDeferredValue, useMemo, useState } from "react";

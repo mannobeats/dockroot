@@ -51,17 +51,26 @@ export function useSocketTerminalSession(input: UseSocketTerminalSessionInput) {
 		setStatus("Connecting...");
 
 		void (async () => {
-			const [{ FitAddon }, { WebLinksAddon }, { Terminal }] = await Promise.all([
+			const [{ FitAddon }, { WebLinksAddon }, xtermModule] = await Promise.all([
 				import("@xterm/addon-fit"),
 				import("@xterm/addon-web-links"),
-				import("xterm"),
+				import("@xterm/xterm"),
 			]);
+			const TerminalCtor =
+				(xtermModule as { Terminal?: typeof import("@xterm/xterm").Terminal }).Terminal ??
+				(xtermModule as { default?: { Terminal?: typeof import("@xterm/xterm").Terminal } }).default
+					?.Terminal;
+
+			if (!TerminalCtor) {
+				setStatus("Terminal module failed to load.");
+				return;
+			}
 
 			if (disposed || !terminalRef.current) {
 				return;
 			}
 
-			const terminal = new Terminal({
+			const terminal = new TerminalCtor({
 				cursorBlink: true,
 				cursorStyle: "underline",
 				fontFamily:
@@ -162,38 +171,86 @@ export function useSocketTerminalSession(input: UseSocketTerminalSessionInput) {
 				}
 			};
 
+			const onConnectError = (error: Error) => {
+				if (sessionIdRef.current) {
+					return;
+				}
+
+				const detail = String(error?.message || "").trim();
+				setStatus(detail ? `Socket error: ${detail}` : "Socket connection failed.");
+			};
+
+			const onDisconnect = (reason: string) => {
+				if (!sessionIdRef.current) {
+					setStatus(`Socket disconnected (${reason || "unknown"}).`);
+				}
+			};
+
 			socket.on("terminal:data", onData);
 			socket.on("terminal:exit", onExit);
+			socket.on("connect_error", onConnectError);
+			socket.on("disconnect", onDisconnect);
 
-			socket.emit(
-				"terminal:create",
-				{
-					target: input.target,
-					containerId: input.containerId,
-					environmentId: input.environmentId,
-					shell: input.shell,
-					customShell: input.customShell,
-					cols: terminal.cols,
-					rows: terminal.rows,
-				},
-				(response: { sessionId?: string; initialData?: string; error?: string }) => {
-					if (response.error || !response.sessionId) {
-						setStatus(response.error || "Unable to start shell session.");
-						terminal.writeln(`\r\n${response.error || "Unable to start shell session."}`);
-						return;
-					}
+			const createPayload = {
+				target: input.target,
+				containerId: input.containerId,
+				environmentId: input.environmentId,
+				shell: input.shell,
+				customShell: input.customShell,
+				cols: terminal.cols,
+				rows: terminal.rows,
+			};
 
-					sessionIdRef.current = response.sessionId;
-					setStatus(`Connected to ${input.label}`);
-					if (response.initialData) {
-						terminal.write(response.initialData);
-					}
-					flushPendingSocketEvents(response.sessionId);
-					window.requestAnimationFrame(() => {
-						terminal.focus();
-					});
-				},
-			);
+			let createAcked = false;
+			const createRequestTimeout = setTimeout(() => {
+				if (createAcked || sessionIdRef.current) {
+					return;
+				}
+				const timeoutMessage = socket.connected
+					? "Terminal request timed out."
+					: "Socket not connected. Check app URL and trusted origin settings.";
+				setStatus(timeoutMessage);
+				terminal.writeln(`\r\n${timeoutMessage}`);
+			}, 12_000);
+
+			const handleCreateResponse = (response: {
+				sessionId?: string;
+				initialData?: string;
+				error?: string;
+			}) => {
+				if (disposed || createAcked) {
+					return;
+				}
+				createAcked = true;
+				clearTimeout(createRequestTimeout);
+
+				if (response.error || !response.sessionId) {
+					setStatus(response.error || "Unable to start shell session.");
+					terminal.writeln(`\r\n${response.error || "Unable to start shell session."}`);
+					return;
+				}
+
+				sessionIdRef.current = response.sessionId;
+				setStatus(`Connected to ${input.label}`);
+				if (response.initialData) {
+					terminal.write(response.initialData);
+				}
+				flushPendingSocketEvents(response.sessionId);
+				window.requestAnimationFrame(() => {
+					terminal.focus();
+				});
+			};
+
+			const requestSessionCreate = () => {
+				socket.emit("terminal:create", createPayload, handleCreateResponse);
+			};
+
+			if (socket.connected) {
+				requestSessionCreate();
+			} else {
+				socket.connect();
+				socket.once("connect", requestSessionCreate);
+			}
 
 			const disposable = terminal.onData((data) => {
 				if (!sessionIdRef.current) {
@@ -207,6 +264,7 @@ export function useSocketTerminalSession(input: UseSocketTerminalSessionInput) {
 			});
 
 			cleanup = () => {
+				clearTimeout(createRequestTimeout);
 				disposable.dispose();
 				resizeObserver.disconnect();
 				if (resizeTimer) {
@@ -219,6 +277,9 @@ export function useSocketTerminalSession(input: UseSocketTerminalSessionInput) {
 				}
 				socket.off("terminal:data", onData);
 				socket.off("terminal:exit", onExit);
+				socket.off("connect_error", onConnectError);
+				socket.off("disconnect", onDisconnect);
+				socket.off("connect", requestSessionCreate);
 				terminal.dispose();
 				terminalInstanceRef.current = null;
 				sessionIdRef.current = null;

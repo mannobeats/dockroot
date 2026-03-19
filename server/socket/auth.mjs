@@ -41,7 +41,7 @@ export function attachSocketAuthMiddleware({
 	io.use(async (socket, nextMiddleware) => {
 		try {
 			const requestOrigin = String(socket.request.headers.origin || "").trim();
-			if (requestOrigin && !isTrustedOrigin(requestOrigin)) {
+			if (requestOrigin && !isTrustedOrigin(requestOrigin, socket.request.headers)) {
 				wsRejectionCounters.origin += 1;
 				nextMiddleware(new Error("Socket origin denied."));
 				return;

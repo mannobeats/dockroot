@@ -44,5 +44,5 @@ export async function exchangeGitHubManifestCode(code: string) {
 	};
 }
 
-export { encodeBase64Url };
 export type { GitHubProviderConfig };
+export { encodeBase64Url };

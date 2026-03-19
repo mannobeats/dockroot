@@ -1,6 +1,6 @@
 "use client";
 
-import "xterm/css/xterm.css";
+import "@xterm/xterm/css/xterm.css";
 
 import { Activity } from "lucide-react";
 import { useSocketTerminalSession } from "@/components/terminal/use-socket-terminal-session";
