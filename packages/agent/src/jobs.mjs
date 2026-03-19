@@ -14,6 +14,108 @@ import {
 	withTempFile,
 } from "./utils.mjs";
 
+const TRANSIENT_COMPOSE_FAILURE_PATTERNS = [
+	/TLS handshake timeout/i,
+	/net\/http: TLS handshake timeout/i,
+	/i\/o timeout/i,
+	/connection reset by peer/i,
+	/temporary failure in name resolution/i,
+	/no such host/i,
+	/context deadline exceeded/i,
+	/net\/http: request canceled/i,
+	/429 Too Many Requests/i,
+	/toomanyrequests/i,
+];
+
+function sleep(ms) {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getRetryAttempts(operation) {
+	if (operation === "destroy") {
+		return 1;
+	}
+
+	const raw = Number(process.env.DOCKROOT_COMPOSE_RETRY_ATTEMPTS || "3");
+	if (!Number.isFinite(raw)) {
+		return 3;
+	}
+	return Math.min(5, Math.max(1, Math.floor(raw)));
+}
+
+function getRetryBaseDelayMs() {
+	const raw = Number(process.env.DOCKROOT_COMPOSE_RETRY_DELAY_MS || "3000");
+	if (!Number.isFinite(raw)) {
+		return 3000;
+	}
+	return Math.min(30_000, Math.max(500, Math.floor(raw)));
+}
+
+function isRetryableComposeFailure(output) {
+	return TRANSIENT_COMPOSE_FAILURE_PATTERNS.some((pattern) => pattern.test(output));
+}
+
+function buildComposeArgs(job, composePath, envPath, workingDirectory) {
+	return job.OPERATION === "destroy"
+		? [
+				"compose",
+				"-p",
+				job.STACK_SLUG,
+				"--project-directory",
+				workingDirectory,
+				"--env-file",
+				envPath,
+				"-f",
+				composePath,
+				"down",
+				"--volumes",
+				"--rmi",
+				"local",
+				"--remove-orphans",
+			]
+		: [
+				"compose",
+				"-p",
+				job.STACK_SLUG,
+				"--project-directory",
+				workingDirectory,
+				"--env-file",
+				envPath,
+				"-f",
+				composePath,
+				"up",
+				"-d",
+				"--build",
+				"--remove-orphans",
+			];
+}
+
+async function runDockerComposeOnce(args, publishChunk) {
+	let output = "";
+	const child = spawn("docker", args, {
+		stdio: ["ignore", "pipe", "pipe"],
+	});
+
+	const onChunk = (chunk, stream) => {
+		const message = chunk.toString();
+		output += message;
+		publishChunk(message, stream);
+	};
+
+	child.stdout.on("data", (chunk) => onChunk(chunk, "stdout"));
+	child.stderr.on("data", (chunk) => onChunk(chunk, "stderr"));
+
+	const exitCode = await new Promise((resolve, reject) => {
+		child.on("error", reject);
+		child.on("close", (code) => resolve(code ?? 1));
+	});
+
+	return {
+		exitCode,
+		output,
+	};
+}
+
 function getAdvertisedAgentUrl() {
 	const explicitUrl = (process.env.DOCKROOT_AGENT_URL || "").trim();
 	if (explicitUrl) {
@@ -210,47 +312,12 @@ export async function runComposeJob(state, job) {
 	try {
 		const { composePath, envPath, workingDirectory } = await prepareComposeWorkspace(state, job);
 
-		const args =
-			job.OPERATION === "destroy"
-				? [
-						"compose",
-						"-p",
-						job.STACK_SLUG,
-						"--project-directory",
-						workingDirectory,
-						"--env-file",
-						envPath,
-						"-f",
-						composePath,
-						"down",
-						"--volumes",
-						"--rmi",
-						"local",
-						"--remove-orphans",
-					]
-				: [
-						"compose",
-						"-p",
-						job.STACK_SLUG,
-						"--project-directory",
-						workingDirectory,
-						"--env-file",
-						envPath,
-						"-f",
-						composePath,
-						"up",
-						"-d",
-						"--build",
-						"--remove-orphans",
-					];
-
+		const args = buildComposeArgs(job, composePath, envPath, workingDirectory);
+		const maxAttempts = getRetryAttempts(job.OPERATION);
+		const baseDelayMs = getRetryBaseDelayMs();
 		let output = "";
-		const child = spawn("docker", args, {
-			stdio: ["ignore", "pipe", "pipe"],
-		});
 
-		const publishChunk = (chunk, stream) => {
-			const message = chunk.toString();
+		const publishChunk = (message, stream) => {
 			output += message;
 			job.onChunk?.({
 				stream,
@@ -259,17 +326,41 @@ export async function runComposeJob(state, job) {
 			});
 		};
 
-		child.stdout.on("data", (chunk) => publishChunk(chunk, "stdout"));
-		child.stderr.on("data", (chunk) => publishChunk(chunk, "stderr"));
+		for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+			if (maxAttempts > 1) {
+				publishChunk(`[agent] docker compose attempt ${attempt}/${maxAttempts}\n`, "stdout");
+			}
 
-		const exitCode = await new Promise((resolve, reject) => {
-			child.on("error", reject);
-			child.on("close", (code) => resolve(code ?? 1));
-		});
+			const result = await runDockerComposeOnce(args, publishChunk);
+			if (result.exitCode === 0) {
+				return {
+					status: "succeeded",
+					log: output.trim() || "docker compose completed successfully.",
+				};
+			}
+
+			const shouldRetry =
+				attempt < maxAttempts &&
+				job.OPERATION !== "destroy" &&
+				isRetryableComposeFailure(result.output);
+			if (!shouldRetry) {
+				return {
+					status: "failed",
+					log: output.trim() || `docker compose exited with code ${result.exitCode}`,
+				};
+			}
+
+			const delayMs = baseDelayMs * 2 ** (attempt - 1);
+			publishChunk(
+				`[agent] transient Docker registry/network failure detected; retrying in ${Math.ceil(delayMs / 1000)}s...\n`,
+				"stderr",
+			);
+			await sleep(delayMs);
+		}
 
 		return {
-			status: exitCode === 0 ? "succeeded" : "failed",
-			log: output.trim() || `docker compose exited with code ${exitCode}`,
+			status: "failed",
+			log: output.trim() || "docker compose failed after retry attempts.",
 		};
 	} catch (error) {
 		return {
