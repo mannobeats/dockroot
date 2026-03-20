@@ -1,11 +1,12 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import os from "node:os";
+import { getMetricsRoom } from "../socket/metrics-room.mjs";
 
 const RESOURCE_COUNTS_INTERVAL_MS = 30_000;
 const LOCAL_SAMPLE_INTERVAL_MS = 15_000;
 const BROADCAST_THROTTLE_MS = 2_000;
-const METRICS_ROOM = "metrics:local";
+const LOCAL_ENVIRONMENT_KEY = "local";
 
 export function createRuntimeMetricsService({
 	io,
@@ -24,6 +25,8 @@ export function createRuntimeMetricsService({
 	let subscriberCount = 0;
 	let broadcastTimer = null;
 	let broadcastPending = false;
+	let latestRuntimeSnapshot = null;
+	let latestRuntimeSnapshotAt = 0;
 
 	// --- Delta tracking for network I/O ---
 	const prevNetIo = new Map();
@@ -139,12 +142,12 @@ export function createRuntimeMetricsService({
 	}
 
 	function addMetricsSubscriber(socket) {
-		socket.join(METRICS_ROOM);
+		socket.join(getMetricsRoom(LOCAL_ENVIRONMENT_KEY));
 		subscriberCount += 1;
 	}
 
 	function removeMetricsSubscriber(socket) {
-		socket.leave(METRICS_ROOM);
+		socket.leave(getMetricsRoom(LOCAL_ENVIRONMENT_KEY));
 		subscriberCount = Math.max(0, subscriberCount - 1);
 	}
 
@@ -173,13 +176,16 @@ export function createRuntimeMetricsService({
 				}),
 			]);
 
-			const containers = parseJsonLines(psResult.stdout);
+			const containers = parseJsonLines(psResult.stdout).map(enrichContainerHealth);
 			const images = parseJsonLines(imagesResult.stdout);
 			const volumes = parseJsonLines(volumesResult.stdout);
 			const networks = parseJsonLines(networksResult.stdout);
 
 			latestResourceCounts = {
 				containerRows: containers,
+				imageRows: images,
+				volumeRows: volumes,
+				networkRows: networks,
 				dockerVersion: versionResult.stdout.trim() || "unknown",
 				counts: {
 					containers: containers.length,
@@ -197,65 +203,15 @@ export function createRuntimeMetricsService({
 		return latestResourceCounts;
 	}
 
-	async function broadcastMetrics() {
-		if (subscriberCount <= 0) {
-			void persistLocalRuntimeSamples({ containers: latestContainerStats, host: null });
-			return;
-		}
-
+	function buildRuntimeSnapshot(resourceCounts = latestResourceCounts) {
 		const statsRows = latestContainerStats;
-		const resourceCounts = await refreshResourceCounts();
-		const netDeltas = computeNetDeltas(statsRows);
-
-		const cpuPercent = clampPercent(statsRows.reduce((sum, row) => sum + (parsePercent(row.CPUPerc) || 0), 0));
-		const memoryPercent = clampPercent(
-			statsRows.reduce((sum, row) => sum + (parsePercent(row.MemPerc) || 0), 0),
-		);
-
-		const host = {
-			source: "native",
-			cpuPercent,
-			memoryPercent,
-			hostname: os.hostname(),
-			platform: `${os.platform()} ${os.release()}`,
-			architecture: os.arch(),
-			dockerVersion: resourceCounts?.dockerVersion || "unknown",
-			cpus: os.cpus().length,
-			totalMemoryGb: Number((os.totalmem() / 1024 / 1024 / 1024).toFixed(1)),
-			freeMemoryGb: Number((os.freemem() / 1024 / 1024 / 1024).toFixed(1)),
-			counts: resourceCounts?.counts || { containers: 0, runningContainers: 0, images: 0, volumes: 0, networks: 0 },
-			containerRows: resourceCounts?.containerRows || [],
-		};
-
-		const ws = getSocketRuntimeMetrics();
-
-		io.to(METRICS_ROOM).emit("runtime:metrics", {
-			environmentId: "local",
-			at: Date.now(),
-			containers: statsRows,
-			host,
-			ws,
-			netDeltas,
-		});
-
-		void persistLocalRuntimeSamples({ containers: statsRows, host, containerRows: resourceCounts?.containerRows });
-	}
-
-	async function getRuntimeMetrics() {
-		const statsRows = latestContainerStats;
-		const resourceCounts = await refreshResourceCounts();
-
 		const cpuPercent = clampPercent(statsRows.reduce((sum, row) => sum + (parsePercent(row.CPUPerc) || 0), 0));
 		const memoryPercent = clampPercent(
 			statsRows.reduce((sum, row) => sum + (parsePercent(row.MemPerc) || 0), 0),
 		);
 
 		return {
-			containers: statsRows,
 			host: {
-				source: "native",
-				cpuPercent,
-				memoryPercent,
 				hostname: os.hostname(),
 				platform: `${os.platform()} ${os.release()}`,
 				architecture: os.arch(),
@@ -263,9 +219,98 @@ export function createRuntimeMetricsService({
 				cpus: os.cpus().length,
 				totalMemoryGb: Number((os.totalmem() / 1024 / 1024 / 1024).toFixed(1)),
 				freeMemoryGb: Number((os.freemem() / 1024 / 1024 / 1024).toFixed(1)),
-				counts: resourceCounts?.counts || { containers: 0, runningContainers: 0, images: 0, volumes: 0, networks: 0 },
-				containerRows: resourceCounts?.containerRows || [],
 			},
+			containers: resourceCounts?.containerRows || [],
+			images: resourceCounts?.imageRows || [],
+			volumes: resourceCounts?.volumeRows || [],
+			networks: resourceCounts?.networkRows || [],
+			counts: resourceCounts?.counts || {
+				containers: 0,
+				runningContainers: 0,
+				images: 0,
+				volumes: 0,
+				networks: 0,
+			},
+			usage: {
+				cpuPercent,
+				memoryPercent,
+			},
+			containerStats: statsRows,
+		};
+	}
+
+	function updateLatestRuntimeSnapshot(snapshot) {
+		latestRuntimeSnapshot = snapshot;
+		latestRuntimeSnapshotAt = Date.now();
+	}
+
+	async function broadcastMetrics() {
+		if (subscriberCount <= 0) {
+			void persistLocalRuntimeSamples({ containers: latestContainerStats, host: null });
+			return;
+		}
+
+		const resourceCounts = await refreshResourceCounts();
+		const snapshot = buildRuntimeSnapshot(resourceCounts);
+		updateLatestRuntimeSnapshot(snapshot);
+		const netDeltas = computeNetDeltas(snapshot.containerStats);
+
+		const ws = getSocketRuntimeMetrics();
+
+		io.to(getMetricsRoom(LOCAL_ENVIRONMENT_KEY)).emit("runtime:metrics", {
+			environmentId: LOCAL_ENVIRONMENT_KEY,
+			at: Date.now(),
+			containers: snapshot.containerStats,
+			host: {
+				source: "native",
+				cpuPercent: snapshot.usage?.cpuPercent ?? null,
+				memoryPercent: snapshot.usage?.memoryPercent ?? null,
+			},
+			ws,
+			netDeltas,
+		});
+
+		void persistLocalRuntimeSamples({
+			containers: snapshot.containerStats,
+			host: {
+				source: "native",
+				cpuPercent: snapshot.usage?.cpuPercent ?? null,
+				memoryPercent: snapshot.usage?.memoryPercent ?? null,
+				hostname: snapshot.host.hostname,
+				platform: snapshot.host.platform,
+				architecture: snapshot.host.architecture,
+				dockerVersion: snapshot.host.dockerVersion,
+				cpus: snapshot.host.cpus,
+				totalMemoryGb: snapshot.host.totalMemoryGb,
+				freeMemoryGb: snapshot.host.freeMemoryGb,
+				counts: snapshot.counts,
+				containerRows: snapshot.containers,
+			},
+			containerRows: snapshot.containers,
+		});
+	}
+
+	async function getRuntimeMetrics() {
+		const resourceCounts = await refreshResourceCounts();
+		const snapshot = buildRuntimeSnapshot(resourceCounts);
+		updateLatestRuntimeSnapshot(snapshot);
+		return {
+			containers: snapshot.containerStats,
+			host: {
+				source: "native",
+				cpuPercent: snapshot.usage?.cpuPercent ?? null,
+				memoryPercent: snapshot.usage?.memoryPercent ?? null,
+				hostname: snapshot.host.hostname,
+				platform: snapshot.host.platform,
+				architecture: snapshot.host.architecture,
+				dockerVersion: snapshot.host.dockerVersion,
+				cpus: snapshot.host.cpus,
+				totalMemoryGb: snapshot.host.totalMemoryGb,
+				freeMemoryGb: snapshot.host.freeMemoryGb,
+				counts: snapshot.counts,
+				containerRows: snapshot.containers,
+			},
+			snapshot,
 		};
 	}
 
@@ -276,6 +321,19 @@ export function createRuntimeMetricsService({
 			host: metrics.host,
 			containerRows: metrics.host?.containerRows,
 		});
+	}
+
+	function getLatestRuntimeSnapshot(maxAgeMs = 30_000) {
+		if (!latestRuntimeSnapshot || !latestRuntimeSnapshotAt) {
+			return null;
+		}
+		if (Date.now() - latestRuntimeSnapshotAt > maxAgeMs) {
+			return null;
+		}
+		return {
+			snapshot: latestRuntimeSnapshot,
+			sampledAt: latestRuntimeSnapshotAt,
+		};
 	}
 
 	async function persistLocalRuntimeSamples(metrics) {
@@ -403,14 +461,30 @@ export function createRuntimeMetricsService({
 		getRuntimeMetrics,
 		persistCurrentMetrics,
 		refreshResourceCounts,
+		getLatestRuntimeSnapshot,
+		setLatestRuntimeSnapshot: (snapshot, sampledAt = Date.now()) => {
+			latestRuntimeSnapshot = snapshot;
+			latestRuntimeSnapshotAt = sampledAt;
+		},
 		localSampleIntervalMs: LOCAL_SAMPLE_INTERVAL_MS,
 		resourceCountsIntervalMs: RESOURCE_COUNTS_INTERVAL_MS,
 		startDockerStatsStream,
 		stopDockerStatsStream,
 		addMetricsSubscriber,
 		removeMetricsSubscriber,
-		metricsRoom: METRICS_ROOM,
+		metricsRoom: getMetricsRoom(LOCAL_ENVIRONMENT_KEY),
 	};
+}
+
+function enrichContainerHealth(row) {
+	const next = row && typeof row === "object" ? { ...row } : {};
+	const status = String(next.Status || "");
+	const healthMatch = status.match(/\((healthy|unhealthy|health: starting)\)/i);
+	if (healthMatch) {
+		const raw = healthMatch[1].toLowerCase();
+		next.HealthStatus = raw === "health: starting" ? "starting" : raw;
+	}
+	return next;
 }
 
 function clampPercent(value) {

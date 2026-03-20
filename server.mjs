@@ -22,6 +22,7 @@ import { createRuntimeActionJournal } from "./server/runtime/runtime-actions.mjs
 import { createDockerEventService } from "./server/runtime/docker-events.mjs";
 import { createRuntimeMetricsService } from "./server/runtime/runtime-metrics.mjs";
 import { createAgentSocketRuntime } from "./server/socket/agent-runtime.mjs";
+import { getMetricsRoom } from "./server/socket/metrics-room.mjs";
 import { createSocketRuntimeService } from "./server/socket/socket-runtime.mjs";
 
 await applyRuntimeBootstrap();
@@ -408,8 +409,78 @@ socketRuntimeService = createSocketRuntimeService({
 	isTrustedOrigin,
 	emitRuntimeAction: runtimeActionJournal.emitRuntimeAction,
 	metricsSubscriptionCallbacks: {
-		addSubscriber: runtimeMetricsService.addMetricsSubscriber,
-		removeSubscriber: runtimeMetricsService.removeMetricsSubscriber,
+		getSubscriptionKey: (input) => {
+			if (typeof input === "string") {
+				const normalized = input.trim();
+				return normalized ? `legacy:${normalized}` : "";
+			}
+			const environmentId =
+				typeof input?.environmentId === "string" ? input.environmentId.trim() : "";
+			const environmentKind = input?.environmentKind === "agent" ? "agent" : "local";
+			return environmentId ? `${environmentKind}:${environmentId}` : "";
+		},
+		addSubscriber: async ({ socket, userId, input }) => {
+			if (
+				(typeof input === "string" && input.trim() === "local") ||
+				(input?.environmentKind !== "agent" && String(input?.environmentId || "").trim() === "local")
+			) {
+				runtimeMetricsService.addMetricsSubscriber(socket);
+				return {
+					subscriptionKey:
+						typeof input === "string" ? "legacy:local" : "local:local",
+					environmentKey: "local",
+					environmentKind: "local",
+				};
+			}
+
+			const environmentId =
+				typeof input?.environmentId === "string" ? input.environmentId.trim() : "";
+			if (!environmentId) {
+				return null;
+			}
+
+			const ownedEnvironment = await socketRuntimeService.accessControl?.resolveOwnedEnvironmentWithKind?.(
+				userId,
+				environmentId,
+			);
+			if (!ownedEnvironment?.id) {
+				return null;
+			}
+
+			if (ownedEnvironment.kind === "local") {
+				runtimeMetricsService.addMetricsSubscriber(socket);
+				return {
+					subscriptionKey: `local:${ownedEnvironment.id}`,
+					environmentKey: "local",
+					environmentKind: "local",
+				};
+			}
+
+			const room = getMetricsRoom(ownedEnvironment.id);
+			socket.join(room);
+			agentSocketRuntime.addEnvironmentSubscriber(ownedEnvironment.id);
+			return {
+				subscriptionKey: `agent:${ownedEnvironment.id}`,
+				environmentKey: ownedEnvironment.id,
+				environmentKind: "agent",
+				room,
+			};
+		},
+		removeSubscriber: async ({ socket, subscription }) => {
+			if (!subscription) {
+				return;
+			}
+			if (subscription.environmentKind === "local") {
+				runtimeMetricsService.removeMetricsSubscriber(socket);
+				return;
+			}
+			if (subscription.room) {
+				socket.leave(subscription.room);
+			}
+			if (subscription.environmentKey) {
+				agentSocketRuntime.removeEnvironmentSubscriber(subscription.environmentKey);
+			}
+		},
 	},
 	maxSocketSessionsPerUser: MAX_SOCKET_SESSIONS_PER_USER,
 	maxSocketConnectionsPerUser: MAX_SOCKET_CONNECTIONS_PER_USER,
@@ -447,9 +518,6 @@ const agentSocketRuntime = createAgentSocketRuntime({
 			console.error("[agent:ws] Agent metrics persistence error:", error?.message);
 		}
 	},
-	emitRealtime: (event, payload) => {
-		io.emit(event, payload);
-	},
 });
 agentSocketRuntime.attach();
 
@@ -457,6 +525,27 @@ globalThis.__dockroot_io = io;
 globalThis.__dockroot_agent_socket_runtime = agentSocketRuntime;
 globalThis.__dockroot_get_ws_metrics = () => socketRuntimeService.getSocketRuntimeMetrics();
 globalThis.__dockroot_register_action = dockerEventService.registerDockrootAction;
+globalThis.__dockroot_get_runtime_snapshot = (environmentId, maxAgeMs) => {
+	const normalizedEnvironmentId = String(environmentId || "").trim();
+	if (!normalizedEnvironmentId) {
+		return null;
+	}
+	if (normalizedEnvironmentId === "local") {
+		return runtimeMetricsService.getLatestRuntimeSnapshot(maxAgeMs);
+	}
+	return agentSocketRuntime.getLatestSnapshot(normalizedEnvironmentId, maxAgeMs);
+};
+globalThis.__dockroot_set_runtime_snapshot = (environmentId, snapshot, sampledAt = Date.now()) => {
+	const normalizedEnvironmentId = String(environmentId || "").trim();
+	if (!normalizedEnvironmentId || !snapshot) {
+		return;
+	}
+	if (normalizedEnvironmentId === "local") {
+		runtimeMetricsService.setLatestRuntimeSnapshot?.(snapshot, sampledAt);
+		return;
+	}
+	agentSocketRuntime.cacheSnapshot(normalizedEnvironmentId, snapshot, sampledAt);
+};
 
 async function shutdownServer(signal) {
 	if (shutdownPromise) {

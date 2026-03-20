@@ -15,6 +15,7 @@ import {
 	uploadContainerFile,
 	writeContainerFile,
 } from "@/lib/platform/docker";
+import { getCachedRuntimeSnapshot } from "@/lib/realtime";
 
 type RuntimeSnapshot = Awaited<ReturnType<typeof getLocalDockerSnapshot>>;
 type ContainerList = Awaited<ReturnType<typeof listContainers>>;
@@ -27,9 +28,25 @@ export async function getRuntimeSnapshotForEnvironment(userId: string, environme
 	const environment = await getEnvironmentRecord(environmentId, userId);
 
 	if (environment.kind === "local") {
+		const cached = getCachedRuntimeSnapshot<RuntimeSnapshot>("local", 20_000);
+		if (cached?.snapshot) {
+			return {
+				environment,
+				snapshot: cached.snapshot,
+			};
+		}
+
 		return {
 			environment,
 			snapshot: await getLocalDockerSnapshot(),
+		};
+	}
+
+	const cached = getCachedRuntimeSnapshot<RuntimeSnapshot>(environment.id, 45_000);
+	if (cached?.snapshot) {
+		return {
+			environment,
+			snapshot: cached.snapshot,
 		};
 	}
 

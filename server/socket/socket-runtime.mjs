@@ -105,6 +105,7 @@ export function createSocketRuntimeService({
 
 		io.on("connection", (socket) => {
 			const authCookie = String(socket.request.headers.cookie || "");
+			const metricsSubscriptions = new Map();
 			emitRuntimeAction("socket.connected", {
 				userId: socket.data.userId,
 				role: socket.data.role,
@@ -128,14 +129,38 @@ export function createSocketRuntimeService({
 				}
 			});
 
-			socket.on("metrics:subscribe", () => {
-				if (socket.data?.role && isPrivilegedRole(socket.data.role)) {
-					metricsSubscriptionCallbacks?.addSubscriber(socket);
+			socket.on("metrics:subscribe", async (input) => {
+				if (!(socket.data?.role && isPrivilegedRole(socket.data.role))) {
+					return;
 				}
+				const subscription = await metricsSubscriptionCallbacks?.addSubscriber?.({
+					socket,
+					userId: socket.data.userId,
+					role: socket.data.role,
+					input,
+				});
+				if (!subscription?.subscriptionKey) {
+					return;
+				}
+				metricsSubscriptions.set(subscription.subscriptionKey, subscription);
 			});
 
-			socket.on("metrics:unsubscribe", () => {
-				metricsSubscriptionCallbacks?.removeSubscriber(socket);
+			socket.on("metrics:unsubscribe", async (input) => {
+				const subscriptionKey = metricsSubscriptionCallbacks?.getSubscriptionKey?.(input);
+				if (!subscriptionKey) {
+					return;
+				}
+				const subscription = metricsSubscriptions.get(subscriptionKey);
+				if (!subscription) {
+					return;
+				}
+				await metricsSubscriptionCallbacks?.removeSubscriber?.({
+					socket,
+					userId: socket.data.userId,
+					role: socket.data.role,
+					subscription,
+				});
+				metricsSubscriptions.delete(subscriptionKey);
 			});
 
 			terminalRuntime.registerSocketHandlers({ socket, authCookie });
@@ -148,7 +173,15 @@ export function createSocketRuntimeService({
 					socketId: socket.id,
 					environmentId: null,
 				});
-				metricsSubscriptionCallbacks?.removeSubscriber(socket);
+				for (const subscription of metricsSubscriptions.values()) {
+					void metricsSubscriptionCallbacks?.removeSubscriber?.({
+						socket,
+						userId: socket.data.userId,
+						role: socket.data.role,
+						subscription,
+					});
+				}
+				metricsSubscriptions.clear();
 				terminalRuntime.closeSocketTerminalSessions(socket.id);
 				logRuntime.closeSocketLogSessions(socket.id);
 			});
@@ -161,6 +194,7 @@ export function createSocketRuntimeService({
 	}
 
 	return {
+		accessControl,
 		attach,
 		closeAllSessions,
 		getSocketRuntimeMetrics,

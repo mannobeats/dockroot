@@ -2,7 +2,7 @@ import { agents, db, environments } from "@dockroot/db";
 import { eq } from "drizzle-orm";
 import { resolveManagerUrl } from "@/lib/manager-url";
 import { publicEnv } from "@/lib/public-env";
-import { emitRealtime } from "@/lib/realtime";
+import { cacheRuntimeSnapshot, emitToRoom } from "@/lib/realtime";
 import { persistRuntimeSnapshotMetrics } from "@/lib/runtime-metrics";
 import { deriveRegisteredManagerUrl } from "../environments";
 import { findAgentByAccessToken, findAgentByRegistrationToken } from "../queries";
@@ -121,13 +121,14 @@ export async function heartbeatAgent(
 	emitEnvironmentUpdate(agent.environmentId, "healthy");
 
 	if (snapshot) {
+		cacheRuntimeSnapshot(agent.environmentId, snapshot);
 		await persistRuntimeSnapshotMetrics({
 			environmentId: agent.environmentId,
 			snapshot,
 			source: "agent",
 		});
 
-		emitRealtime("runtime:metrics", {
+		emitToRoom(`metrics:env:${agent.environmentId}`, "runtime:metrics", {
 			environmentId: agent.environmentId,
 			at: Date.now(),
 			containers: snapshot.containerStats || [],

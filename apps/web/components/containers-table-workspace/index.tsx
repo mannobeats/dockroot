@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ALL_COLUMNS } from "@/components/containers-table-workspace/columns";
 import { useColumnVisibility } from "@/components/containers-table-workspace/hooks/use-column-visibility";
 import { useRuntimeMetrics } from "@/components/containers-table-workspace/hooks/use-runtime-metrics";
@@ -84,6 +84,12 @@ export function ContainersTableWorkspace({
 	const allSelectableSelected =
 		selectableIds.length > 0 && selectableIds.every((containerId) => selectedIds[containerId]);
 	const visibleCount = ALL_COLUMNS.filter((c) => visibleColumns.has(c.id)).length + 1; // +1 for checkbox
+	const handleSelectChange = useCallback((containerId: string, checked: boolean) => {
+		setSelectedIds((current) => ({
+			...current,
+			[containerId]: checked,
+		}));
+	}, []);
 
 	return (
 		<>
@@ -155,12 +161,7 @@ export function ContainersTableWorkspace({
 									isProtected={protectedSet.has(container.ID)}
 									protectedLabel={protectedContainerLabels[container.ID]}
 									isSelected={Boolean(selectedIds[container.ID])}
-									onSelectChange={(checked) =>
-										setSelectedIds((current) => ({
-											...current,
-											[container.ID]: checked,
-										}))
-									}
+									onSelectChange={handleSelectChange}
 									controlContainerAction={controlContainerAction}
 									checkContainerUpdatesAction={checkContainerUpdatesAction}
 									applyContainerUpdatesAction={applyContainerUpdatesAction}

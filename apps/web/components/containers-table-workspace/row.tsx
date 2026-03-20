@@ -34,7 +34,7 @@ type ContainersTableRowProps = {
 	isProtected: boolean;
 	protectedLabel?: string;
 	isSelected: boolean;
-	onSelectChange: (checked: boolean) => void;
+	onSelectChange: (containerId: string, checked: boolean) => void;
 	controlContainerAction: FormAction;
 	checkContainerUpdatesAction: FormAction;
 	applyContainerUpdatesAction: FormAction;
@@ -94,7 +94,7 @@ export const ContainersTableRow = memo(function ContainersTableRow({
 					aria-label={`Select ${container.Names}`}
 					disabled={isProtected}
 					checked={isSelected}
-					onChange={(event) => onSelectChange(event.target.checked)}
+					onChange={(event) => onSelectChange(container.ID, event.target.checked)}
 					className="h-3.5 w-3.5 rounded border-default/30 bg-background"
 				/>
 			</DataTableCell>

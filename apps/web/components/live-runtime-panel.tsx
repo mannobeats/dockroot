@@ -79,7 +79,8 @@ export function LiveRuntimePanel() {
 	useEffect(() => {
 		setMounted(true);
 		const client = getSocket();
-		subscribeMetrics();
+		// This panel is currently intended for the shared local runtime stream.
+		subscribeMetrics({ environmentId: "local", environmentKind: "local" });
 
 		const onMetrics = (payload: RuntimePayload) => {
 			const fallbackCpu =
@@ -117,7 +118,7 @@ export function LiveRuntimePanel() {
 
 		return () => {
 			client.off("runtime:metrics", onMetrics);
-			unsubscribeMetrics();
+			unsubscribeMetrics({ environmentId: "local", environmentKind: "local" });
 			if (timerRef.current) {
 				clearTimeout(timerRef.current);
 				timerRef.current = null;

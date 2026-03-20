@@ -1,3 +1,5 @@
+import { getMetricsRoom } from "./metrics-room.mjs";
+
 /**
  * Agent WebSocket runtime: handles persistent WebSocket connections from remote agents.
  * Enables hub-initiated pulls for metrics (Beszel pattern) and real-time streaming.
@@ -7,13 +9,33 @@ export function createAgentSocketRuntime({
 	sql,
 	isShuttingDown,
 	persistRuntimeSnapshotMetrics,
-	emitRealtime,
 }) {
 	// Map<environmentId, { socket, agentId, streaming }>
 	const connectedAgents = new Map();
 
 	// Map<environmentId, number> — count of dashboard subscribers watching this env
 	const envSubscriberCounts = new Map();
+	const latestSnapshots = new Map();
+
+	function cacheSnapshot(environmentId, snapshot, sampledAt = Date.now()) {
+		latestSnapshots.set(environmentId, {
+			snapshot,
+			sampledAt,
+		});
+	}
+
+	function emitRuntimeMetrics(environmentId, snapshot, at = Date.now()) {
+		io.to(getMetricsRoom(environmentId)).emit("runtime:metrics", {
+			environmentId,
+			at,
+			containers: snapshot.containerStats || [],
+			host: {
+				source: "native",
+				cpuPercent: snapshot.usage?.cpuPercent ?? null,
+				memoryPercent: snapshot.usage?.memoryPercent ?? null,
+			},
+		});
+	}
 
 	function attach() {
 		io.on("connection", (socket) => {
@@ -55,22 +77,14 @@ export function createAgentSocketRuntime({
 					}
 
 					try {
+						cacheSnapshot(environmentId, data.snapshot);
 						await persistRuntimeSnapshotMetrics({
 							environmentId,
 							snapshot: data.snapshot,
 							source: "agent",
 						});
 
-						emitRealtime("runtime:metrics", {
-							environmentId,
-							at: Date.now(),
-							containers: data.snapshot.containerStats || [],
-							host: {
-								source: "native",
-								cpuPercent: data.snapshot.usage?.cpuPercent ?? null,
-								memoryPercent: data.snapshot.usage?.memoryPercent ?? null,
-							},
-						});
+						emitRuntimeMetrics(environmentId, data.snapshot);
 					} catch (error) {
 						console.error(
 							"[agent:ws] Failed to persist snapshot:",
@@ -85,22 +99,14 @@ export function createAgentSocketRuntime({
 					}
 
 					try {
+						cacheSnapshot(environmentId, data.snapshot, data.at || Date.now());
 						await persistRuntimeSnapshotMetrics({
 							environmentId,
 							snapshot: data.snapshot,
 							source: "agent",
 						});
 
-						emitRealtime("runtime:metrics", {
-							environmentId,
-							at: data.at || Date.now(),
-							containers: data.snapshot.containerStats || [],
-							host: {
-								source: "native",
-								cpuPercent: data.snapshot.usage?.cpuPercent ?? null,
-								memoryPercent: data.snapshot.usage?.memoryPercent ?? null,
-							},
-						});
+						emitRuntimeMetrics(environmentId, data.snapshot, data.at || Date.now());
 					} catch (error) {
 						console.error(
 							"[agent:ws] Failed to persist streaming metrics:",
@@ -189,6 +195,17 @@ export function createAgentSocketRuntime({
 		return connectedAgents.size;
 	}
 
+	function getLatestSnapshot(environmentId, maxAgeMs = 45_000) {
+		const entry = latestSnapshots.get(environmentId);
+		if (!entry) {
+			return null;
+		}
+		if (Date.now() - entry.sampledAt > maxAgeMs) {
+			return null;
+		}
+		return entry;
+	}
+
 	return {
 		attach,
 		requestAgentSnapshot,
@@ -198,5 +215,7 @@ export function createAgentSocketRuntime({
 		removeEnvironmentSubscriber,
 		isAgentConnected,
 		getConnectedAgentCount,
+		getLatestSnapshot,
+		cacheSnapshot,
 	};
 }
