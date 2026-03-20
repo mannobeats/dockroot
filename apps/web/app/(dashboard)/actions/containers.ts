@@ -14,7 +14,6 @@ import {
 	createContainerForEnvironment,
 	resolveRuntimeEnvironment,
 } from "@/lib/environment-runtime";
-import { listContainers } from "@/lib/platform/docker";
 import {
 	listAccessibleContainersForUser,
 	requireAccessibleContainerForUser,
@@ -95,10 +94,7 @@ export async function controlContainerAction(formData: FormData) {
 		environmentId,
 	});
 	const environment = await resolveRuntimeEnvironment(auth.userId, environmentId);
-	const containers =
-		environment.kind === "local"
-			? await listContainers()
-			: await listAccessibleContainersForUser(auth.userId, auth.role, environment.id);
+	const containers = await listAccessibleContainersForUser(auth.userId, auth.role, environment.id);
 	const container = containers.find((entry: Record<string, string>) => entry.ID === containerId);
 
 	if (environment.kind === "local" && container && isProtectedManagerContainer(container)) {
@@ -131,10 +127,7 @@ export async function bulkControlContainerAction(formData: FormData) {
 	}
 
 	const environment = await resolveRuntimeEnvironment(auth.userId, environmentId);
-	const containers =
-		environment.kind === "local"
-			? await listContainers()
-			: await listAccessibleContainersForUser(auth.userId, auth.role, environment.id);
+	const containers = await listAccessibleContainersForUser(auth.userId, auth.role, environment.id);
 	const allowedIds = new Set(
 		containers.map((entry: Record<string, string>) => entry.ID).filter(Boolean),
 	);

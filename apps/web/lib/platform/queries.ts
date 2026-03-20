@@ -1,5 +1,5 @@
 import { agents, db, environments, stacks } from "@dockroot/db";
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, ne, or } from "drizzle-orm";
 import { publicEnv } from "@/lib/public-env";
 import { hashToken, now, randomToken, slugify } from "./shared";
 
@@ -58,14 +58,19 @@ export async function requireOwnedEnvironment(environmentId: string, userId: str
 	return environment;
 }
 
-export async function ensureUniqueEnvironmentSlug(baseValue: string) {
+export async function ensureUniqueEnvironmentSlug(
+	baseValue: string,
+	options?: { excludeId?: string },
+) {
 	const baseSlug = slugify(baseValue) || `environment-${randomToken(8)}`;
 	let slug = baseSlug;
 	let attempt = 1;
 
 	while (true) {
 		const existing = await db.query.environments.findFirst({
-			where: eq(environments.slug, slug),
+			where: options?.excludeId
+				? and(eq(environments.slug, slug), ne(environments.id, options.excludeId))
+				: eq(environments.slug, slug),
 			columns: { id: true },
 		});
 

@@ -10,7 +10,6 @@ import {
 	now,
 	randomToken,
 	resolveStoredAgentRuntimeUrl,
-	slugify,
 } from "./shared";
 import { deleteOwnedStackById } from "./stack-cleanup";
 
@@ -113,12 +112,15 @@ export async function updateEnvironment({
 	const environment = await requireOwnedEnvironment(environmentId, userId);
 	const updatedAt = now();
 	const normalizedAgentUrl = environment.isDefaultLocal ? null : normalizeAgentUrl(agentUrl);
+	const nextSlug = environment.isDefaultLocal
+		? environment.slug
+		: await ensureUniqueEnvironmentSlug(name, { excludeId: environment.id });
 
 	await db
 		.update(environments)
 		.set({
 			name,
-			slug: environment.isDefaultLocal ? environment.slug : slugify(name),
+			slug: nextSlug,
 			description: description || null,
 			managerUrl: environment.isDefaultLocal ? environment.managerUrl : normalizedAgentUrl,
 			updatedAt,

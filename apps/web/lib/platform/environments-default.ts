@@ -18,7 +18,7 @@ export async function ensureDefaultLocalEnvironment(userId: string) {
 		});
 
 	const existing = await loadDefaultEnvironment();
-	if (existing?.agent) {
+	if (existing?.agent?.length) {
 		return existing;
 	}
 
@@ -50,7 +50,7 @@ export async function ensureDefaultLocalEnvironment(userId: string) {
 		throw new Error("Failed to provision the default local environment.");
 	}
 
-	if (!environment.agent) {
+	if (!environment.agent?.length) {
 		await db
 			.insert(agents)
 			.values({

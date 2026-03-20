@@ -1,6 +1,5 @@
 import { revalidatePath } from "next/cache";
 import { resolveRuntimeEnvironment } from "@/lib/environment-runtime";
-import { listContainers } from "@/lib/platform/docker";
 import { listAccessibleContainersForUser } from "@/lib/runtime-access";
 
 export type RuntimeContainerEntry = Record<string, string>;
@@ -11,10 +10,11 @@ export async function loadAccessibleContainers(input: {
 	environmentId?: string;
 }) {
 	const environment = await resolveRuntimeEnvironment(input.userId, input.environmentId);
-	const sourceContainers =
-		environment.kind === "local"
-			? await listContainers()
-			: await listAccessibleContainersForUser(input.userId, input.role, environment.id);
+	const sourceContainers = await listAccessibleContainersForUser(
+		input.userId,
+		input.role,
+		environment.id,
+	);
 
 	return {
 		environment,

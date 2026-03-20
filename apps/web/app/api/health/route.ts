@@ -6,7 +6,16 @@ export function GET() {
 	return NextResponse.json({ status: "ok" });
 }
 
-export async function POST() {
+function isInternalRequestAuthorized(request: Request) {
+	const token = request.headers.get("x-dockroot-internal-token") || "";
+	return Boolean(token) && token === (process.env.DOCKROOT_TOKEN_PEPPER || "");
+}
+
+export async function POST(request: Request) {
+	if (!isInternalRequestAuthorized(request)) {
+		return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+	}
+
 	const checks: Record<string, unknown> = {};
 
 	try {

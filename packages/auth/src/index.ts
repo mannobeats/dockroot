@@ -76,7 +76,7 @@ function shouldUseSecureCookies(): boolean {
 			return false;
 		}
 	}
-	return false;
+	return process.env.NODE_ENV === "production";
 }
 
 function publicSignupsAllowed() {

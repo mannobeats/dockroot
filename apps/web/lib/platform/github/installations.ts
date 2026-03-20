@@ -4,30 +4,13 @@ import { decryptSecret } from "@/lib/crypto-secrets";
 import {
 	getGitHubInstallation,
 	getInstallationProviderConfigByInternalInstallationId,
-	listGitHubAppInstallations,
-	listGitHubProviderConfigs,
 	listInstallationRepositories,
 } from "@/lib/github-app";
 import { now } from "../shared";
 
 export async function listGitHubInstallations(userId: string) {
-	const providers = await listGitHubProviderConfigs();
-	if (!providers.length) {
-		return [];
-	}
-
-	for (const provider of providers) {
-		const remoteInstallations = await listGitHubAppInstallations(provider).catch(() => []);
-		for (const installation of remoteInstallations) {
-			await syncGitHubInstallation({
-				userId,
-				githubInstallationId: String(installation.id),
-				providerId: provider.id || undefined,
-			});
-		}
-	}
-
 	const installations = await db.query.githubInstallations.findMany({
+		where: eq(githubInstallations.createdByUserId, userId),
 		orderBy: [desc(githubInstallations.updatedAt)],
 	});
 

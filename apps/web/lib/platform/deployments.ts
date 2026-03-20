@@ -26,17 +26,20 @@ export async function listDeployments(
 	});
 	const environmentIds = ownedEnvironments.map((e) => e.id);
 
-	const conditions = [];
-	if (stackIds.length) conditions.push(inArray(deployments.stackId, stackIds));
-	if (options?.environmentId) {
-		conditions.push(eq(deployments.environmentId, options.environmentId));
-	} else if (environmentIds.length) {
-		conditions.push(inArray(deployments.environmentId, environmentIds));
+	const ownershipConditions = [];
+	if (stackIds.length) ownershipConditions.push(inArray(deployments.stackId, stackIds));
+	if (environmentIds.length) {
+		ownershipConditions.push(inArray(deployments.environmentId, environmentIds));
 	}
-	conditions.push(eq(deployments.initiatedByUserId, userId));
+	ownershipConditions.push(eq(deployments.initiatedByUserId, userId));
+	const ownershipFilter =
+		ownershipConditions.length === 1 ? ownershipConditions[0] : or(...ownershipConditions);
+	const where = options?.environmentId
+		? and(eq(deployments.environmentId, options.environmentId), ownershipFilter)
+		: ownershipFilter;
 
 	return db.query.deployments.findMany({
-		where: or(...conditions),
+		where,
 		orderBy: [desc(deployments.createdAt)],
 		limit: Math.max(1, Math.min(200, limit)),
 		with: {

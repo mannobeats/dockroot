@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { requireUserSession } from "@/lib/authorization";
 import { getContainerLogsForEnvironment } from "@/lib/environment-runtime";
+import { requireAccessibleContainerForUser } from "@/lib/runtime-access";
 
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
-	const { userId } = await requireUserSession(request.headers);
+	const auth = await requireUserSession(request.headers);
 	const url = new URL(request.url);
 	const environmentId = url.searchParams.get("environmentId") || undefined;
 	const containerId = url.searchParams.get("containerId");
@@ -16,7 +17,13 @@ export async function GET(request: Request) {
 	}
 
 	try {
-		const { logs } = await getContainerLogsForEnvironment(userId, containerId, environmentId, {
+		await requireAccessibleContainerForUser({
+			containerId,
+			userId: auth.userId,
+			role: auth.role,
+			environmentId,
+		});
+		const { logs } = await getContainerLogsForEnvironment(auth.userId, containerId, environmentId, {
 			tail,
 		});
 		return new NextResponse(logs, {

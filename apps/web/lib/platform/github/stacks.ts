@@ -1,5 +1,5 @@
 import { db, githubInstallations, stacks } from "@dockroot/db";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import {
 	getInstallationProviderConfigByInternalInstallationId,
@@ -45,7 +45,10 @@ export async function createGitHubStack({
 	await requireOwnedEnvironment(environmentId, userId);
 
 	const installation = await db.query.githubInstallations.findFirst({
-		where: eq(githubInstallations.id, installationId),
+		where: and(
+			eq(githubInstallations.id, installationId),
+			eq(githubInstallations.createdByUserId, userId),
+		),
 	});
 
 	if (!installation) {
