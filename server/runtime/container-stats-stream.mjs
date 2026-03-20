@@ -88,7 +88,7 @@ export function createContainerStatsHub({ isShuttingDown }) {
 						const raw = JSON.parse(trimmed);
 						const stats = computeContainerStats(containerId, raw);
 						entry.lastStats = stats;
-						emitToSubscribers(entry, stats);
+						emitToSubscribers(entry, stats, containerId);
 					} catch {
 						// Skip malformed lines
 					}
@@ -122,7 +122,7 @@ export function createContainerStatsHub({ isShuttingDown }) {
 		req.end();
 	}
 
-	function emitToSubscribers(entry, stats) {
+	function emitToSubscribers(entry, stats, containerId) {
 		const io = globalThis.__dockroot_io;
 		if (!io) return;
 		for (const socketId of entry.subscribers) {
@@ -132,6 +132,10 @@ export function createContainerStatsHub({ isShuttingDown }) {
 			} else {
 				entry.subscribers.delete(socketId);
 			}
+		}
+		if (entry.subscribers.size === 0 && streams.has(containerId)) {
+			entry.abort.abort();
+			streams.delete(containerId);
 		}
 	}
 
