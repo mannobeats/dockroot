@@ -1,4 +1,4 @@
-import { Check, ChevronsUpDown, Globe, Monitor } from "lucide-react";
+import { Check, ChevronsUpDown, Monitor } from "lucide-react";
 import type { SidebarEnvironment } from "./types";
 
 interface EnvironmentSwitcherProps {
@@ -11,8 +11,7 @@ interface EnvironmentSwitcherProps {
 	onSelect: (environmentId: string) => void;
 }
 
-function EnvironmentIcon({ kind, className }: { kind: string; className?: string }) {
-	if (kind === "agent") return <Globe className={className} />;
+function EnvironmentIcon({ className }: { className?: string }) {
 	return <Monitor className={className} />;
 }
 
@@ -57,7 +56,7 @@ export function EnvironmentSwitcher({
 							: "text-muted hover:bg-foreground/[0.04] hover:text-foreground"
 					}`}
 				>
-					<EnvironmentIcon kind={selectedEnvironment?.kind || "local"} className="h-3.5 w-3.5" />
+					<EnvironmentIcon className="h-3.5 w-3.5" />
 				</button>
 			) : (
 				<button
@@ -77,7 +76,7 @@ export function EnvironmentSwitcher({
 								: "bg-accent/10 text-accent"
 						}`}
 					>
-						<EnvironmentIcon kind={selectedEnvironment?.kind || "local"} className="h-3.5 w-3.5" />
+						<EnvironmentIcon className="h-3.5 w-3.5" />
 					</div>
 					<div className="min-w-0 flex-1">
 						<p className="truncate text-[12px] font-semibold leading-tight">
@@ -132,7 +131,7 @@ export function EnvironmentSwitcher({
 												: "bg-accent/10 text-accent"
 										}`}
 									>
-										<EnvironmentIcon kind={environment.kind} className="h-3 w-3" />
+										<EnvironmentIcon className="h-3 w-3" />
 									</div>
 									<div className="min-w-0 flex-1">
 										<p className="truncate font-medium">{environment.name}</p>
