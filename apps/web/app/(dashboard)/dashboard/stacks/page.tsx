@@ -37,7 +37,7 @@ export default async function StacksPage({
 	const environment = await resolveRuntimeEnvironment(userId, params.environment);
 
 	const [stacks, environments, githubInstallations, githubProviders] = await Promise.all([
-		listStacks(userId, { includeUntracked, environmentId: environment.id }),
+		listStacks(userId, { includeUntracked, environmentId: environment.id, role }),
 		listEnvironments(userId),
 		listGitHubInstallations(userId),
 		listGitHubProviders(userId),

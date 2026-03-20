@@ -106,6 +106,10 @@ export function createSocketRuntimeService({
 		});
 
 		io.on("connection", (socket) => {
+			if (socket.data?.connectionType === "agent") {
+				return;
+			}
+
 			const authCookie = String(socket.request.headers.cookie || "");
 			emitRuntimeAction("socket.connected", {
 				userId: socket.data.userId,

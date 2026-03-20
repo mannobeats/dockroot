@@ -47,6 +47,13 @@ export function attachSocketAuthMiddleware({
 				return;
 			}
 
+			const handshakeAuth = socket.handshake?.auth || {};
+			if (handshakeAuth.agentToken && handshakeAuth.environmentId) {
+				socket.data.connectionType = "agent";
+				nextMiddleware();
+				return;
+			}
+
 			const auth = await getSessionFromSocket(socket, getAppBaseUrl);
 			if (!auth) {
 				wsRejectionCounters.unauthorized += 1;
@@ -68,6 +75,7 @@ export function attachSocketAuthMiddleware({
 
 			socket.data.userId = auth.userId;
 			socket.data.role = auth.role;
+			socket.data.connectionType = "user";
 			nextMiddleware();
 		} catch (error) {
 			nextMiddleware(error instanceof Error ? error : new Error("Unauthorized"));

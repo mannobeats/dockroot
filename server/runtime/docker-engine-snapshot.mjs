@@ -85,6 +85,45 @@ export async function collectDockerEngineSnapshot(options = {}) {
 	};
 }
 
+export async function collectDockerContainerStatsSnapshot(containerId, options = {}) {
+	const normalizedContainerId = String(containerId || "").trim();
+	if (!normalizedContainerId) {
+		throw new Error("Container ID is required.");
+	}
+
+	const endpoint = resolveDockerEndpoint(options.dockerHost || process.env.DOCKER_HOST);
+	const timeoutMs =
+		Number.isFinite(options.timeoutMs) && Number(options.timeoutMs) > 0
+			? Number(options.timeoutMs)
+			: DEFAULT_TIMEOUT_MS;
+
+	const stats = await requestDockerJson(
+		endpoint,
+		`/containers/${encodeURIComponent(normalizedContainerId)}/stats?stream=false`,
+		{ timeoutMs },
+	);
+
+	const memoryUsageBytes = computeMemoryUsageBytes(stats);
+	const memoryLimitBytes = Number(stats?.memory_stats?.limit || 0);
+	const memoryPercent =
+		memoryLimitBytes > 0 ? Number(((memoryUsageBytes / memoryLimitBytes) * 100).toFixed(1)) : 0;
+	const { rxBytes, txBytes } = computeNetworkTotals(stats);
+	const { readBytes, writeBytes } = computeBlockIoTotals(stats);
+
+	return {
+		containerId: normalizedContainerId,
+		cpuPercent: computeCpuPercent(stats),
+		memoryUsageBytes,
+		memoryLimitBytes,
+		memoryPercent,
+		networkRxBytes: rxBytes,
+		networkTxBytes: txBytes,
+		blockReadBytes: readBytes,
+		blockWriteBytes: writeBytes,
+		pids: Number(stats?.pids_stats?.current || 0),
+	};
+}
+
 function resolveDockerEndpoint(input) {
 	const dockerHost = String(input || "").trim();
 	if (!dockerHost) {

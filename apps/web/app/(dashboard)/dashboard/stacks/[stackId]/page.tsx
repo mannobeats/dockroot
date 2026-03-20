@@ -14,6 +14,7 @@ import { StackServicesAccordion } from "@/components/stack-services-accordion";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/link-button";
+import { getRoleFromSession } from "@/lib/authorization";
 import {
 	getContainerDetailsForEnvironment,
 	getRuntimeConnectionMessage,
@@ -43,6 +44,7 @@ export default async function StackWorkspacePage({
 		getStackById({
 			stackId,
 			userId: session.user.id,
+			role: getRoleFromSession(session),
 		}),
 		getGlobalSettings(session.user.id),
 	]);

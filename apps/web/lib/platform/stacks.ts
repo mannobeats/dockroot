@@ -1,6 +1,8 @@
 import { db, deployments, stacks } from "@dockroot/db";
 import { and, desc, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import type { AppRole } from "@/lib/authorization";
+import { isPrivilegedRole } from "@/lib/authorization";
 import { exportComposeProjectConfig } from "@/lib/platform/docker";
 import { isProtectedManagerStack } from "@/lib/runtime-protection";
 import { ensureDefaultLocalEnvironment } from "./environments";
@@ -8,16 +10,61 @@ import { ensureUniqueStackSlug, requireOwnedEnvironment } from "./queries";
 import { now } from "./shared";
 import { deleteOwnedStackById } from "./stack-cleanup";
 
-export async function getStackById({ stackId, userId }: { stackId: string; userId: string }) {
-	return db.query.stacks.findFirst({
-		where: and(eq(stacks.id, stackId), eq(stacks.createdByUserId, userId)),
+async function findAccessibleStackById({
+	stackId,
+	userId,
+	role,
+	withDeployments = false,
+}: {
+	stackId: string;
+	userId: string;
+	role?: AppRole;
+	withDeployments?: boolean;
+}) {
+	const stack = await db.query.stacks.findFirst({
+		where: eq(stacks.id, stackId),
 		with: {
 			environment: true,
-			deployments: {
-				orderBy: [desc(deployments.createdAt)],
-				limit: 20,
-			},
+			...(withDeployments
+				? {
+						deployments: {
+							orderBy: [desc(deployments.createdAt)],
+							limit: 20,
+						},
+					}
+				: {}),
 		},
+	});
+
+	if (!stack) {
+		return null;
+	}
+
+	if (stack.createdByUserId === userId) {
+		return stack;
+	}
+
+	if (isPrivilegedRole(role || "member") && stack.environment.createdByUserId === userId) {
+		return stack;
+	}
+
+	return null;
+}
+
+export async function getStackById({
+	stackId,
+	userId,
+	role,
+}: {
+	stackId: string;
+	userId: string;
+	role?: AppRole;
+}) {
+	return findAccessibleStackById({
+		stackId,
+		userId,
+		role,
+		withDeployments: true,
 	});
 }
 
@@ -63,19 +110,20 @@ export async function createStack({
 export async function updateStackConfig({
 	stackId,
 	userId,
+	role,
 	composeYaml,
 	envFileContent,
 }: {
 	stackId: string;
 	userId: string;
+	role?: AppRole;
 	composeYaml: string;
 	envFileContent?: string;
 }) {
-	const stack = await db.query.stacks.findFirst({
-		where: and(eq(stacks.id, stackId), eq(stacks.createdByUserId, userId)),
-		columns: {
-			id: true,
-		},
+	const stack = await findAccessibleStackById({
+		stackId,
+		userId,
+		role,
 	});
 
 	if (!stack) {
@@ -153,6 +201,14 @@ export async function adoptComposeProject({
 	return stackId;
 }
 
-export async function deleteStack({ stackId, userId }: { stackId: string; userId: string }) {
-	await deleteOwnedStackById(stackId, userId, { destroyRuntime: false });
+export async function deleteStack({
+	stackId,
+	userId,
+	role,
+}: {
+	stackId: string;
+	userId: string;
+	role?: AppRole;
+}) {
+	await deleteOwnedStackById(stackId, userId, { destroyRuntime: false, role });
 }

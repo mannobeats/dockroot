@@ -16,7 +16,7 @@ import { controlComposeProject } from "@/lib/platform/docker";
 import { isProtectedManagerStack } from "@/lib/runtime-protection";
 
 export async function deployStackAction(formData: FormData) {
-	const { userId } = await requireUserSession();
+	const { userId, role } = await requireUserSession();
 	const stackId = getValue(formData, "stackId");
 
 	if (!stackId) {
@@ -26,18 +26,20 @@ export async function deployStackAction(formData: FormData) {
 	await getRequiredControllableStack(
 		stackId,
 		userId,
+		role,
 		"Dockroot platform stacks are locked and cannot be controlled from the UI.",
 	);
 
 	await queueOrRunDeployment({
 		stackId,
 		userId,
+		role,
 		operation: "deploy",
 	});
 }
 
 export async function updateStackConfigAction(formData: FormData) {
-	const { userId } = await requireUserSession();
+	const { userId, role } = await requireUserSession();
 	const stackId = getValue(formData, "stackId");
 	const composeYaml = getValue(formData, "composeYaml");
 	const envFileContent = getValue(formData, "envFileContent");
@@ -50,12 +52,14 @@ export async function updateStackConfigAction(formData: FormData) {
 	await getRequiredControllableStack(
 		stackId,
 		userId,
+		role,
 		"Dockroot platform stacks are locked and cannot be edited from the UI.",
 	);
 
 	await updateStackConfig({
 		stackId,
 		userId,
+		role,
 		composeYaml,
 		envFileContent,
 	});
@@ -64,6 +68,7 @@ export async function updateStackConfigAction(formData: FormData) {
 		await queueOrRunDeployment({
 			stackId,
 			userId,
+			role,
 			operation: "deploy",
 		});
 	}
@@ -71,7 +76,7 @@ export async function updateStackConfigAction(formData: FormData) {
 
 export async function destroyStackAction(formData: FormData) {
 	requireDestructiveConfirmation(formData);
-	const { userId } = await requireUserSession();
+	const { userId, role } = await requireUserSession();
 	const stackId = getValue(formData, "stackId");
 
 	if (!stackId) {
@@ -81,12 +86,14 @@ export async function destroyStackAction(formData: FormData) {
 	await getRequiredControllableStack(
 		stackId,
 		userId,
+		role,
 		"Dockroot platform stacks are locked and cannot be destroyed from the UI.",
 	);
 
 	await queueOrRunDeployment({
 		stackId,
 		userId,
+		role,
 		operation: "destroy",
 	});
 }

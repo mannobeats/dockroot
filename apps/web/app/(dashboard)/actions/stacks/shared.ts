@@ -4,6 +4,7 @@ import {
 	getValues,
 	parseJsonValue,
 } from "@/app/(dashboard)/actions/utils/form-data";
+import type { AppRole } from "@/lib/authorization";
 import { isPrivilegedRole } from "@/lib/authorization";
 import { getStackById } from "@/lib/platform";
 import { isProtectedManagerStack } from "@/lib/runtime-protection";
@@ -55,8 +56,8 @@ export function projectConfigFiles(project: BulkComposeProjectInput) {
 	return project.configFiles?.filter(Boolean) || [];
 }
 
-export async function getControllableStack(stackId: string, userId: string) {
-	const stack = await getStackById({ stackId, userId });
+export async function getControllableStack(stackId: string, userId: string, role?: AppRole) {
+	const stack = await getStackById({ stackId, userId, role });
 	if (!stack || isProtectedManagerStack(stack.slug)) {
 		return null;
 	}
@@ -66,9 +67,10 @@ export async function getControllableStack(stackId: string, userId: string) {
 export async function getRequiredControllableStack(
 	stackId: string,
 	userId: string,
+	role: AppRole | undefined,
 	protectedMessage: string,
 ) {
-	const stack = await getStackById({ stackId, userId });
+	const stack = await getStackById({ stackId, userId, role });
 	if (!stack) {
 		throw new Error("Stack not found");
 	}

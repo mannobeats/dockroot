@@ -1,6 +1,8 @@
 import { db, deployments, environments, stacks } from "@dockroot/db";
 import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import type { AppRole } from "@/lib/authorization";
+import { isPrivilegedRole } from "@/lib/authorization";
 import { deployStackLocally } from "@/lib/platform/docker";
 import { emitRealtime } from "@/lib/realtime";
 import { ensureDefaultLocalEnvironment } from "./environments";
@@ -53,16 +55,18 @@ export async function listDeployments(
 export async function queueOrRunDeployment({
 	stackId,
 	userId,
+	role,
 	operation = "deploy",
 	webhookDeliveryId,
 }: {
 	stackId: string;
 	userId: string;
+	role?: AppRole;
 	operation?: "deploy" | "destroy";
 	webhookDeliveryId?: string | null;
 }) {
 	const stack = await db.query.stacks.findFirst({
-		where: and(eq(stacks.id, stackId), eq(stacks.createdByUserId, userId)),
+		where: eq(stacks.id, stackId),
 		with: {
 			githubInstallation: true,
 			environment: {
@@ -74,6 +78,14 @@ export async function queueOrRunDeployment({
 	});
 
 	if (!stack) {
+		throw new Error("Stack not found");
+	}
+
+	const canAccessStack =
+		stack.createdByUserId === userId ||
+		(isPrivilegedRole(role || "member") && stack.environment.createdByUserId === userId);
+
+	if (!canAccessStack) {
 		throw new Error("Stack not found");
 	}
 

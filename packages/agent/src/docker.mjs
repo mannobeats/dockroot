@@ -1,8 +1,10 @@
-import { spawn } from "node:child_process";
 import { mkdir, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { collectDockerEngineSnapshot } from "../../../server/runtime/docker-engine-snapshot.mjs";
+import {
+	collectDockerContainerStatsSnapshot,
+	collectDockerEngineSnapshot,
+} from "../../../server/runtime/docker-engine-snapshot.mjs";
 import { dataDir } from "./config.mjs";
 import {
 	detectDockerVersion,
@@ -353,81 +355,38 @@ export async function deleteBackup(backupId) {
  * Calls `onStats(stats)` for each update. Stops when signal is aborted.
  */
 export function streamContainerStats(containerId, signal, onStats) {
-	const proc = spawn("docker", ["stats", "--format", "{{json .}}", containerId], {
-		stdio: ["ignore", "pipe", "ignore"],
-	});
+	let timer = null;
+	let stopped = false;
 
-	let buffer = "";
-	proc.stdout.setEncoding("utf8");
-	proc.stdout.on("data", (chunk) => {
-		buffer += chunk;
-		const lines = buffer.split("\n");
-		buffer = lines.pop() || "";
-		for (const line of lines) {
-			const trimmed = line.trim();
-			if (!trimmed) continue;
-			try {
-				const raw = JSON.parse(trimmed);
-				const stats = {
-					cpuPercent: Number.parseFloat((raw.CPUPerc || "0").replace("%", "")) || 0,
-					memoryUsageBytes: parseAgentMemoryUsage(raw.MemUsage),
-					memoryLimitBytes: parseAgentMemoryLimit(raw.MemUsage),
-					memoryPercent: Number.parseFloat((raw.MemPerc || "0").replace("%", "")) || 0,
-					networkRxBytes: parseAgentIoValue(raw.NetIO, 0),
-					networkTxBytes: parseAgentIoValue(raw.NetIO, 1),
-					blockReadBytes: parseAgentIoValue(raw.BlockIO, 0),
-					blockWriteBytes: parseAgentIoValue(raw.BlockIO, 1),
-					pids: Number(raw.PIDs) || 0,
-				};
+	const poll = async () => {
+		if (stopped || signal.aborted) {
+			return;
+		}
+
+		try {
+			const stats = await collectDockerContainerStatsSnapshot(containerId);
+			if (!stopped && !signal.aborted) {
 				onStats(stats);
-			} catch {
-				// Skip malformed lines
 			}
+		} catch {
+			// Container may have stopped or disappeared between polls.
+		}
+
+		if (!stopped && !signal.aborted) {
+			timer = setTimeout(() => {
+				void poll();
+			}, 2_000);
+			timer.unref?.();
+		}
+	};
+
+	signal.addEventListener("abort", () => {
+		stopped = true;
+		if (timer) {
+			clearTimeout(timer);
+			timer = null;
 		}
 	});
 
-	signal.addEventListener("abort", () => {
-		proc.kill("SIGTERM");
-	});
-
-	proc.on("exit", () => {
-		// Stream ended (container stopped or aborted)
-	});
-}
-
-function parseAgentHumanBytes(value) {
-	const raw = String(value || "").trim();
-	if (!raw) return 0;
-	const match = raw.match(/^([\d.]+)\s*([A-Za-z]+)?$/);
-	if (!match) return 0;
-	const amount = Number.parseFloat(match[1]);
-	if (!Number.isFinite(amount)) return 0;
-	const unit = (match[2] || "B").toUpperCase();
-	const multipliers = {
-		B: 1,
-		KB: 1000,
-		KIB: 1024,
-		MB: 1000 ** 2,
-		MIB: 1024 ** 2,
-		GB: 1000 ** 3,
-		GIB: 1024 ** 3,
-		TB: 1000 ** 4,
-		TIB: 1024 ** 4,
-	};
-	return Math.round(amount * (multipliers[unit] || 1));
-}
-
-function parseAgentMemoryUsage(value) {
-	const parts = String(value || "").split("/");
-	return parseAgentHumanBytes(parts[0]?.trim());
-}
-
-function parseAgentMemoryLimit(value) {
-	const parts = String(value || "").split("/");
-	return parts.length > 1 ? parseAgentHumanBytes(parts[1]?.trim()) : 0;
-}
-
-function parseAgentIoValue(value, index) {
-	const parts = String(value || "").split("/");
-	return parts.length > index ? parseAgentHumanBytes(parts[index]?.trim()) : 0;
+	void poll();
 }

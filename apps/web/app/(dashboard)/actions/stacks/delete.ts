@@ -14,7 +14,7 @@ import { deleteStack } from "@/lib/platform";
 
 export async function deleteStackAction(formData: FormData) {
 	requireDestructiveConfirmation(formData);
-	const { userId } = await requireUserSession();
+	const { userId, role } = await requireUserSession();
 	const stackId = getValue(formData, "stackId");
 
 	if (!stackId) {
@@ -24,12 +24,14 @@ export async function deleteStackAction(formData: FormData) {
 	const stack = await getRequiredControllableStack(
 		stackId,
 		userId,
+		role,
 		"Dockroot platform stacks are locked and cannot be deleted from the UI.",
 	);
 
 	await deleteStack({
 		stackId,
 		userId,
+		role,
 	});
 	await recordAuditEvent({
 		environmentId: stack.environment?.id,

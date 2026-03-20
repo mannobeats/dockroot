@@ -20,20 +20,21 @@ import { deleteStack, queueOrRunDeployment } from "@/lib/platform";
 import { controlComposeProject } from "@/lib/platform/docker";
 
 export async function bulkDeployStacksAction(formData: FormData) {
-	const { userId } = await requireUserSession();
+	const { userId, role } = await requireUserSession();
 	const { stackIds } = parseBulkStackTargets(formData);
 	if (!stackIds.length) {
 		throw new Error("At least one stack is required.");
 	}
 
 	for (const stackId of stackIds) {
-		const stack = await getControllableStack(stackId, userId);
+		const stack = await getControllableStack(stackId, userId, role);
 		if (!stack) {
 			continue;
 		}
 		await queueOrRunDeployment({
 			stackId,
 			userId,
+			role,
 			operation: "deploy",
 		});
 	}
@@ -47,13 +48,14 @@ export async function bulkRestartStacksAction(formData: FormData) {
 	assertPrivilegedForUntrackedProjects(auth.role, projects.length);
 
 	for (const stackId of stackIds) {
-		const stack = await getControllableStack(stackId, auth.userId);
+		const stack = await getControllableStack(stackId, auth.userId, auth.role);
 		if (!stack) {
 			continue;
 		}
 		await queueOrRunDeployment({
 			stackId,
 			userId: auth.userId,
+			role: auth.role,
 			operation: "deploy",
 		});
 	}
@@ -75,13 +77,14 @@ export async function bulkStopStacksAction(formData: FormData) {
 	assertPrivilegedForUntrackedProjects(auth.role, projects.length);
 
 	for (const stackId of stackIds) {
-		const stack = await getControllableStack(stackId, auth.userId);
+		const stack = await getControllableStack(stackId, auth.userId, auth.role);
 		if (!stack) {
 			continue;
 		}
 		await queueOrRunDeployment({
 			stackId,
 			userId: auth.userId,
+			role: auth.role,
 			operation: "destroy",
 		});
 	}
@@ -104,13 +107,14 @@ export async function bulkDestroyStacksAction(formData: FormData) {
 	assertPrivilegedForUntrackedProjects(auth.role, projects.length);
 
 	for (const stackId of stackIds) {
-		const stack = await getControllableStack(stackId, auth.userId);
+		const stack = await getControllableStack(stackId, auth.userId, auth.role);
 		if (!stack) {
 			continue;
 		}
 		await queueOrRunDeployment({
 			stackId,
 			userId: auth.userId,
+			role: auth.role,
 			operation: "destroy",
 		});
 	}
@@ -132,13 +136,14 @@ export async function bulkRemoveStacksAction(formData: FormData) {
 	assertPrivilegedForUntrackedProjects(auth.role, projects.length);
 
 	for (const stackId of stackIds) {
-		const stack = await getControllableStack(stackId, auth.userId);
+		const stack = await getControllableStack(stackId, auth.userId, auth.role);
 		if (!stack) {
 			continue;
 		}
 		await deleteStack({
 			stackId,
 			userId: auth.userId,
+			role: auth.role,
 		});
 		await recordAuditEvent({
 			environmentId: stack.environment?.id,

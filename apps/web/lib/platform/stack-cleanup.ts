@@ -1,15 +1,17 @@
 import { db, stacks } from "@dockroot/db";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import type { AppRole } from "@/lib/authorization";
+import { isPrivilegedRole } from "@/lib/authorization";
 import { deleteLocalStackResources } from "@/lib/platform/docker";
 
 export async function deleteOwnedStackById(
 	stackId: string,
 	userId: string,
-	options?: { destroyRuntime?: boolean },
+	options?: { destroyRuntime?: boolean; role?: AppRole },
 ) {
 	const stack = await db.query.stacks.findFirst({
-		where: and(eq(stacks.id, stackId), eq(stacks.createdByUserId, userId)),
+		where: eq(stacks.id, stackId),
 		with: {
 			environment: {
 				with: {
@@ -20,6 +22,14 @@ export async function deleteOwnedStackById(
 	});
 
 	if (!stack) {
+		throw new Error("Stack not found");
+	}
+
+	const canAccessStack =
+		stack.createdByUserId === userId ||
+		(isPrivilegedRole(options?.role || "member") && stack.environment.createdByUserId === userId);
+
+	if (!canAccessStack) {
 		throw new Error("Stack not found");
 	}
 

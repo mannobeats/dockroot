@@ -1,5 +1,7 @@
 import { db, deployments, environments, stacks } from "@dockroot/db";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import type { AppRole } from "@/lib/authorization";
+import { isPrivilegedRole } from "@/lib/authorization";
 import { listComposeProjects, listContainers } from "@/lib/platform/docker";
 import { getPlatformDataDir } from "@/lib/platform/fs";
 import { isProtectedManagerStack } from "@/lib/runtime-protection";
@@ -87,7 +89,7 @@ export async function getDashboardData(userId: string, options?: { includeRuntim
 
 export async function listStacks(
 	userId: string,
-	options?: { includeUntracked?: boolean; environmentId?: string },
+	options?: { includeUntracked?: boolean; environmentId?: string; role?: AppRole },
 ) {
 	await ensureDefaultLocalEnvironment(userId);
 
@@ -104,9 +106,7 @@ export async function listStacks(
 		: null;
 
 	const trackedStacks = await db.query.stacks.findMany({
-		where: options?.environmentId
-			? and(eq(stacks.createdByUserId, userId), eq(stacks.environmentId, options.environmentId))
-			: eq(stacks.createdByUserId, userId),
+		where: options?.environmentId ? eq(stacks.environmentId, options.environmentId) : undefined,
 		orderBy: [desc(stacks.updatedAt)],
 		with: {
 			environment: true,
@@ -115,6 +115,15 @@ export async function listStacks(
 				limit: 1,
 			},
 		},
+	});
+	const accessibleTrackedStacks = trackedStacks.filter((stack) => {
+		if (stack.createdByUserId === userId) {
+			return true;
+		}
+
+		return (
+			isPrivilegedRole(options?.role || "member") && stack.environment.createdByUserId === userId
+		);
 	});
 
 	let runtimeContainers: Array<Record<string, string>> = [];
@@ -160,7 +169,7 @@ export async function listStacks(
 		runtimeByProject.set(composeProject, current);
 	}
 
-	const tracked = trackedStacks.map((stack) => {
+	const tracked = accessibleTrackedStacks.map((stack) => {
 		const containers = runtimeByProject.get(stack.slug) || [];
 		return {
 			type: "tracked" as const,

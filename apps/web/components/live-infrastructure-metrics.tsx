@@ -35,14 +35,20 @@ export function LiveInfrastructureMetrics({
 	const [lastUpdate, setLastUpdate] = useState<number | null>(null);
 	const tickCountRef = useRef(0);
 
-	const onMetrics = useCallback((payload: RuntimePayload) => {
-		const cpuVal = payload.host?.cpuPercent ?? null;
-		const memVal = payload.host?.memoryPercent ?? null;
-		if (cpuVal !== null) setCpu(Number(cpuVal.toFixed(1)));
-		if (memVal !== null) setMemory(Number(memVal.toFixed(1)));
-		setLastUpdate(payload.at || Date.now());
-		tickCountRef.current += 1;
-	}, []);
+	const onMetrics = useCallback(
+		(payload: RuntimePayload) => {
+			if (payload.environmentId && payload.environmentId !== environmentId) {
+				return;
+			}
+			const cpuVal = payload.host?.cpuPercent ?? null;
+			const memVal = payload.host?.memoryPercent ?? null;
+			if (cpuVal !== null) setCpu(Number(cpuVal.toFixed(1)));
+			if (memVal !== null) setMemory(Number(memVal.toFixed(1)));
+			setLastUpdate(payload.at || Date.now());
+			tickCountRef.current += 1;
+		},
+		[environmentId],
+	);
 
 	useEffect(() => {
 		// Reset state when environment changes
