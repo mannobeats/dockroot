@@ -27,6 +27,7 @@ export function DestructiveActionModal({
 	triggerVariant = "danger",
 	triggerSize = "xs",
 	triggerClassName,
+	triggerTitle,
 	disabled = false,
 	hiddenFields = {},
 	options = [],
@@ -44,6 +45,7 @@ export function DestructiveActionModal({
 	triggerVariant?: "danger" | "warning" | "quietDanger" | "outline" | "ghost";
 	triggerSize?: "xs" | "sm" | "md";
 	triggerClassName?: string;
+	triggerTitle?: string;
 	disabled?: boolean;
 	hiddenFields?: Record<string, string | string[]>;
 	options?: ModalOption[];
@@ -114,6 +116,7 @@ export function DestructiveActionModal({
 				type="button"
 				disabled={disabled}
 				onClick={() => setOpen(true)}
+				title={triggerTitle}
 				className={cn(
 					buttonVariants({
 						variant: triggerVariant,

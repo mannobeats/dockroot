@@ -83,23 +83,24 @@ export default async function EnvironmentsPage() {
 												href={`/dashboard?environment=${environment.id}`}
 												variant="ghost"
 												size="icon-xs"
-												title="Open workspace"
+												title="View"
 											>
 												<ExternalLink className="h-3.5 w-3.5" />
 											</LinkButton>
 											{environment.isDefaultLocal ? null : (
 												<DestructiveActionModal
 													action={deleteEnvironmentAction}
-													title={`Delete environment ${environment.name}`}
-													description="This will permanently remove the environment and linked runtime metadata."
+													title={`Remove environment ${environment.name}`}
+													description="This permanently removes the environment and its linked runtime metadata."
 													triggerLabel=""
-													confirmLabel="Delete"
-													pendingLabel="Deleting..."
+													confirmLabel="Remove"
+													pendingLabel="Removing..."
 													triggerVariant="ghost"
 													triggerSize="xs"
 													hiddenFields={{ environmentId: environment.id }}
 													triggerClassName="h-6 w-6 p-0 text-muted hover:text-danger"
 													triggerIcon={<Trash2 className="h-3.5 w-3.5" />}
+													triggerTitle="Remove"
 												/>
 											)}
 										</div>

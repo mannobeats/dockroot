@@ -1,9 +1,8 @@
-import { ArrowLeft, Lock, Play, RotateCcw, Trash2 } from "lucide-react";
+import { ArrowLeft, Lock, Play, RotateCcw } from "lucide-react";
 import {
 	controlContainerAction,
 	deleteStackAction,
 	deployStackAction,
-	destroyStackAction,
 	updateStackConfigAction,
 } from "@/app/(dashboard)/actions";
 import { DeployLogTrigger } from "@/components/deploy-log-trigger";
@@ -163,26 +162,12 @@ export default async function StackWorkspacePage({
 						</FormSubmitButton>
 					</form>
 					<DestructiveActionModal
-						action={destroyStackAction}
-						title={`Destroy stack ${stack.name}`}
-						description="This will stop and remove the stack resources."
-						triggerLabel=""
-						confirmLabel="Destroy"
-						pendingLabel="Destroying..."
-						triggerVariant="ghost"
-						triggerSize="sm"
-						disabled={isProtected}
-						hiddenFields={{ stackId: stack.id }}
-						triggerClassName="h-8 w-8 p-0 text-muted hover:text-danger"
-						triggerIcon={<Trash2 className="h-4 w-4" />}
-					/>
-					<DestructiveActionModal
 						action={deleteStackAction}
-						title={`Delete stack ${stack.name}`}
-						description="This permanently removes stack metadata from Dockroot."
-						triggerLabel="Delete"
-						confirmLabel="Delete"
-						pendingLabel="Deleting..."
+						title={`Remove stack ${stack.name}`}
+						description="This permanently removes the stack, its configuration, and deployment history from Dockroot."
+						triggerLabel="Remove"
+						confirmLabel="Remove"
+						pendingLabel="Removing..."
 						triggerVariant="quietDanger"
 						triggerSize="xs"
 						disabled={isProtected}

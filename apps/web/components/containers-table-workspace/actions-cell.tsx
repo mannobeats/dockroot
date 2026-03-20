@@ -139,6 +139,7 @@ export function ContainersActionsCell({
 							}}
 							triggerClassName="h-7 w-7 p-0 text-muted hover:text-danger"
 							triggerIcon={<Trash2 className="h-3.5 w-3.5" />}
+							triggerTitle="Remove"
 							options={[
 								{
 									name: "removeVolumes",
@@ -169,7 +170,7 @@ export function ContainersActionsCell({
 					href={`/dashboard/containers/${container.ID}?environment=${environmentId}`}
 					variant="ghost"
 					size="icon-xs"
-					title="Details"
+					title="View"
 				>
 					<ExternalLink className="h-3.5 w-3.5" />
 				</LinkButton>

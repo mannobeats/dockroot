@@ -252,7 +252,7 @@ export function ContainerFileBrowser({
 									type="button"
 									onClick={() => void deletePath(nextPath)}
 									className="rounded p-1 text-muted/0 transition-all group-hover:text-muted hover:!text-danger"
-									title={`Delete ${entry.name}`}
+									title="Remove"
 								>
 									<Trash2 className="h-3.5 w-3.5" />
 								</button>
@@ -284,7 +284,7 @@ export function ContainerFileBrowser({
 									type="button"
 									onClick={() => void deletePath(nextPath)}
 									className="rounded p-1 text-muted/0 transition-all group-hover:text-muted hover:!text-danger"
-									title={`Delete ${entry.name}`}
+									title="Remove"
 								>
 									<Trash2 className="h-3.5 w-3.5" />
 								</button>
@@ -316,7 +316,7 @@ export function ContainerFileBrowser({
 								onClick={() => void deletePath(browser.path)}
 							>
 								<Trash2 className="h-3 w-3" />
-								Delete
+								Remove
 							</Button>
 							<Button type="button" size="xs" onClick={() => void saveFile()} disabled={isPending}>
 								<Save className="h-3 w-3" />

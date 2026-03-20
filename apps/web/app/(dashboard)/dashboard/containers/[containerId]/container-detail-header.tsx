@@ -128,6 +128,7 @@ export function ContainerDetailHeader({
 							disabled={isProtected}
 							triggerClassName="h-8 w-8 p-0 text-muted hover:text-danger"
 							triggerIcon={<Trash2 className="h-4 w-4" />}
+							triggerTitle="Remove"
 							hiddenFields={{
 								containerId,
 								action: "remove",

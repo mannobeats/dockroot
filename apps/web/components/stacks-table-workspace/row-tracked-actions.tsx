@@ -46,23 +46,24 @@ export function TrackedStackActions({
 				onConfirm={() => {
 					onWatchStack(stack.stackId);
 				}}
-				title={`Destroy stack ${stack.name}`}
+				title={`Remove stack ${stack.name}`}
 				description="This will stop and remove the stack resources."
 				triggerLabel=""
-				confirmLabel="Destroy"
-				pendingLabel="Destroying..."
+				confirmLabel="Remove"
+				pendingLabel="Removing..."
 				triggerVariant="ghost"
 				triggerSize="xs"
 				disabled={stack.isProtected}
 				hiddenFields={{ stackId: stack.stackId }}
 				triggerClassName="h-7 w-7 p-0 text-muted hover:text-danger"
 				triggerIcon={<Trash2 className="h-3.5 w-3.5" />}
+				triggerTitle="Remove"
 			/>
 			<LinkButton
 				href={`/dashboard/stacks/${stack.stackId}${detailEnvironmentSuffix}`}
 				variant="ghost"
 				size="icon-xs"
-				title="Open"
+				title="View"
 			>
 				<ExternalLink className="h-3.5 w-3.5" />
 			</LinkButton>

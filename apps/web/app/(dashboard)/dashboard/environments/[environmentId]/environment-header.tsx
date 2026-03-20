@@ -36,16 +36,17 @@ export function EnvironmentDetailHeader({
 				{environment.isDefaultLocal ? null : (
 					<DestructiveActionModal
 						action={deleteEnvironmentAction}
-						title={`Delete environment ${environment.name}`}
-						description="This will permanently remove the environment and linked runtime metadata."
+						title={`Remove environment ${environment.name}`}
+						description="This permanently removes the environment and its linked runtime metadata."
 						triggerLabel=""
-						confirmLabel="Delete"
-						pendingLabel="Deleting..."
+						confirmLabel="Remove"
+						pendingLabel="Removing..."
 						triggerVariant="ghost"
 						triggerSize="sm"
 						hiddenFields={{ environmentId: environment.id }}
 						triggerClassName="h-8 w-8 p-0 text-muted hover:text-danger"
 						triggerIcon={<Trash2 className="h-4 w-4" />}
+						triggerTitle="Remove"
 					/>
 				)}
 			</div>

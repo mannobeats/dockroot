@@ -59,11 +59,11 @@ export function VolumesTableWorkspace({
 					onConfirm={() => {
 						setSelectedNames({});
 					}}
-					title={`Delete ${selected.length} volume(s)`}
+					title={`Remove ${selected.length} volume(s)`}
 					description="This permanently removes all selected volumes and their data."
-					triggerLabel={`Delete${selected.length ? ` (${selected.length})` : ""}`}
-					confirmLabel="Delete all"
-					pendingLabel="Deleting..."
+					triggerLabel="Remove"
+					confirmLabel="Remove all"
+					pendingLabel="Removing..."
 					triggerVariant="danger"
 					triggerSize="xs"
 					disabled={!selected.length}
@@ -152,22 +152,23 @@ export function VolumesTableWorkspace({
 											href={`/dashboard/volumes/${encodeURIComponent(volume.Name)}?environment=${environmentId}`}
 											variant="ghost"
 											size="icon-xs"
-											title="Details"
+											title="View"
 										>
 											<ExternalLink className="h-3.5 w-3.5" />
 										</LinkButton>
 										<DestructiveActionModal
 											action={removeVolumeAction}
-											title={`Delete volume ${volume.Name}`}
+											title={`Remove volume ${volume.Name}`}
 											description="This permanently removes the volume and all data it contains."
 											triggerLabel=""
-											confirmLabel="Delete"
-											pendingLabel="Deleting..."
+											confirmLabel="Remove"
+											pendingLabel="Removing..."
 											triggerVariant="ghost"
 											triggerSize="xs"
 											hiddenFields={{ name: volume.Name, environmentId }}
 											triggerClassName="h-6 w-6 p-0 text-muted hover:text-danger"
 											triggerIcon={<Trash2 className="h-3.5 w-3.5" />}
+											triggerTitle="Remove"
 										/>
 									</div>
 								</DataTableCell>

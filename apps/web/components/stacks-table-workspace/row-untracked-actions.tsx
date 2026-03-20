@@ -71,11 +71,11 @@ export function UntrackedComposeActions({
 			)}
 			<DestructiveActionModal
 				action={controlComposeProjectAction}
-				title={`Destroy compose stack ${stack.slug}`}
-				description="This will run docker compose down for the selected stack."
+				title={`Remove stack ${stack.slug}`}
+				description="This will stop and remove all containers and resources for this stack."
 				triggerLabel=""
-				confirmLabel="Destroy"
-				pendingLabel="Destroying..."
+				confirmLabel="Remove"
+				pendingLabel="Removing..."
 				triggerVariant="ghost"
 				triggerSize="xs"
 				disabled={stack.isProtected}
@@ -86,6 +86,7 @@ export function UntrackedComposeActions({
 				}}
 				triggerClassName="h-7 w-7 p-0 text-muted hover:text-danger"
 				triggerIcon={<Trash2 className="h-3.5 w-3.5" />}
+				triggerTitle="Remove"
 				options={[
 					{
 						name: "removeVolumes",

@@ -66,11 +66,11 @@ export function ImagesTableWorkspace({
 					onConfirm={() => {
 						setSelectedRefs({});
 					}}
-					title={`Delete ${selected.length} image(s)`}
+					title={`Remove ${selected.length} image(s)`}
 					description="This permanently removes all selected images from local cache."
-					triggerLabel={`Delete${selected.length ? ` (${selected.length})` : ""}`}
-					confirmLabel="Delete all"
-					pendingLabel="Deleting..."
+					triggerLabel="Remove"
+					confirmLabel="Remove all"
+					pendingLabel="Removing..."
 					triggerVariant="danger"
 					triggerSize="xs"
 					disabled={!selected.length}
@@ -174,27 +174,28 @@ export function ImagesTableWorkspace({
 												href={`/dashboard/images/${encodeURIComponent(imageRef)}?environment=${environmentId}`}
 												variant="ghost"
 												size="icon-xs"
-												title="Details"
+												title="View"
 											>
 												<ExternalLink className="h-3.5 w-3.5" />
 											</LinkButton>
 											<DestructiveActionModal
 												action={removeImageAction}
-												title={`Delete image ${imageRef}`}
+												title={`Remove image ${imageRef}`}
 												description={
 													isInUse
 														? "Cannot delete this image because one or more containers are currently using it."
 														: "This permanently removes the image from local cache."
 												}
 												triggerLabel=""
-												confirmLabel="Delete"
-												pendingLabel="Deleting..."
+												confirmLabel="Remove"
+												pendingLabel="Removing..."
 												triggerVariant="ghost"
 												triggerSize="xs"
 												disabled={deleteBlocked}
 												hiddenFields={{ imageRef, environmentId }}
 												triggerClassName="h-6 w-6 p-0 text-muted hover:text-danger"
 												triggerIcon={<Trash2 className="h-3.5 w-3.5" />}
+												triggerTitle="Remove"
 											/>
 										</div>
 									</DataTableCell>

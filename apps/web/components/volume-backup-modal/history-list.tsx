@@ -79,6 +79,7 @@ export function VolumeBackupHistoryList({
 									triggerVariant="ghost"
 									triggerSize="xs"
 									triggerClassName="h-6 w-6 p-0 text-muted hover:text-foreground"
+									triggerTitle="Restore"
 									hiddenFields={{
 										backupId: backup.id,
 										volumeName,
@@ -87,15 +88,16 @@ export function VolumeBackupHistoryList({
 								/>
 								<DestructiveActionModal
 									action={deleteAction}
-									title="Delete backup"
+									title="Remove backup"
 									description="This permanently removes this backup file."
 									triggerLabel=""
 									triggerIcon={<Trash2 className="h-3.5 w-3.5" />}
-									confirmLabel="Delete"
-									pendingLabel="Deleting..."
+									confirmLabel="Remove"
+									pendingLabel="Removing..."
 									triggerVariant="ghost"
 									triggerSize="xs"
 									triggerClassName="h-6 w-6 p-0 text-muted hover:text-danger"
+									triggerTitle="Remove"
 									hiddenFields={{
 										backupId: backup.id,
 										environmentId,
