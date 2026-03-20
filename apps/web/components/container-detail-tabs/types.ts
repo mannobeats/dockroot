@@ -32,6 +32,7 @@ export type ContainerBrowserState =
 export interface ContainerDetailTabsProps {
 	containerId: string;
 	environmentId: string;
+	environmentKind?: "local" | "agent";
 	inspect: Record<string, unknown>;
 	details: Record<string, unknown> | null;
 	metrics: ContainerMetrics | null;

@@ -123,6 +123,7 @@ export default async function ContainerDetailPage({
 				<ContainerDetailTabs
 					containerId={containerId}
 					environmentId={environment.id}
+					environmentKind={environment.kind}
 					inspect={inspect}
 					details={details.details}
 					metrics={metrics}

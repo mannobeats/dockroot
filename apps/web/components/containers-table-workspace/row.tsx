@@ -17,6 +17,7 @@ import {
 	CpuBar,
 	extractUptime,
 	formatBytes,
+	HealthIndicator,
 	latestRefForMajorUpgrade,
 	MemoryBar,
 	StatsSkeleton,
@@ -125,9 +126,9 @@ export const ContainersTableRow = memo(function ContainersTableRow({
 
 			{isVisible("state") ? (
 				<DataTableCell>
-					<div className="flex flex-col items-start gap-0.5">
+					<div className="flex items-center gap-1.5">
 						<StatusBadge status={state || "offline"} />
-						{container.HealthStatus ? <StatusBadge status={container.HealthStatus} /> : null}
+						{container.HealthStatus ? <HealthIndicator status={container.HealthStatus} /> : null}
 					</div>
 				</DataTableCell>
 			) : null}

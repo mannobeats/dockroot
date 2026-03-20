@@ -1,3 +1,4 @@
+import type { ContainerStats } from "@/components/containers-table-workspace/types";
 import { RuntimePortLinks } from "@/components/runtime-port-links";
 import { LinkButton } from "@/components/ui/link-button";
 import { LogBlock } from "@/components/ui/log-block";
@@ -7,10 +8,7 @@ import { UtilizationBar } from "@/components/ui/utilization-bar";
 
 interface OverviewTabProps {
 	inspect: Record<string, unknown>;
-	details: Record<string, unknown> | null;
-	runtimeStats: Record<string, string>;
-	cpuPercent: number;
-	memoryPercent: number;
+	liveStats: ContainerStats | null;
 	publishedPortSummary: string;
 	managerUrl?: string | null;
 	recentLogs: string;
@@ -18,18 +16,33 @@ interface OverviewTabProps {
 	environmentId: string;
 }
 
+function formatBytes(bytes: number): string {
+	if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+	const units = ["B", "KB", "MB", "GB", "TB"];
+	let i = 0;
+	let val = bytes;
+	while (val >= 1024 && i < units.length - 1) {
+		val /= 1024;
+		i++;
+	}
+	return `${val.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+}
+
 export function OverviewTab({
 	inspect,
-	details,
-	runtimeStats,
-	cpuPercent,
-	memoryPercent,
+	liveStats,
 	publishedPortSummary,
 	managerUrl,
 	recentLogs,
 	containerId,
 	environmentId,
 }: OverviewTabProps) {
+	const cpuPercent = liveStats?.cpuPercent ?? 0;
+	const memoryPercent = liveStats?.memoryPercent ?? 0;
+	const memoryUsage = liveStats ? formatBytes(liveStats.memoryUsageBytes) : "—";
+	const memoryLimit = liveStats ? formatBytes(liveStats.memoryLimitBytes) : "—";
+	const memCpuSummary = liveStats ? `${memoryUsage} · ${cpuPercent.toFixed(1)}%` : "—";
+
 	return (
 		<div className="space-y-4">
 			<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -53,7 +66,7 @@ export function OverviewTab({
 				/>
 				<MetricCard
 					label="Memory / CPU"
-					value={details ? `${runtimeStats.MemUsage || "—"} · ${runtimeStats.CPUPerc || "—"}` : "—"}
+					value={memCpuSummary}
 					className="h-full"
 					valueClassName="text-sm"
 				/>
@@ -69,9 +82,9 @@ export function OverviewTab({
 				/>
 				<UtilizationBar
 					label="Memory"
-					valueLabel={runtimeStats.MemUsage || "—"}
+					valueLabel={memoryUsage}
 					percent={memoryPercent}
-					helper={`Usage against limit (${runtimeStats.MemLimit || "—"})`}
+					helper={`Usage against limit (${memoryLimit})`}
 				/>
 			</Panel>
 

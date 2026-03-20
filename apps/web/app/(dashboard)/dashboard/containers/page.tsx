@@ -52,7 +52,6 @@ export default async function ContainersPage({
 			throw error;
 		},
 	);
-	// LiveRuntimePanel removed from containers page — stats now shown per-container in table
 	const runningCount = containers.filter(
 		(container: Record<string, string>) => container.State === "running",
 	).length;

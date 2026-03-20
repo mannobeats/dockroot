@@ -49,7 +49,13 @@ const CustomTooltip = ({ active, payload, label }: ChartTooltipProps) => {
 
 const MAX_HISTORY = 60;
 
-export function LiveRuntimePanel() {
+export function LiveRuntimePanel({
+	environmentId = "local",
+	environmentKind = "local",
+}: {
+	environmentId?: string;
+	environmentKind?: "local" | "agent";
+}) {
 	const [mounted, setMounted] = useState(false);
 	const [history, setHistory] = useState<HistoryEntry[]>([]);
 	const lastEntryRef = useRef<HistoryEntry | null>(null);
@@ -74,14 +80,14 @@ export function LiveRuntimePanel() {
 	useEffect(() => {
 		setMounted(true);
 		const client = getSocket();
-		subscribeMetrics({ environmentId: "local", environmentKind: "local" });
+		subscribeMetrics({ environmentId, environmentKind });
 		client.on("runtime:metrics", onMetrics);
 
 		return () => {
 			client.off("runtime:metrics", onMetrics);
-			unsubscribeMetrics({ environmentId: "local", environmentKind: "local" });
+			unsubscribeMetrics({ environmentId, environmentKind });
 		};
-	}, [onMetrics]);
+	}, [onMetrics, environmentId, environmentKind]);
 
 	const latest = useMemo(() => history.at(-1), [history]);
 

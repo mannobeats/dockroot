@@ -94,3 +94,23 @@ export function StatsSkeleton() {
 		</div>
 	);
 }
+
+const healthStyles: Record<string, { dot: string; text: string }> = {
+	healthy: { dot: "bg-emerald-500", text: "text-emerald-600 dark:text-emerald-400" },
+	unhealthy: { dot: "bg-rose-500", text: "text-rose-600 dark:text-rose-400" },
+	starting: { dot: "bg-amber-500 animate-pulse", text: "text-amber-600 dark:text-amber-400" },
+};
+
+export function HealthIndicator({ status }: { status: string }) {
+	const normalized = status.toLowerCase().trim();
+	const style = healthStyles[normalized];
+	if (!style) return null;
+	return (
+		<span
+			className={`inline-flex items-center gap-1 rounded-full border border-current/10 px-1.5 py-px text-[10px] font-medium ${style.text}`}
+		>
+			<span className={`h-1 w-1 rounded-full ${style.dot}`} />
+			{normalized}
+		</span>
+	);
+}

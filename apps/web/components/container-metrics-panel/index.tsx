@@ -1,11 +1,18 @@
 "use client";
 
+import type { ContainerStats } from "@/components/containers-table-workspace/types";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ContainerMetricsSummarySection } from "./summary-section";
 import { ContainerMetricsTrendChartsSection } from "./trend-charts-section";
 import type { ContainerMetrics } from "./types";
 
-export function ContainerMetricsPanel({ metrics }: { metrics: ContainerMetrics }) {
+export function ContainerMetricsPanel({
+	metrics,
+	liveStats,
+}: {
+	metrics: ContainerMetrics;
+	liveStats?: ContainerStats | null;
+}) {
 	if (!metrics.available) {
 		return (
 			<EmptyState
@@ -18,7 +25,7 @@ export function ContainerMetricsPanel({ metrics }: { metrics: ContainerMetrics }
 
 	return (
 		<div className="space-y-5">
-			<ContainerMetricsSummarySection metrics={metrics} />
+			<ContainerMetricsSummarySection metrics={metrics} liveStats={liveStats} />
 			<ContainerMetricsTrendChartsSection metrics={metrics} />
 		</div>
 	);

@@ -11,6 +11,7 @@ import {
 	serializeRecentDeployments,
 } from "@/app/(dashboard)/dashboard/_lib/dashboard-page-utils";
 import { DashboardStatusPanel } from "@/components/dashboard-status-panel";
+import { LiveRuntimePanel } from "@/components/live-runtime-panel";
 import { RuntimeUnavailablePanel } from "@/components/runtime-unavailable-panel";
 import { Panel } from "@/components/ui/panel";
 import { isPrivilegedRole, requireUserSession } from "@/lib/authorization";
@@ -196,6 +197,10 @@ async function DashboardInfrastructureSection({
 					activityLink={activityLink}
 				/>
 			</div>
+
+			{includeRuntime ? (
+				<LiveRuntimePanel environmentId={environment.id} environmentKind={environment.kind} />
+			) : null}
 
 			<DashboardRecentStacks stacks={data.recentStacks} environmentId={environment.id} />
 		</>
