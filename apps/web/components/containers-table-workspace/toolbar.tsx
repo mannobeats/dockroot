@@ -74,7 +74,7 @@ export function ContainersTableToolbar({
 				))}
 				<input type="hidden" name="environmentId" value={environmentId} />
 				<FormSubmitButton
-					label={`Check updates${selectedContainers.length ? ` (${selectedContainers.length})` : ""}`}
+					label="Check updates"
 					pendingLabel="Checking..."
 					size="xs"
 					variant="outline"
@@ -93,7 +93,7 @@ export function ContainersTableToolbar({
 				<input type="hidden" name="environmentId" value={environmentId} />
 				<input type="hidden" name="updateOnlyRunning" value="true" />
 				<FormSubmitButton
-					label={`Update${selectedContainers.length ? ` (${selectedContainers.length})` : ""}`}
+					label="Update"
 					pendingLabel="Queueing..."
 					size="xs"
 					variant="secondary"
@@ -112,7 +112,7 @@ export function ContainersTableToolbar({
 				<input type="hidden" name="action" value="start" />
 				<input type="hidden" name="environmentId" value={environmentId} />
 				<FormSubmitButton
-					label={`Start${selectedStopped.length ? ` (${selectedStopped.length})` : ""}`}
+					label="Start"
 					pendingLabel="Starting..."
 					size="xs"
 					variant="outline"
@@ -131,7 +131,7 @@ export function ContainersTableToolbar({
 				<input type="hidden" name="action" value="stop" />
 				<input type="hidden" name="environmentId" value={environmentId} />
 				<FormSubmitButton
-					label={`Stop${selectedRunning.length ? ` (${selectedRunning.length})` : ""}`}
+					label="Stop"
 					pendingLabel="Stopping..."
 					size="xs"
 					variant="outline"
@@ -150,7 +150,7 @@ export function ContainersTableToolbar({
 				<input type="hidden" name="action" value="restart" />
 				<input type="hidden" name="environmentId" value={environmentId} />
 				<FormSubmitButton
-					label={`Restart${selectedRunning.length ? ` (${selectedRunning.length})` : ""}`}
+					label="Restart"
 					pendingLabel="Restarting..."
 					size="xs"
 					variant="outline"
@@ -162,7 +162,7 @@ export function ContainersTableToolbar({
 				onConfirm={clearSelection}
 				title={`Remove ${selectedContainers.length} container(s)`}
 				description="This permanently removes all selected containers."
-				triggerLabel={`Remove${selectedContainers.length ? ` (${selectedContainers.length})` : ""}`}
+				triggerLabel="Remove"
 				confirmLabel="Remove all"
 				pendingLabel="Removing..."
 				triggerVariant="danger"

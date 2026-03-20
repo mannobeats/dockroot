@@ -45,7 +45,7 @@ export function StacksBulkActions({
 				))}
 				<input type="hidden" name="projects" value={selectedUntrackedPayload} />
 				<FormSubmitButton
-					label={`Restart${selectedCount ? ` (${selectedCount})` : ""}`}
+					label="Restart"
 					pendingLabel="Restarting..."
 					size="xs"
 					variant="outline"
@@ -58,7 +58,7 @@ export function StacksBulkActions({
 				))}
 				<input type="hidden" name="projects" value={selectedUntrackedPayload} />
 				<FormSubmitButton
-					label={`Stop${selectedCount ? ` (${selectedCount})` : ""}`}
+					label="Stop"
 					pendingLabel="Stopping..."
 					size="xs"
 					variant="outline"
@@ -70,7 +70,7 @@ export function StacksBulkActions({
 				onConfirm={() => onAfterRuntimeAction(firstTrackedId)}
 				title={`Destroy ${selectedCount} stack(s)`}
 				description="This stops and destroys runtime resources for the selected stacks."
-				triggerLabel={`Destroy${selectedCount ? ` (${selectedCount})` : ""}`}
+				triggerLabel="Destroy"
 				confirmLabel="Destroy"
 				pendingLabel="Destroying..."
 				triggerVariant="danger"
@@ -86,7 +86,7 @@ export function StacksBulkActions({
 				onConfirm={onAfterRemoveAction}
 				title={`Remove ${selectedCount} stack(s)`}
 				description="Tracked stacks are removed from Dockroot. Compose stacks are fully removed with containers, volumes, and local images."
-				triggerLabel={`Remove${selectedCount ? ` (${selectedCount})` : ""}`}
+				triggerLabel="Remove"
 				confirmLabel="Remove"
 				pendingLabel="Removing..."
 				triggerVariant="warning"

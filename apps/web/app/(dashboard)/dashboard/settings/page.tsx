@@ -1,13 +1,12 @@
 import { headers } from "next/headers";
 import { updateGlobalSettingsAction } from "@/app/(dashboard)/actions";
 import { FormSubmitButton } from "@/components/form-submit-button";
-import { Alert } from "@/components/ui/alert";
 import { Field, FieldHint, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { MetricCard } from "@/components/ui/metric-card";
 import { Panel } from "@/components/ui/panel";
 import { requirePrivilegedPageSession } from "@/lib/authorization";
-import { inferRequestManagerUrl, isLoopbackHostname, resolveManagerUrl } from "@/lib/manager-url";
+import { inferRequestManagerUrl, resolveManagerUrl } from "@/lib/manager-url";
 import { getGlobalSettings } from "@/lib/platform";
 
 export default async function SettingsPage() {
@@ -19,15 +18,6 @@ export default async function SettingsPage() {
 		configuredUrl: settings.managerUrl,
 		requestManagerUrl: detectedManagerUrl,
 	});
-	const usingAutoDetectedAddress = (() => {
-		try {
-			return (
-				isLoopbackHostname(new URL(settings.managerUrl).hostname) && detectedManagerUrl != null
-			);
-		} catch {
-			return false;
-		}
-	})();
 
 	return (
 		<div className="space-y-5">
@@ -47,12 +37,6 @@ export default async function SettingsPage() {
 						/>
 						<FieldHint>Use an IP or URL reachable by your browser and agents.</FieldHint>
 					</Field>
-					{usingAutoDetectedAddress ? (
-						<Alert variant="info">
-							Local loopback was replaced with the detected server address so agent install commands
-							work outside this machine.
-						</Alert>
-					) : null}
 					<FormSubmitButton label="Save" pendingLabel="Saving..." size="sm" />
 				</form>
 			</Panel>
