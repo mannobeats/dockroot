@@ -1,4 +1,4 @@
-import { InfrastructureCharts } from "@/components/infrastructure-charts";
+import { LiveInfrastructureMetrics } from "@/components/live-infrastructure-metrics";
 import { Panel, PanelContent, PanelHeader } from "@/components/ui/panel";
 import { UtilizationBar } from "@/components/ui/utilization-bar";
 
@@ -10,14 +10,14 @@ export function DashboardInfrastructurePanel({
 	memoryUsedPercent,
 	memoryUsed,
 	dataDir,
+	environmentId,
+	environmentKind,
 }: {
 	includeRuntime: boolean;
 	dashboardMetrics: {
 		cpuPercent: number | null;
 		memoryPercent: number | null;
 		runningContainers: number | null;
-		cpuSeries: Array<{ time: string; value: number }>;
-		memorySeries: Array<{ time: string; value: number }>;
 	} | null;
 	runtime: {
 		snapshot: {
@@ -33,6 +33,8 @@ export function DashboardInfrastructurePanel({
 	memoryUsedPercent: number | null;
 	memoryUsed: number | null;
 	dataDir?: string | null;
+	environmentId?: string;
+	environmentKind?: "local" | "agent";
 }) {
 	if (!(includeRuntime && dashboardMetrics)) {
 		return (
@@ -53,18 +55,6 @@ export function DashboardInfrastructurePanel({
 					<p className="text-xs font-medium text-muted">Infrastructure</p>
 					<div className="mt-1.5 flex flex-wrap items-baseline gap-x-4 gap-y-1">
 						<span className="text-xs text-muted">
-							CPU{" "}
-							<span className="font-mono text-sm font-semibold text-foreground">
-								{dashboardMetrics.cpuPercent?.toFixed(1) ?? "—"}%
-							</span>
-						</span>
-						<span className="text-xs text-muted">
-							Memory{" "}
-							<span className="font-mono text-sm font-semibold text-foreground">
-								{dashboardMetrics.memoryPercent?.toFixed(1) ?? "—"}%
-							</span>
-						</span>
-						<span className="text-xs text-muted">
 							Containers{" "}
 							<span className="font-mono text-sm font-semibold text-foreground">
 								{dashboardMetrics.runningContainers ?? 0}
@@ -83,13 +73,18 @@ export function DashboardInfrastructurePanel({
 				) : null}
 			</PanelHeader>
 			<PanelContent>
-				<InfrastructureCharts metrics={dashboardMetrics} />
+				<LiveInfrastructureMetrics
+					environmentId={environmentId}
+					environmentKind={environmentKind}
+					initialCpu={dashboardMetrics.cpuPercent}
+					initialMemory={dashboardMetrics.memoryPercent}
+				/>
 
 				{runtime && hostTotalMemoryGb !== null ? (
 					<div className="mt-4 flex flex-col gap-3 border-t border-default/8 pt-4 sm:flex-row sm:items-end sm:justify-between">
 						<div className="min-w-0 flex-1 sm:max-w-xs">
 							<UtilizationBar
-								label="Memory"
+								label="Host memory"
 								percent={memoryUsedPercent ?? 0}
 								valueLabel={`${memoryUsed ?? "—"} / ${hostTotalMemoryGb} GB`}
 							/>

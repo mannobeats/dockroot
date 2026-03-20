@@ -1,16 +1,6 @@
 "use client";
 
-import {
-	Area,
-	AreaChart,
-	CartesianGrid,
-	Cell,
-	Pie,
-	PieChart,
-	Tooltip,
-	XAxis,
-	YAxis,
-} from "recharts";
+import { Cell, Pie, PieChart } from "recharts";
 import { ChartFrame } from "@/components/chart-frame";
 
 export const STATUS_COLORS: Record<string, string> = {
@@ -26,36 +16,6 @@ export const STATUS_COLORS: Record<string, string> = {
 	succeeded: "#10b981",
 	failed: "#ef4444",
 	queued: "#f59e0b",
-};
-
-type ChartTooltipEntry = {
-	name?: string;
-	value?: number;
-	color?: string;
-};
-
-type ChartTooltipProps = {
-	active?: boolean;
-	payload?: ChartTooltipEntry[];
-	label?: string;
-};
-
-const TimelineTooltip = ({ active, payload, label }: ChartTooltipProps) => {
-	if (!active || !payload?.length) return null;
-	return (
-		<div className="rounded-lg border border-default/10 bg-surface px-3 py-2 shadow-[var(--shadow-md)]">
-			<p className="text-[11px] font-medium text-muted">{label}</p>
-			{payload.map((entry, index) => (
-				<p
-					key={`${entry.name}-${index}`}
-					className="text-sm font-semibold"
-					style={{ color: entry.color }}
-				>
-					{entry.name}: {entry.value?.toFixed(1)}%
-				</p>
-			))}
-		</div>
-	);
 };
 
 function formatLabel(label: string) {
@@ -135,113 +95,6 @@ export function DonutStatusCard({
 			) : (
 				<p className="mt-3 text-[11px] text-muted">{emptyLabel}</p>
 			)}
-		</div>
-	);
-}
-
-export function InfrastructureCharts({
-	metrics,
-}: {
-	metrics: {
-		cpuPercent: number | null;
-		memoryPercent: number | null;
-		cpuSeries: Array<{ time: string; value: number }>;
-		memorySeries: Array<{ time: string; value: number }>;
-	};
-}) {
-	return (
-		<div className="grid gap-4 lg:grid-cols-2">
-			<div className="min-w-0">
-				<div className="flex items-baseline justify-between gap-3 pb-2">
-					<p className="text-[11px] font-medium text-muted">CPU Trend</p>
-					<span className="font-mono text-sm font-semibold tabular-nums">
-						{metrics.cpuPercent?.toFixed(1) ?? "—"}
-						<span className="text-[10px] font-normal text-muted">%</span>
-					</span>
-				</div>
-				<ChartFrame className="h-36">
-					{({ width, height }) => (
-						<AreaChart width={width} height={height} data={metrics.cpuSeries}>
-							<defs>
-								<linearGradient id="overview-cpu-fill" x1="0" y1="0" x2="0" y2="1">
-									<stop offset="5%" stopColor="var(--accent)" stopOpacity={0.18} />
-									<stop offset="95%" stopColor="var(--accent)" stopOpacity={0} />
-								</linearGradient>
-							</defs>
-							<CartesianGrid stroke="var(--border)" vertical={false} />
-							<XAxis
-								dataKey="time"
-								tick={{ fontSize: 10, fill: "var(--muted)" }}
-								axisLine={false}
-								tickLine={false}
-							/>
-							<YAxis
-								tick={{ fontSize: 10, fill: "var(--muted)" }}
-								axisLine={false}
-								tickLine={false}
-								domain={[0, 100]}
-								tickFormatter={(value) => `${value}%`}
-								width={36}
-							/>
-							<Tooltip content={<TimelineTooltip />} />
-							<Area
-								type="monotone"
-								dataKey="value"
-								name="CPU"
-								fill="url(#overview-cpu-fill)"
-								stroke="var(--accent)"
-								strokeWidth={1.6}
-							/>
-						</AreaChart>
-					)}
-				</ChartFrame>
-			</div>
-
-			<div className="min-w-0">
-				<div className="flex items-baseline justify-between gap-3 pb-2">
-					<p className="text-[11px] font-medium text-muted">Memory Trend</p>
-					<span className="font-mono text-sm font-semibold tabular-nums">
-						{metrics.memoryPercent?.toFixed(1) ?? "—"}
-						<span className="text-[10px] font-normal text-muted">%</span>
-					</span>
-				</div>
-				<ChartFrame className="h-36">
-					{({ width, height }) => (
-						<AreaChart width={width} height={height} data={metrics.memorySeries}>
-							<defs>
-								<linearGradient id="overview-memory-fill" x1="0" y1="0" x2="0" y2="1">
-									<stop offset="5%" stopColor="var(--success)" stopOpacity={0.18} />
-									<stop offset="95%" stopColor="var(--success)" stopOpacity={0} />
-								</linearGradient>
-							</defs>
-							<CartesianGrid stroke="var(--border)" vertical={false} />
-							<XAxis
-								dataKey="time"
-								tick={{ fontSize: 10, fill: "var(--muted)" }}
-								axisLine={false}
-								tickLine={false}
-							/>
-							<YAxis
-								tick={{ fontSize: 10, fill: "var(--muted)" }}
-								axisLine={false}
-								tickLine={false}
-								domain={[0, 100]}
-								tickFormatter={(value) => `${value}%`}
-								width={36}
-							/>
-							<Tooltip content={<TimelineTooltip />} />
-							<Area
-								type="monotone"
-								dataKey="value"
-								name="Memory"
-								fill="url(#overview-memory-fill)"
-								stroke="var(--success)"
-								strokeWidth={1.6}
-							/>
-						</AreaChart>
-					)}
-				</ChartFrame>
-			</div>
 		</div>
 	);
 }
