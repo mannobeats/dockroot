@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import os from "node:os";
 
 const RESOURCE_COUNTS_INTERVAL_MS = 30_000;
+const LOCAL_SAMPLE_INTERVAL_MS = 15_000;
 const BROADCAST_THROTTLE_MS = 2_000;
 const METRICS_ROOM = "metrics:local";
 
@@ -268,6 +269,15 @@ export function createRuntimeMetricsService({
 		};
 	}
 
+	async function persistCurrentMetrics() {
+		const metrics = await getRuntimeMetrics();
+		await persistLocalRuntimeSamples({
+			containers: metrics.containers,
+			host: metrics.host,
+			containerRows: metrics.host?.containerRows,
+		});
+	}
+
 	async function persistLocalRuntimeSamples(metrics) {
 		if (!metrics?.host) {
 			return;
@@ -391,7 +401,9 @@ export function createRuntimeMetricsService({
 	return {
 		broadcastMetrics,
 		getRuntimeMetrics,
+		persistCurrentMetrics,
 		refreshResourceCounts,
+		localSampleIntervalMs: LOCAL_SAMPLE_INTERVAL_MS,
 		resourceCountsIntervalMs: RESOURCE_COUNTS_INTERVAL_MS,
 		startDockerStatsStream,
 		stopDockerStatsStream,

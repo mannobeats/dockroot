@@ -58,6 +58,7 @@ const LOG_SESSION_KILL_TIMEOUT_MS = 1_500;
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 
 let runtimeMetricsInterval = null;
+let runtimeMetricsPersistInterval = null;
 let updateSchedulerInterval = null;
 let shutdownPromise = null;
 let shuttingDown = false;
@@ -470,6 +471,10 @@ async function shutdownServer(signal) {
 			clearInterval(runtimeMetricsInterval);
 			runtimeMetricsInterval = null;
 		}
+		if (runtimeMetricsPersistInterval) {
+			clearInterval(runtimeMetricsPersistInterval);
+			runtimeMetricsPersistInterval = null;
+		}
 		if (updateSchedulerInterval) {
 			clearInterval(updateSchedulerInterval);
 			updateSchedulerInterval = null;
@@ -513,6 +518,11 @@ runtimeMetricsInterval = setInterval(
 	runtimeMetricsService.resourceCountsIntervalMs,
 );
 runtimeMetricsInterval.unref?.();
+runtimeMetricsPersistInterval = setInterval(
+	() => void runtimeMetricsService.persistCurrentMetrics(),
+	runtimeMetricsService.localSampleIntervalMs,
+);
+runtimeMetricsPersistInterval.unref?.();
 
 const updateSchedulerWorkerId = `dockroot-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -564,6 +574,7 @@ for (const signal of ["SIGINT", "SIGTERM"]) {
 
 server.listen(port, hostname, () => {
 	console.log(`> Ready on http://${hostname}:${port}`);
+	void runtimeMetricsService.persistCurrentMetrics();
 	void tickContainerUpdateScheduler();
 	dockerEventService.startDockerEventStream();
 });
