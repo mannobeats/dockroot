@@ -1,8 +1,8 @@
 import { mkdir, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { collectDockerEngineSnapshot } from "../../../server/runtime/docker-engine-snapshot.mjs";
 import { dataDir } from "./config.mjs";
-import { getLatestContainerStats } from "./docker-stats.mjs";
 import {
 	detectDockerVersion,
 	execFileAsync,
@@ -183,66 +183,66 @@ function enrichContainerHealth(row) {
 }
 
 export async function getSnapshot() {
-	const [containers, images, volumes, networks] = await Promise.all([
-		runDocker(["ps", "-a", "--size", "--format", "{{json .}}"]),
-		runDocker(["images", "--digests", "--format", "{{json .}}"]),
-		runDocker(["volume", "ls", "--format", "{{json .}}"]),
-		runDocker(["network", "ls", "--format", "{{json .}}"]),
-	]);
-	const containerRows = parseJsonLines(containers.stdout).map(enrichContainerHealth);
-	const imageRows = parseJsonLines(images.stdout);
-	const volumeRows = parseJsonLines(volumes.stdout);
-	const networkRows = parseJsonLines(networks.stdout);
-	const cachedStats = getLatestContainerStats();
-	const statsRows =
-		cachedStats.length > 0
-			? cachedStats
-			: parseJsonLines(
-					(await runDocker(["stats", "--no-stream", "--format", "{{json .}}"], "container.stats"))
-						.stdout,
-				);
-	const cpuPercent = Number(
-		statsRows
-			.reduce((sum, row) => {
-				return sum + (Number.parseFloat((row.CPUPerc || "0").replace("%", "")) || 0);
-			}, 0)
-			.toFixed(1),
-	);
-	const memoryPercent = Number(
-		statsRows
-			.reduce((sum, row) => {
-				return sum + (Number.parseFloat((row.MemPerc || "0").replace("%", "")) || 0);
-			}, 0)
-			.toFixed(1),
-	);
+	try {
+		return await collectDockerEngineSnapshot();
+	} catch {
+		const [containers, images, volumes, networks] = await Promise.all([
+			runDocker(["ps", "-a", "--size", "--format", "{{json .}}"]),
+			runDocker(["images", "--digests", "--format", "{{json .}}"]),
+			runDocker(["volume", "ls", "--format", "{{json .}}"]),
+			runDocker(["network", "ls", "--format", "{{json .}}"]),
+		]);
+		const containerRows = parseJsonLines(containers.stdout).map(enrichContainerHealth);
+		const imageRows = parseJsonLines(images.stdout);
+		const volumeRows = parseJsonLines(volumes.stdout);
+		const networkRows = parseJsonLines(networks.stdout);
+		const statsRows = parseJsonLines(
+			(await runDocker(["stats", "--no-stream", "--format", "{{json .}}"], "container.stats"))
+				.stdout,
+		);
+		const cpuPercent = Number(
+			statsRows
+				.reduce((sum, row) => {
+					return sum + (Number.parseFloat((row.CPUPerc || "0").replace("%", "")) || 0);
+				}, 0)
+				.toFixed(1),
+		);
+		const memoryPercent = Number(
+			statsRows
+				.reduce((sum, row) => {
+					return sum + (Number.parseFloat((row.MemPerc || "0").replace("%", "")) || 0);
+				}, 0)
+				.toFixed(1),
+		);
 
-	return {
-		host: {
-			hostname: os.hostname(),
-			platform: `${os.platform()} ${os.release()}`,
-			architecture: os.arch(),
-			dockerVersion: await detectDockerVersion(),
-			cpus: os.cpus().length,
-			totalMemoryGb: Number((os.totalmem() / 1024 / 1024 / 1024).toFixed(1)),
-			freeMemoryGb: Number((os.freemem() / 1024 / 1024 / 1024).toFixed(1)),
-		},
-		containers: containerRows,
-		images: imageRows,
-		volumes: volumeRows,
-		networks: networkRows,
-		counts: {
-			containers: containerRows.length,
-			runningContainers: containerRows.filter((row) => row.State === "running").length,
-			images: imageRows.length,
-			volumes: volumeRows.length,
-			networks: networkRows.length,
-		},
-		usage: {
-			cpuPercent,
-			memoryPercent,
-		},
-		containerStats: statsRows,
-	};
+		return {
+			host: {
+				hostname: os.hostname(),
+				platform: `${os.platform()} ${os.release()}`,
+				architecture: os.arch(),
+				dockerVersion: await detectDockerVersion(),
+				cpus: os.cpus().length,
+				totalMemoryGb: Number((os.totalmem() / 1024 / 1024 / 1024).toFixed(1)),
+				freeMemoryGb: Number((os.freemem() / 1024 / 1024 / 1024).toFixed(1)),
+			},
+			containers: containerRows,
+			images: imageRows,
+			volumes: volumeRows,
+			networks: networkRows,
+			counts: {
+				containers: containerRows.length,
+				runningContainers: containerRows.filter((row) => row.State === "running").length,
+				images: imageRows.length,
+				volumes: volumeRows.length,
+				networks: networkRows.length,
+			},
+			usage: {
+				cpuPercent,
+				memoryPercent,
+			},
+			containerStats: statsRows,
+		};
+	}
 }
 
 export async function getContainerDetails(containerId) {

@@ -3,6 +3,7 @@ import "server-only";
 import os from "node:os";
 import { runDockerCommand } from "@/lib/platform/docker/command";
 import { parseJsonLines } from "@/lib/platform/docker/parsing";
+import { collectDockerEngineSnapshot } from "../../../../../server/runtime/docker-engine-snapshot.mjs";
 
 function enrichContainerHealth(row: Record<string, string>) {
 	const status = row.Status || "";
@@ -16,6 +17,12 @@ function enrichContainerHealth(row: Record<string, string>) {
 }
 
 export async function getLocalDockerSnapshot() {
+	try {
+		return await collectDockerEngineSnapshot();
+	} catch {
+		// Fall back to CLI only if the Docker Engine API is unavailable in this environment.
+	}
+
 	const [ps, images, volumes, networks, version, stats] = await Promise.all([
 		runDockerCommand(["ps", "-a", "--size", "--format", "{{json .}}"]),
 		runDockerCommand(["images", "--digests", "--format", "{{json .}}"]),

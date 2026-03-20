@@ -1,24 +1,22 @@
-import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import os from "node:os";
+import { collectDockerEngineSnapshot } from "./docker-engine-snapshot.mjs";
 import { getMetricsRoom } from "../socket/metrics-room.mjs";
 
-const RESOURCE_COUNTS_INTERVAL_MS = 30_000;
+const RESOURCE_COUNTS_INTERVAL_MS = 2_000;
 const LOCAL_SAMPLE_INTERVAL_MS = 15_000;
 const BROADCAST_THROTTLE_MS = 2_000;
 const LOCAL_ENVIRONMENT_KEY = "local";
+const SNAPSHOT_STALE_AFTER_MS = 5_000;
 
 export function createRuntimeMetricsService({
 	io,
 	sql,
-	dockerBinary,
-	execFileAsync,
-	isPrivilegedRole,
 	getSocketRuntimeMetrics,
 	isShuttingDown,
 }) {
 	let lastLocalMetricsPersistAt = 0;
-	let dockerStatsProcess = null;
+	let collectionTimer = null;
+	let collectionInFlight = null;
 	let latestContainerStats = [];
 	let latestResourceCounts = null;
 	let lastResourceCountsFetchAt = 0;
@@ -61,62 +59,88 @@ export function createRuntimeMetricsService({
 		return result;
 	}
 
-	function startDockerStatsStream() {
-		if (dockerStatsProcess) {
-			return;
+	async function collectCurrentSnapshot(options = {}) {
+		const maxAgeMs =
+			Number.isFinite(options.maxAgeMs) && Number(options.maxAgeMs) > 0
+				? Number(options.maxAgeMs)
+				: SNAPSHOT_STALE_AFTER_MS;
+		if (!options.force && latestRuntimeSnapshot && Date.now() - latestRuntimeSnapshotAt <= maxAgeMs) {
+			return latestRuntimeSnapshot;
 		}
 
-		const args = ["stats", "--format", "{{json .}}", "--no-trunc"];
-		const process = spawn(dockerBinary, args, {
-			stdio: ["ignore", "pipe", "ignore"],
+		if (collectionInFlight) {
+			return collectionInFlight;
+		}
+
+		collectionInFlight = (async () => {
+			const snapshot = await collectDockerEngineSnapshot();
+			latestRuntimeSnapshot = snapshot;
+			latestRuntimeSnapshotAt = Date.now();
+			latestContainerStats = Array.isArray(snapshot.containerStats) ? snapshot.containerStats : [];
+			latestResourceCounts = {
+				containerRows: Array.isArray(snapshot.containers) ? snapshot.containers : [],
+				imageRows: Array.isArray(snapshot.images) ? snapshot.images : [],
+				volumeRows: Array.isArray(snapshot.volumes) ? snapshot.volumes : [],
+				networkRows: Array.isArray(snapshot.networks) ? snapshot.networks : [],
+				dockerVersion: snapshot.host?.dockerVersion || "unknown",
+				counts: {
+					containers: Number(snapshot.counts?.containers || 0),
+					runningContainers: Number(snapshot.counts?.runningContainers || 0),
+					images: Number(snapshot.counts?.images || 0),
+					volumes: Number(snapshot.counts?.volumes || 0),
+					networks: Number(snapshot.counts?.networks || 0),
+				},
+			};
+			lastResourceCountsFetchAt = latestRuntimeSnapshotAt;
+			return snapshot;
+		})().finally(() => {
+			collectionInFlight = null;
 		});
-		dockerStatsProcess = process;
 
-		let buffer = "";
-		process.stdout.on("data", (chunk) => {
-			buffer += chunk.toString();
-			const lines = buffer.split("\n");
-			buffer = lines.pop() || "";
+		return collectionInFlight;
+	}
 
-			const rows = [];
-			for (const line of lines) {
-				const trimmed = line.trim();
-				if (!trimmed) {
-					continue;
+	function scheduleCollection(delayMs = subscriberCount > 0 ? RESOURCE_COUNTS_INTERVAL_MS : LOCAL_SAMPLE_INTERVAL_MS) {
+		if (isShuttingDown()) {
+			return;
+		}
+		if (collectionTimer) {
+			clearTimeout(collectionTimer);
+		}
+		collectionTimer = setTimeout(async () => {
+			collectionTimer = null;
+			try {
+				await collectCurrentSnapshot({ force: true });
+				if (subscriberCount > 0) {
+					scheduleBroadcast();
 				}
-
-				try {
-					rows.push(JSON.parse(trimmed));
-				} catch {
-					// Skip malformed lines.
-				}
+			} catch {
+				// Keep the last known snapshot if collection fails.
+			} finally {
+				scheduleCollection();
 			}
+		}, Math.max(delayMs, 250));
+		collectionTimer.unref?.();
+	}
 
-			if (rows.length > 0) {
-				latestContainerStats = rows;
-				scheduleBroadcast();
-			}
-		});
-
-		process.on("exit", () => {
-			dockerStatsProcess = null;
-			if (!isShuttingDown()) {
-				setTimeout(() => startDockerStatsStream(), 3_000);
-			}
-		});
-
-		process.on("error", () => {
-			dockerStatsProcess = null;
-			if (!isShuttingDown()) {
-				setTimeout(() => startDockerStatsStream(), 5_000);
-			}
-		});
+	function startDockerStatsStream() {
+		if (collectionTimer || collectionInFlight) {
+			return;
+		}
+		void collectCurrentSnapshot({ force: true })
+			.catch(() => {
+				// Collector will retry on the next schedule.
+			})
+			.finally(() => {
+				scheduleCollection();
+			});
 	}
 
 	function stopDockerStatsStream() {
-		if (dockerStatsProcess) {
-			dockerStatsProcess.kill("SIGTERM");
-			dockerStatsProcess = null;
+		collectionInFlight = null;
+		if (collectionTimer) {
+			clearTimeout(collectionTimer);
+			collectionTimer = null;
 		}
 		if (broadcastTimer) {
 			clearTimeout(broadcastTimer);
@@ -144,11 +168,17 @@ export function createRuntimeMetricsService({
 	function addMetricsSubscriber(socket) {
 		socket.join(getMetricsRoom(LOCAL_ENVIRONMENT_KEY));
 		subscriberCount += 1;
+		if (subscriberCount === 1) {
+			scheduleCollection(0);
+		}
 	}
 
 	function removeMetricsSubscriber(socket) {
 		socket.leave(getMetricsRoom(LOCAL_ENVIRONMENT_KEY));
 		subscriberCount = Math.max(0, subscriberCount - 1);
+		if (subscriberCount === 0) {
+			scheduleCollection(LOCAL_SAMPLE_INTERVAL_MS);
+		}
 	}
 
 	async function refreshResourceCounts() {
@@ -158,44 +188,7 @@ export function createRuntimeMetricsService({
 		}
 
 		try {
-			const [psResult, imagesResult, volumesResult, networksResult, versionResult] = await Promise.all([
-				execFileAsync(dockerBinary, ["ps", "-a", "--format", "{{json .}}"], {
-					maxBuffer: 1024 * 1024 * 8,
-				}),
-				execFileAsync(dockerBinary, ["images", "--digests", "--format", "{{json .}}"], {
-					maxBuffer: 1024 * 1024 * 8,
-				}),
-				execFileAsync(dockerBinary, ["volume", "ls", "--format", "{{json .}}"], {
-					maxBuffer: 1024 * 1024 * 4,
-				}),
-				execFileAsync(dockerBinary, ["network", "ls", "--format", "{{json .}}"], {
-					maxBuffer: 1024 * 1024 * 4,
-				}),
-				execFileAsync(dockerBinary, ["version", "--format", "{{.Server.Version}}"], {
-					maxBuffer: 1024 * 256,
-				}),
-			]);
-
-			const containers = parseJsonLines(psResult.stdout).map(enrichContainerHealth);
-			const images = parseJsonLines(imagesResult.stdout);
-			const volumes = parseJsonLines(volumesResult.stdout);
-			const networks = parseJsonLines(networksResult.stdout);
-
-			latestResourceCounts = {
-				containerRows: containers,
-				imageRows: images,
-				volumeRows: volumes,
-				networkRows: networks,
-				dockerVersion: versionResult.stdout.trim() || "unknown",
-				counts: {
-					containers: containers.length,
-					runningContainers: containers.filter((row) => row.State === "running").length,
-					images: images.length,
-					volumes: volumes.length,
-					networks: networks.length,
-				},
-			};
-			lastResourceCountsFetchAt = now;
+			await collectCurrentSnapshot({ force: true });
 		} catch {
 			// Keep stale counts if Docker CLI fails.
 		}
@@ -203,45 +196,10 @@ export function createRuntimeMetricsService({
 		return latestResourceCounts;
 	}
 
-	function buildRuntimeSnapshot(resourceCounts = latestResourceCounts) {
-		const statsRows = latestContainerStats;
-		const cpuPercent = clampPercent(statsRows.reduce((sum, row) => sum + (parsePercent(row.CPUPerc) || 0), 0));
-		const memoryPercent = clampPercent(
-			statsRows.reduce((sum, row) => sum + (parsePercent(row.MemPerc) || 0), 0),
-		);
-
-		return {
-			host: {
-				hostname: os.hostname(),
-				platform: `${os.platform()} ${os.release()}`,
-				architecture: os.arch(),
-				dockerVersion: resourceCounts?.dockerVersion || "unknown",
-				cpus: os.cpus().length,
-				totalMemoryGb: Number((os.totalmem() / 1024 / 1024 / 1024).toFixed(1)),
-				freeMemoryGb: Number((os.freemem() / 1024 / 1024 / 1024).toFixed(1)),
-			},
-			containers: resourceCounts?.containerRows || [],
-			images: resourceCounts?.imageRows || [],
-			volumes: resourceCounts?.volumeRows || [],
-			networks: resourceCounts?.networkRows || [],
-			counts: resourceCounts?.counts || {
-				containers: 0,
-				runningContainers: 0,
-				images: 0,
-				volumes: 0,
-				networks: 0,
-			},
-			usage: {
-				cpuPercent,
-				memoryPercent,
-			},
-			containerStats: statsRows,
-		};
-	}
-
 	function updateLatestRuntimeSnapshot(snapshot) {
 		latestRuntimeSnapshot = snapshot;
 		latestRuntimeSnapshotAt = Date.now();
+		latestContainerStats = Array.isArray(snapshot?.containerStats) ? snapshot.containerStats : [];
 	}
 
 	async function broadcastMetrics() {
@@ -250,8 +208,8 @@ export function createRuntimeMetricsService({
 			return;
 		}
 
-		const resourceCounts = await refreshResourceCounts();
-		const snapshot = buildRuntimeSnapshot(resourceCounts);
+		await refreshResourceCounts();
+		const snapshot = await collectCurrentSnapshot();
 		updateLatestRuntimeSnapshot(snapshot);
 		const netDeltas = computeNetDeltas(snapshot.containerStats);
 
@@ -291,8 +249,8 @@ export function createRuntimeMetricsService({
 	}
 
 	async function getRuntimeMetrics() {
-		const resourceCounts = await refreshResourceCounts();
-		const snapshot = buildRuntimeSnapshot(resourceCounts);
+		await refreshResourceCounts();
+		const snapshot = await collectCurrentSnapshot();
 		updateLatestRuntimeSnapshot(snapshot);
 		return {
 			containers: snapshot.containerStats,
@@ -474,17 +432,6 @@ export function createRuntimeMetricsService({
 		removeMetricsSubscriber,
 		metricsRoom: getMetricsRoom(LOCAL_ENVIRONMENT_KEY),
 	};
-}
-
-function enrichContainerHealth(row) {
-	const next = row && typeof row === "object" ? { ...row } : {};
-	const status = String(next.Status || "");
-	const healthMatch = status.match(/\((healthy|unhealthy|health: starting)\)/i);
-	if (healthMatch) {
-		const raw = healthMatch[1].toLowerCase();
-		next.HealthStatus = raw === "health: starting" ? "starting" : raw;
-	}
-	return next;
 }
 
 function clampPercent(value) {

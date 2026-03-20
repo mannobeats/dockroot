@@ -1,7 +1,6 @@
 import { metrics, pollIntervalMs } from "./config.mjs";
 import { getSnapshot } from "./docker.mjs";
 import { startDockerEventStream } from "./docker-events.mjs";
-import { startAgentDockerStatsStream, stopAgentDockerStatsStream } from "./docker-stats.mjs";
 import {
 	createJobEventReporter,
 	ensureRegistered,
@@ -20,8 +19,6 @@ import {
 
 async function loop() {
 	let state = await loadState();
-
-	startAgentDockerStatsStream();
 
 	while (true) {
 		try {
@@ -64,7 +61,6 @@ startHttpServer();
 for (const signal of ["SIGINT", "SIGTERM"]) {
 	process.once(signal, () => {
 		console.log(`[agent] Received ${signal}, shutting down...`);
-		stopAgentDockerStatsStream();
 		stopAgentWebSocket();
 		process.exit(0);
 	});

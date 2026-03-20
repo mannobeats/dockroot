@@ -392,9 +392,6 @@ runtimeActionJournal = createRuntimeActionJournal({
 const runtimeMetricsService = createRuntimeMetricsService({
 	io,
 	sql,
-	dockerBinary,
-	execFileAsync,
-	isPrivilegedRole,
 	getSocketRuntimeMetrics: () => socketRuntimeService?.getSocketRuntimeMetrics?.() || {},
 	isShuttingDown: () => shuttingDown,
 });
