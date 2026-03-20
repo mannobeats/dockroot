@@ -16,8 +16,10 @@ import { ContainersUpdatesCell } from "@/components/containers-table-workspace/u
 import {
 	CpuBar,
 	extractUptime,
+	formatBytes,
 	latestRefForMajorUpgrade,
 	MemoryBar,
+	StatsSkeleton,
 	summarizeComposeProject,
 	tagFromImageRef,
 } from "@/components/containers-table-workspace/utils";
@@ -42,6 +44,7 @@ type ContainersTableRowProps = {
 	updatePolicyMap: UpdatePolicyRecord;
 	updateStateMap: UpdateStateRecord;
 	rowStats: ContainerStats | undefined;
+	isLoading: boolean;
 };
 
 export const ContainersTableRow = memo(function ContainersTableRow({
@@ -60,6 +63,7 @@ export const ContainersTableRow = memo(function ContainersTableRow({
 	updatePolicyMap,
 	updateStateMap,
 	rowStats,
+	isLoading,
 }: ContainersTableRowProps) {
 	const state = (container.State || "").toLowerCase();
 	const isRunning = state === "running";
@@ -79,11 +83,6 @@ export const ContainersTableRow = memo(function ContainersTableRow({
 		(updateState?.majorTargetTag || "").trim() ||
 		tagFromImageRef(majorTargetImageRef || "") ||
 		"latest";
-	const stats = rowStats || {};
-	const cpuPercent = Number.parseFloat((stats.CPUPerc || "0").replace("%", "")) || 0;
-	const memPercent = Number.parseFloat((stats.MemPerc || "0").replace("%", "")) || 0;
-	const memUsageParts = (stats.MemUsage || "").split("/");
-	const memory = { usage: memUsageParts[0]?.trim() || "—", percent: memPercent };
 	const uptime = isRunning ? extractUptime(container.Status || "") : "—";
 
 	return (
@@ -135,20 +134,28 @@ export const ContainersTableRow = memo(function ContainersTableRow({
 
 			{isVisible("cpu") ? (
 				<DataTableCell>
-					{isRunning ? (
-						<CpuBar percent={cpuPercent} />
-					) : (
+					{!isRunning ? (
 						<span className="text-xs text-muted/50">—</span>
+					) : isLoading ? (
+						<StatsSkeleton />
+					) : rowStats ? (
+						<CpuBar percent={rowStats.cpuPercent} />
+					) : (
+						<StatsSkeleton />
 					)}
 				</DataTableCell>
 			) : null}
 
 			{isVisible("memory") ? (
 				<DataTableCell>
-					{isRunning ? (
-						<MemoryBar usage={memory.usage} percent={memory.percent} />
-					) : (
+					{!isRunning ? (
 						<span className="text-xs text-muted/50">—</span>
+					) : isLoading ? (
+						<StatsSkeleton />
+					) : rowStats ? (
+						<MemoryBar usageBytes={rowStats.memoryUsageBytes} percent={rowStats.memoryPercent} />
+					) : (
+						<StatsSkeleton />
 					)}
 				</DataTableCell>
 			) : null}
@@ -159,7 +166,9 @@ export const ContainersTableRow = memo(function ContainersTableRow({
 
 			{isVisible("netio") ? (
 				<DataTableCell className="text-xs text-muted whitespace-nowrap font-mono">
-					{isRunning && stats.NetIO ? stats.NetIO : "—"}
+					{isRunning && rowStats
+						? `${formatBytes(rowStats.networkRxBytes)} / ${formatBytes(rowStats.networkTxBytes)}`
+						: "—"}
 				</DataTableCell>
 			) : null}
 

@@ -1,5 +1,3 @@
-import type { ContainerStats } from "@/components/containers-table-workspace/types";
-
 export function summarizeComposeProject(labels: string | undefined) {
 	if (!labels) return "";
 	return (
@@ -33,30 +31,23 @@ export function tagFromImageRef(imageRef: string) {
 	return value.slice(lastColon + 1);
 }
 
-export function parsePercent(value: string | undefined): number {
-	return Number.parseFloat((value || "0").replace("%", "")) || 0;
-}
-
 export function extractUptime(status: string): string {
 	if (!status) return "—";
 	const match = status.match(/^Up\s+(.+?)(?:\s*\(.*\))?$/i);
 	return match ? match[1] : "—";
 }
 
-function formatCpu(value: number): string {
-	return `${value.toFixed(1)}%`;
-}
-
-export function formatMemory(
-	memUsage: string | undefined,
-	memPerc: string | undefined,
-): { usage: string; percent: number } {
-	const percent = parsePercent(memPerc);
-	if (memUsage) {
-		const parts = memUsage.split("/");
-		return { usage: parts[0]?.trim() || "—", percent };
+export function formatBytes(bytes: number): string {
+	if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+	const units = ["B", "KB", "MB", "GB", "TB"];
+	let unitIndex = 0;
+	let amount = bytes;
+	while (amount >= 1024 && unitIndex < units.length - 1) {
+		amount /= 1024;
+		unitIndex += 1;
 	}
-	return { usage: "—", percent };
+	const precision = amount >= 10 || unitIndex === 0 ? 0 : 1;
+	return `${amount.toFixed(precision)} ${units[unitIndex]}`;
 }
 
 export function CpuBar({ percent }: { percent: number }) {
@@ -64,7 +55,7 @@ export function CpuBar({ percent }: { percent: number }) {
 	return (
 		<div className="flex min-w-[80px] items-center gap-1.5">
 			<span className="w-[38px] text-right font-mono text-[11px] tabular-nums">
-				{formatCpu(percent)}
+				{percent.toFixed(1)}%
 			</span>
 			<div className="h-1 flex-1 overflow-hidden rounded-full bg-default/10">
 				<div
@@ -76,13 +67,13 @@ export function CpuBar({ percent }: { percent: number }) {
 	);
 }
 
-export function MemoryBar({ usage, percent }: { usage: string; percent: number }) {
+export function MemoryBar({ usageBytes, percent }: { usageBytes: number; percent: number }) {
 	const color = percent > 85 ? "bg-danger" : percent > 60 ? "bg-warning" : "bg-success";
 	return (
 		<div className="min-w-[90px]">
 			<div className="flex items-center gap-1.5">
 				<span className="w-[55px] truncate text-right font-mono text-[11px] tabular-nums">
-					{usage}
+					{formatBytes(usageBytes)}
 				</span>
 				<div className="h-1 flex-1 overflow-hidden rounded-full bg-default/10">
 					<div
@@ -95,12 +86,11 @@ export function MemoryBar({ usage, percent }: { usage: string; percent: number }
 	);
 }
 
-export function getStatsForContainer(
-	containerName: string,
-	containerStats: Record<string, ContainerStats>,
-) {
-	const stats = containerStats[containerName] || {};
-	const cpuPercent = parsePercent(stats.CPUPerc);
-	const memory = formatMemory(stats.MemUsage, stats.MemPerc);
-	return { stats, cpuPercent, memory };
+export function StatsSkeleton() {
+	return (
+		<div className="flex min-w-[80px] items-center gap-1.5">
+			<div className="h-3 w-[38px] animate-pulse rounded bg-default/10" />
+			<div className="h-1 flex-1 animate-pulse rounded-full bg-default/10" />
+		</div>
+	);
 }

@@ -21,8 +21,8 @@ import { validateRuntimeEnv } from "./scripts/runtime-env.mjs";
 import { createRuntimeActionJournal } from "./server/runtime/runtime-actions.mjs";
 import { createDockerEventService } from "./server/runtime/docker-events.mjs";
 import { createRuntimeMetricsService } from "./server/runtime/runtime-metrics.mjs";
+import { createContainerStatsHub } from "./server/runtime/container-stats-stream.mjs";
 import { createAgentSocketRuntime } from "./server/socket/agent-runtime.mjs";
-import { getMetricsRoom } from "./server/socket/metrics-room.mjs";
 import { createSocketRuntimeService } from "./server/socket/socket-runtime.mjs";
 
 await applyRuntimeBootstrap();
@@ -59,7 +59,6 @@ const LOG_SESSION_KILL_TIMEOUT_MS = 1_500;
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 
 let runtimeMetricsInterval = null;
-let runtimeMetricsPersistInterval = null;
 let updateSchedulerInterval = null;
 let shutdownPromise = null;
 let shuttingDown = false;
@@ -396,100 +395,7 @@ const runtimeMetricsService = createRuntimeMetricsService({
 	isShuttingDown: () => shuttingDown,
 });
 
-socketRuntimeService = createSocketRuntimeService({
-	io,
-	sql,
-	dockerBinary,
-	execFileAsync,
-	getAppBaseUrl,
-	isPrivilegedRole,
-	isTrustedOrigin,
-	emitRuntimeAction: runtimeActionJournal.emitRuntimeAction,
-	metricsSubscriptionCallbacks: {
-		getSubscriptionKey: (input) => {
-			if (typeof input === "string") {
-				const normalized = input.trim();
-				return normalized ? `legacy:${normalized}` : "";
-			}
-			const environmentId =
-				typeof input?.environmentId === "string" ? input.environmentId.trim() : "";
-			const environmentKind = input?.environmentKind === "agent" ? "agent" : "local";
-			return environmentId ? `${environmentKind}:${environmentId}` : "";
-		},
-		addSubscriber: async ({ socket, userId, input }) => {
-			if (
-				(typeof input === "string" && input.trim() === "local") ||
-				(input?.environmentKind !== "agent" && String(input?.environmentId || "").trim() === "local")
-			) {
-				runtimeMetricsService.addMetricsSubscriber(socket);
-				return {
-					subscriptionKey:
-						typeof input === "string" ? "legacy:local" : "local:local",
-					environmentKey: "local",
-					environmentKind: "local",
-				};
-			}
-
-			const environmentId =
-				typeof input?.environmentId === "string" ? input.environmentId.trim() : "";
-			if (!environmentId) {
-				return null;
-			}
-
-			const ownedEnvironment = await socketRuntimeService.accessControl?.resolveOwnedEnvironmentWithKind?.(
-				userId,
-				environmentId,
-			);
-			if (!ownedEnvironment?.id) {
-				return null;
-			}
-
-			if (ownedEnvironment.kind === "local") {
-				runtimeMetricsService.addMetricsSubscriber(socket);
-				return {
-					subscriptionKey: `local:${ownedEnvironment.id}`,
-					environmentKey: "local",
-					environmentKind: "local",
-				};
-			}
-
-			const room = getMetricsRoom(ownedEnvironment.id);
-			socket.join(room);
-			agentSocketRuntime.addEnvironmentSubscriber(ownedEnvironment.id);
-			return {
-				subscriptionKey: `agent:${ownedEnvironment.id}`,
-				environmentKey: ownedEnvironment.id,
-				environmentKind: "agent",
-				room,
-			};
-		},
-		removeSubscriber: async ({ socket, subscription }) => {
-			if (!subscription) {
-				return;
-			}
-			if (subscription.environmentKind === "local") {
-				runtimeMetricsService.removeMetricsSubscriber(socket);
-				return;
-			}
-			if (subscription.room) {
-				socket.leave(subscription.room);
-			}
-			if (subscription.environmentKey) {
-				agentSocketRuntime.removeEnvironmentSubscriber(subscription.environmentKey);
-			}
-		},
-	},
-	maxSocketSessionsPerUser: MAX_SOCKET_SESSIONS_PER_USER,
-	maxSocketConnectionsPerUser: MAX_SOCKET_CONNECTIONS_PER_USER,
-	socketIdleTimeoutMs: SOCKET_IDLE_TIMEOUT_MS,
-	logSessionKillTimeoutMs: LOG_SESSION_KILL_TIMEOUT_MS,
-});
-socketRuntimeService.attach();
-
-const dockerEventService = createDockerEventService({
-	io,
-	dockerBinary,
-	emitRuntimeAction: runtimeActionJournal.emitRuntimeAction,
+const containerStatsHub = createContainerStatsHub({
 	isShuttingDown: () => shuttingDown,
 });
 
@@ -498,7 +404,6 @@ const agentSocketRuntime = createAgentSocketRuntime({
 	sql,
 	isShuttingDown: () => shuttingDown,
 	persistRuntimeSnapshotMetrics: async (input) => {
-		// Lazy import to use the Next.js server-side module
 		try {
 			const response = await fetch(`${getAppBaseUrl()}/api/internal/agent-metrics`, {
 				method: "POST",
@@ -517,6 +422,32 @@ const agentSocketRuntime = createAgentSocketRuntime({
 	},
 });
 agentSocketRuntime.attach();
+
+socketRuntimeService = createSocketRuntimeService({
+	io,
+	sql,
+	dockerBinary,
+	execFileAsync,
+	getAppBaseUrl,
+	isPrivilegedRole,
+	isTrustedOrigin,
+	emitRuntimeAction: runtimeActionJournal.emitRuntimeAction,
+	containerStatsHub,
+	agentSocketRuntime,
+	runtimeMetricsService,
+	maxSocketSessionsPerUser: MAX_SOCKET_SESSIONS_PER_USER,
+	maxSocketConnectionsPerUser: MAX_SOCKET_CONNECTIONS_PER_USER,
+	socketIdleTimeoutMs: SOCKET_IDLE_TIMEOUT_MS,
+	logSessionKillTimeoutMs: LOG_SESSION_KILL_TIMEOUT_MS,
+});
+socketRuntimeService.attach();
+
+const dockerEventService = createDockerEventService({
+	io,
+	dockerBinary,
+	emitRuntimeAction: runtimeActionJournal.emitRuntimeAction,
+	isShuttingDown: () => shuttingDown,
+});
 
 globalThis.__dockroot_io = io;
 globalThis.__dockroot_agent_socket_runtime = agentSocketRuntime;
@@ -553,13 +484,10 @@ async function shutdownServer(signal) {
 	console.log(`[shutdown] Received ${signal}; draining Dockroot runtime services...`);
 	shutdownPromise = (async () => {
 		runtimeMetricsService.stopDockerStatsStream();
+		containerStatsHub.destroy();
 		if (runtimeMetricsInterval) {
 			clearInterval(runtimeMetricsInterval);
 			runtimeMetricsInterval = null;
-		}
-		if (runtimeMetricsPersistInterval) {
-			clearInterval(runtimeMetricsPersistInterval);
-			runtimeMetricsPersistInterval = null;
 		}
 		if (updateSchedulerInterval) {
 			clearInterval(updateSchedulerInterval);
@@ -601,14 +529,9 @@ async function shutdownServer(signal) {
 runtimeMetricsService.startDockerStatsStream();
 runtimeMetricsInterval = setInterval(
 	() => void runtimeMetricsService.refreshResourceCounts(),
-	runtimeMetricsService.resourceCountsIntervalMs,
+	runtimeMetricsService.collectionIntervalMs,
 );
 runtimeMetricsInterval.unref?.();
-runtimeMetricsPersistInterval = setInterval(
-	() => void runtimeMetricsService.persistCurrentMetrics(),
-	runtimeMetricsService.localSampleIntervalMs,
-);
-runtimeMetricsPersistInterval.unref?.();
 
 const updateSchedulerWorkerId = `dockroot-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
 

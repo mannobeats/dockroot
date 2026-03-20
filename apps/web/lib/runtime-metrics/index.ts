@@ -1,4 +1,3 @@
-export { downsampleSeries } from "./helpers";
 export {
 	getContainerRuntimeMetrics,
 	getEnvironmentMetricsSeries,

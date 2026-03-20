@@ -3,26 +3,15 @@ export type FormAction = (formData: FormData) => void | Promise<void>;
 export type ContainerRow = Record<string, string>;
 
 export type ContainerStats = {
-	CPUPerc?: string;
-	MemPerc?: string;
-	MemUsage?: string;
-	NetIO?: string;
-	BlockIO?: string;
-	PIDs?: string;
-};
-
-export type RuntimePayload = {
-	environmentId?: string;
-	at: number;
-	containers: Array<{
-		Name?: string;
-		CPUPerc?: string;
-		MemPerc?: string;
-		MemUsage?: string;
-		NetIO?: string;
-		BlockIO?: string;
-		PIDs?: string;
-	}>;
+	cpuPercent: number;
+	memoryUsageBytes: number;
+	memoryLimitBytes: number;
+	memoryPercent: number;
+	networkRxBytes: number;
+	networkTxBytes: number;
+	blockReadBytes: number;
+	blockWriteBytes: number;
+	pids: number;
 };
 
 export type ColumnId =

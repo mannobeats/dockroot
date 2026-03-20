@@ -1,8 +1,6 @@
-import { getMetricsRoom } from "./metrics-room.mjs";
-
 /**
  * Agent WebSocket runtime: handles persistent WebSocket connections from remote agents.
- * Enables hub-initiated pulls for metrics (Beszel pattern) and real-time streaming.
+ * Enables hub-initiated pulls for metrics and per-container stats streaming.
  */
 export function createAgentSocketRuntime({
 	io,
@@ -17,18 +15,17 @@ export function createAgentSocketRuntime({
 	const envSubscriberCounts = new Map();
 	const latestSnapshots = new Map();
 
+	// Map<`${environmentId}:${containerId}`, Set<socketId>> — per-container stats subscribers
+	const containerStatsSubscribers = new Map();
+
 	function cacheSnapshot(environmentId, snapshot, sampledAt = Date.now()) {
-		latestSnapshots.set(environmentId, {
-			snapshot,
-			sampledAt,
-		});
+		latestSnapshots.set(environmentId, { snapshot, sampledAt });
 	}
 
 	function emitRuntimeMetrics(environmentId, snapshot, at = Date.now()) {
-		io.to(getMetricsRoom(environmentId)).emit("runtime:metrics", {
+		io.to(`metrics:env:${environmentId}`).emit("runtime:metrics", {
 			environmentId,
 			at,
-			containers: snapshot.containerStats || [],
 			host: {
 				source: "native",
 				cpuPercent: snapshot.usage?.cpuPercent ?? null,
@@ -42,13 +39,10 @@ export function createAgentSocketRuntime({
 			const auth = socket.handshake.auth || {};
 
 			// Only handle agent connections (identified by agentToken in auth)
-			if (!auth.agentToken || !auth.environmentId) {
-				return;
-			}
+			if (!auth.agentToken || !auth.environmentId) return;
 
 			const { agentId, environmentId } = auth;
 
-			// Verify agent token against DB
 			verifyAgentToken(auth.agentToken, agentId).then((valid) => {
 				if (!valid) {
 					socket.disconnect(true);
@@ -64,7 +58,6 @@ export function createAgentSocketRuntime({
 				console.log(`[agent:ws] Agent ${agentId} connected for environment ${environmentId}`);
 
 				socket.on("agent:identify", (data) => {
-					// Agent confirms identity after connect
 					const entry = connectedAgents.get(environmentId);
 					if (entry) {
 						entry.agentId = data.agentId || agentId;
@@ -72,10 +65,7 @@ export function createAgentSocketRuntime({
 				});
 
 				socket.on("agent:snapshot", async (data) => {
-					if (!data.snapshot) {
-						return;
-					}
-
+					if (!data.snapshot) return;
 					try {
 						cacheSnapshot(environmentId, data.snapshot);
 						await persistRuntimeSnapshotMetrics({
@@ -83,21 +73,14 @@ export function createAgentSocketRuntime({
 							snapshot: data.snapshot,
 							source: "agent",
 						});
-
 						emitRuntimeMetrics(environmentId, data.snapshot);
 					} catch (error) {
-						console.error(
-							"[agent:ws] Failed to persist snapshot:",
-							error instanceof Error ? error.message : "unknown error",
-						);
+						console.error("[agent:ws] Failed to persist snapshot:", error?.message);
 					}
 				});
 
 				socket.on("agent:metrics", async (data) => {
-					if (!data.snapshot) {
-						return;
-					}
-
+					if (!data.snapshot) return;
 					try {
 						cacheSnapshot(environmentId, data.snapshot, data.at || Date.now());
 						await persistRuntimeSnapshotMetrics({
@@ -105,13 +88,26 @@ export function createAgentSocketRuntime({
 							snapshot: data.snapshot,
 							source: "agent",
 						});
-
 						emitRuntimeMetrics(environmentId, data.snapshot, data.at || Date.now());
 					} catch (error) {
-						console.error(
-							"[agent:ws] Failed to persist streaming metrics:",
-							error instanceof Error ? error.message : "unknown error",
-						);
+						console.error("[agent:ws] Failed to persist streaming metrics:", error?.message);
+					}
+				});
+
+				// Per-container stats from agent → forward to subscribing clients
+				socket.on("agent:container:stats", (data) => {
+					if (!data?.containerId) return;
+					const key = `${environmentId}:${data.containerId}`;
+					const subscribers = containerStatsSubscribers.get(key);
+					if (!subscribers || subscribers.size === 0) return;
+
+					for (const socketId of subscribers) {
+						const clientSocket = io.of("/").sockets.get(socketId);
+						if (clientSocket) {
+							clientSocket.emit("container:stats", data);
+						} else {
+							subscribers.delete(socketId);
+						}
 					}
 				});
 
@@ -145,27 +141,21 @@ export function createAgentSocketRuntime({
 
 	function requestAgentSnapshot(environmentId) {
 		const entry = connectedAgents.get(environmentId);
-		if (!entry) {
-			return;
-		}
+		if (!entry) return;
 		const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 		entry.socket.emit("agent:request-snapshot", requestId);
 	}
 
 	function startAgentStreaming(environmentId) {
 		const entry = connectedAgents.get(environmentId);
-		if (!entry || entry.streaming) {
-			return;
-		}
+		if (!entry || entry.streaming) return;
 		entry.streaming = true;
 		entry.socket.emit("agent:start-streaming", 2_000);
 	}
 
 	function stopAgentStreaming(environmentId) {
 		const entry = connectedAgents.get(environmentId);
-		if (!entry || !entry.streaming) {
-			return;
-		}
+		if (!entry || !entry.streaming) return;
 		entry.streaming = false;
 		entry.socket.emit("agent:stop-streaming");
 	}
@@ -187,6 +177,57 @@ export function createAgentSocketRuntime({
 		}
 	}
 
+	// Per-container stats: client subscribes to a specific container on a remote agent
+	function subscribeContainerStats(clientSocket, containerId, environmentId) {
+		if (!environmentId || !containerId) return;
+		const key = `${environmentId}:${containerId}`;
+		let subscribers = containerStatsSubscribers.get(key);
+		if (!subscribers) {
+			subscribers = new Set();
+			containerStatsSubscribers.set(key, subscribers);
+		}
+		const wasEmpty = subscribers.size === 0;
+		subscribers.add(clientSocket.id);
+
+		// Tell agent to start streaming this container's stats
+		if (wasEmpty) {
+			const entry = connectedAgents.get(environmentId);
+			if (entry) {
+				entry.socket.emit("agent:container:stats:start", containerId);
+			}
+		}
+	}
+
+	function unsubscribeContainerStats(clientSocket, containerId, environmentId) {
+		if (!environmentId || !containerId) return;
+		const key = `${environmentId}:${containerId}`;
+		const subscribers = containerStatsSubscribers.get(key);
+		if (!subscribers) return;
+		subscribers.delete(clientSocket.id);
+
+		if (subscribers.size === 0) {
+			containerStatsSubscribers.delete(key);
+			const entry = connectedAgents.get(environmentId);
+			if (entry) {
+				entry.socket.emit("agent:container:stats:stop", containerId);
+			}
+		}
+	}
+
+	function unsubscribeAllContainerStats(clientSocket) {
+		for (const [key, subscribers] of containerStatsSubscribers) {
+			subscribers.delete(clientSocket.id);
+			if (subscribers.size === 0) {
+				containerStatsSubscribers.delete(key);
+				const [environmentId, containerId] = key.split(":");
+				const entry = connectedAgents.get(environmentId);
+				if (entry && containerId) {
+					entry.socket.emit("agent:container:stats:stop", containerId);
+				}
+			}
+		}
+	}
+
 	function isAgentConnected(environmentId) {
 		return connectedAgents.has(environmentId);
 	}
@@ -197,12 +238,8 @@ export function createAgentSocketRuntime({
 
 	function getLatestSnapshot(environmentId, maxAgeMs = 45_000) {
 		const entry = latestSnapshots.get(environmentId);
-		if (!entry) {
-			return null;
-		}
-		if (Date.now() - entry.sampledAt > maxAgeMs) {
-			return null;
-		}
+		if (!entry) return null;
+		if (Date.now() - entry.sampledAt > maxAgeMs) return null;
 		return entry;
 	}
 
@@ -213,6 +250,9 @@ export function createAgentSocketRuntime({
 		stopAgentStreaming,
 		addEnvironmentSubscriber,
 		removeEnvironmentSubscriber,
+		subscribeContainerStats,
+		unsubscribeContainerStats,
+		unsubscribeAllContainerStats,
 		isAgentConnected,
 		getConnectedAgentCount,
 		getLatestSnapshot,

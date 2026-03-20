@@ -1,20 +1,19 @@
 import { io } from "socket.io-client";
 import msgpackParser from "socket.io-msgpack-parser";
 import { metrics } from "./config.mjs";
-import { getSnapshot } from "./docker.mjs";
+import { getSnapshot, streamContainerStats } from "./docker.mjs";
 
 let socket = null;
 let connected = false;
 
+// Map<containerId, AbortController> — active per-container stats streams
+const containerStreams = new Map();
+
 export function startAgentWebSocket(state) {
-	if (socket) {
-		return;
-	}
+	if (socket) return;
 
 	const managerUrl = state.managerUrl || "";
-	if (!managerUrl) {
-		return;
-	}
+	if (!managerUrl) return;
 
 	socket = io(managerUrl, {
 		path: "/socket.io",
@@ -44,6 +43,8 @@ export function startAgentWebSocket(state) {
 	socket.on("disconnect", (reason) => {
 		connected = false;
 		metrics.connected = 0;
+		stopAllContainerStreams();
+		stopMetricsStream();
 		console.log(`[agent:ws] Disconnected: ${reason}`);
 	});
 
@@ -53,24 +54,18 @@ export function startAgentWebSocket(state) {
 		console.error(`[agent:ws] Connection error: ${error.message}`);
 	});
 
-	// Hub-initiated pull: when the hub wants fresh metrics, it sends this event
+	// Hub-initiated snapshot pull
 	socket.on("agent:request-snapshot", async (requestId) => {
 		try {
 			const snapshot = await getSnapshot();
-			socket.emit("agent:snapshot", {
-				requestId,
-				snapshot,
-			});
+			socket.emit("agent:snapshot", { requestId, snapshot });
 		} catch (error) {
 			console.error("[agent:ws] Failed to generate snapshot:", error.message);
-			socket.emit("agent:snapshot", {
-				requestId,
-				error: error.message,
-			});
+			socket.emit("agent:snapshot", { requestId, error: error.message });
 		}
 	});
 
-	// Hub can request metrics at a specific interval
+	// Hub requests environment-level metrics streaming
 	socket.on("agent:start-streaming", (intervalMs) => {
 		startMetricsStream(intervalMs || 2_000);
 	});
@@ -78,6 +73,34 @@ export function startAgentWebSocket(state) {
 	socket.on("agent:stop-streaming", () => {
 		stopMetricsStream();
 	});
+
+	// Per-container stats streaming (Arcane-inspired)
+	socket.on("agent:container:stats:start", (containerId) => {
+		if (!containerId || containerStreams.has(containerId)) return;
+		const abort = new AbortController();
+		containerStreams.set(containerId, abort);
+		streamContainerStats(containerId, abort.signal, (stats) => {
+			if (connected && socket) {
+				socket.emit("agent:container:stats", { containerId, ...stats });
+			}
+		});
+	});
+
+	socket.on("agent:container:stats:stop", (containerId) => {
+		if (!containerId) return;
+		const abort = containerStreams.get(containerId);
+		if (abort) {
+			abort.abort();
+			containerStreams.delete(containerId);
+		}
+	});
+}
+
+function stopAllContainerStreams() {
+	for (const abort of containerStreams.values()) {
+		abort.abort();
+	}
+	containerStreams.clear();
 }
 
 let streamTimer = null;
@@ -85,15 +108,10 @@ let streamTimer = null;
 function startMetricsStream(intervalMs) {
 	stopMetricsStream();
 	const tick = async () => {
-		if (!connected || !socket) {
-			return;
-		}
+		if (!connected || !socket) return;
 		try {
 			const snapshot = await getSnapshot();
-			socket.emit("agent:metrics", {
-				at: Date.now(),
-				snapshot,
-			});
+			socket.emit("agent:metrics", { at: Date.now(), snapshot });
 		} catch (error) {
 			console.error("[agent:ws] Metrics stream error:", error.message);
 		}
@@ -112,6 +130,7 @@ function stopMetricsStream() {
 
 export function stopAgentWebSocket() {
 	stopMetricsStream();
+	stopAllContainerStreams();
 	if (socket) {
 		socket.disconnect();
 		socket = null;

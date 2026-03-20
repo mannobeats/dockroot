@@ -6,17 +6,8 @@ import { ChartFrame } from "@/components/chart-frame";
 import { Panel } from "@/components/ui/panel";
 import { getSocket, subscribeMetrics, unsubscribeMetrics } from "@/lib/socket-client";
 
-function parsePercent(value: string | undefined) {
-	return Number.parseFloat((value || "0").replace("%", "")) || 0;
-}
-
 interface RuntimePayload {
 	at: number;
-	containers: Array<{
-		Name?: string;
-		CPUPerc?: string;
-		MemPerc?: string;
-	}>;
 	host?: {
 		source?: "native" | "docker";
 		cpuPercent?: number | null;
@@ -24,7 +15,7 @@ interface RuntimePayload {
 	};
 }
 
-type HistoryEntry = { time: string; cpu: number; memory: number; source: "native" | "docker" };
+type HistoryEntry = { time: string; cpu: number; memory: number };
 
 type ChartTooltipEntry = {
 	name?: string;
@@ -57,74 +48,40 @@ const CustomTooltip = ({ active, payload, label }: ChartTooltipProps) => {
 };
 
 const MAX_HISTORY = 60;
-const THROTTLE_MS = 1_000;
 
 export function LiveRuntimePanel() {
 	const [mounted, setMounted] = useState(false);
 	const [history, setHistory] = useState<HistoryEntry[]>([]);
-	const pendingRef = useRef<HistoryEntry | null>(null);
-	const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-	const lastFlushRef = useRef(0);
+	const lastEntryRef = useRef<HistoryEntry | null>(null);
 
-	const flushPending = useCallback(() => {
-		timerRef.current = null;
-		if (pendingRef.current) {
-			const entry = pendingRef.current;
-			pendingRef.current = null;
-			lastFlushRef.current = Date.now();
-			setHistory((current) => [...current.slice(-(MAX_HISTORY - 1)), entry]);
-		}
+	const onMetrics = useCallback((payload: RuntimePayload) => {
+		const cpu = Number(payload.host?.cpuPercent ?? 0);
+		const memory = Number(payload.host?.memoryPercent ?? 0);
+
+		const entry: HistoryEntry = {
+			time: new Date(payload.at).toLocaleTimeString([], {
+				hour: "2-digit",
+				minute: "2-digit",
+			}),
+			cpu: Number(cpu.toFixed(1)),
+			memory: Number(memory.toFixed(1)),
+		};
+
+		lastEntryRef.current = entry;
+		setHistory((current) => [...current.slice(-(MAX_HISTORY - 1)), entry]);
 	}, []);
 
 	useEffect(() => {
 		setMounted(true);
 		const client = getSocket();
-		// This panel is currently intended for the shared local runtime stream.
 		subscribeMetrics({ environmentId: "local", environmentKind: "local" });
-
-		const onMetrics = (payload: RuntimePayload) => {
-			const fallbackCpu =
-				payload.containers.reduce((sum, item) => sum + parsePercent(item.CPUPerc), 0) /
-				Math.max(payload.containers.length, 1);
-			const fallbackMemory =
-				payload.containers.reduce((sum, item) => sum + parsePercent(item.MemPerc), 0) /
-				Math.max(payload.containers.length, 1);
-			const hostCpu = payload.host?.cpuPercent;
-			const hostMemory = payload.host?.memoryPercent;
-			const cpu = Number.isFinite(hostCpu) ? Number(hostCpu) : fallbackCpu;
-			const memory = Number.isFinite(hostMemory) ? Number(hostMemory) : fallbackMemory;
-			const source: "native" | "docker" = payload.host?.source === "native" ? "native" : "docker";
-
-			const entry: HistoryEntry = {
-				time: new Date(payload.at).toLocaleTimeString([], {
-					hour: "2-digit",
-					minute: "2-digit",
-				}),
-				cpu: Number(cpu.toFixed(1)),
-				memory: Number(memory.toFixed(1)),
-				source,
-			};
-
-			pendingRef.current = entry;
-			const elapsed = Date.now() - lastFlushRef.current;
-			if (elapsed >= THROTTLE_MS) {
-				flushPending();
-			} else if (!timerRef.current) {
-				timerRef.current = setTimeout(flushPending, THROTTLE_MS - elapsed);
-			}
-		};
-
 		client.on("runtime:metrics", onMetrics);
 
 		return () => {
 			client.off("runtime:metrics", onMetrics);
 			unsubscribeMetrics({ environmentId: "local", environmentKind: "local" });
-			if (timerRef.current) {
-				clearTimeout(timerRef.current);
-				timerRef.current = null;
-			}
 		};
-	}, [flushPending]);
+	}, [onMetrics]);
 
 	const latest = useMemo(() => history.at(-1), [history]);
 

@@ -13,7 +13,9 @@ export function createSocketRuntimeService({
 	isPrivilegedRole,
 	isTrustedOrigin,
 	emitRuntimeAction,
-	metricsSubscriptionCallbacks = null,
+	containerStatsHub = null,
+	agentSocketRuntime = null,
+	runtimeMetricsService = null,
 	maxSocketSessionsPerUser = 5,
 	maxSocketConnectionsPerUser = 12,
 	socketIdleTimeoutMs = 10 * 60 * 1000,
@@ -105,7 +107,6 @@ export function createSocketRuntimeService({
 
 		io.on("connection", (socket) => {
 			const authCookie = String(socket.request.headers.cookie || "");
-			const metricsSubscriptions = new Map();
 			emitRuntimeAction("socket.connected", {
 				userId: socket.data.userId,
 				role: socket.data.role,
@@ -129,38 +130,64 @@ export function createSocketRuntimeService({
 				}
 			});
 
-			socket.on("metrics:subscribe", async (input) => {
-				if (!(socket.data?.role && isPrivilegedRole(socket.data.role))) {
-					return;
+			// --- Per-container stats (Arcane-inspired) ---
+			socket.on("container:stats:subscribe", async (input) => {
+				if (!(socket.data?.role && isPrivilegedRole(socket.data.role))) return;
+				const containerId = typeof input === "string" ? input : input?.containerId;
+				if (!containerId) return;
+
+				const environmentKind = input?.environmentKind || "local";
+				if (environmentKind === "agent") {
+					agentSocketRuntime?.subscribeContainerStats(socket, containerId, input?.environmentId);
+				} else {
+					containerStatsHub?.subscribe(socket, containerId);
 				}
-				const subscription = await metricsSubscriptionCallbacks?.addSubscriber?.({
-					socket,
-					userId: socket.data.userId,
-					role: socket.data.role,
-					input,
-				});
-				if (!subscription?.subscriptionKey) {
-					return;
-				}
-				metricsSubscriptions.set(subscription.subscriptionKey, subscription);
 			});
 
-			socket.on("metrics:unsubscribe", async (input) => {
-				const subscriptionKey = metricsSubscriptionCallbacks?.getSubscriptionKey?.(input);
-				if (!subscriptionKey) {
-					return;
+			socket.on("container:stats:unsubscribe", (input) => {
+				const containerId = typeof input === "string" ? input : input?.containerId;
+				if (!containerId) return;
+
+				const environmentKind = input?.environmentKind || "local";
+				if (environmentKind === "agent") {
+					agentSocketRuntime?.unsubscribeContainerStats(socket, containerId, input?.environmentId);
+				} else {
+					containerStatsHub?.unsubscribe(socket, containerId);
 				}
-				const subscription = metricsSubscriptions.get(subscriptionKey);
-				if (!subscription) {
-					return;
+			});
+
+			// --- Environment-level metrics (dashboard live telemetry) ---
+			socket.on("metrics:subscribe", async (input) => {
+				if (!(socket.data?.role && isPrivilegedRole(socket.data.role))) return;
+
+				const environmentKind = input?.environmentKind === "agent" ? "agent" : "local";
+				if (environmentKind === "local") {
+					runtimeMetricsService?.addMetricsSubscriber(socket);
+				} else if (input?.environmentId) {
+					const env = await accessControl.resolveOwnedEnvironmentWithKind?.(
+						socket.data.userId,
+						input.environmentId,
+					);
+					if (env?.id && env.kind === "agent") {
+						const room = `metrics:env:${env.id}`;
+						socket.join(room);
+						agentSocketRuntime?.addEnvironmentSubscriber(env.id);
+						socket.data._agentMetricsRooms = socket.data._agentMetricsRooms || new Set();
+						socket.data._agentMetricsRooms.add(env.id);
+					}
 				}
-				await metricsSubscriptionCallbacks?.removeSubscriber?.({
-					socket,
-					userId: socket.data.userId,
-					role: socket.data.role,
-					subscription,
-				});
-				metricsSubscriptions.delete(subscriptionKey);
+			});
+
+			socket.on("metrics:unsubscribe", (input) => {
+				const environmentKind = input?.environmentKind === "agent" ? "agent" : "local";
+				if (environmentKind === "local") {
+					runtimeMetricsService?.removeMetricsSubscriber(socket);
+				} else if (input?.environmentId) {
+					const room = `metrics:env:${input.environmentId}`;
+					socket.leave(room);
+					agentSocketRuntime?.removeEnvironmentSubscriber(input.environmentId);
+					socket.data._agentMetricsRooms?.delete(input.environmentId);
+				}
 			});
 
 			terminalRuntime.registerSocketHandlers({ socket, authCookie });
@@ -173,15 +200,21 @@ export function createSocketRuntimeService({
 					socketId: socket.id,
 					environmentId: null,
 				});
-				for (const subscription of metricsSubscriptions.values()) {
-					void metricsSubscriptionCallbacks?.removeSubscriber?.({
-						socket,
-						userId: socket.data.userId,
-						role: socket.data.role,
-						subscription,
-					});
+
+				// Clean up per-container stats
+				containerStatsHub?.unsubscribeAll(socket);
+
+				// Clean up environment-level subscriptions
+				runtimeMetricsService?.removeMetricsSubscriber(socket);
+				if (socket.data._agentMetricsRooms) {
+					for (const envId of socket.data._agentMetricsRooms) {
+						agentSocketRuntime?.removeEnvironmentSubscriber(envId);
+					}
 				}
-				metricsSubscriptions.clear();
+
+				// Clean up agent per-container stats
+				agentSocketRuntime?.unsubscribeAllContainerStats(socket);
+
 				terminalRuntime.closeSocketTerminalSessions(socket.id);
 				logRuntime.closeSocketLogSessions(socket.id);
 			});

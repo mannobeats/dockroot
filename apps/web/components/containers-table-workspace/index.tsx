@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ALL_COLUMNS } from "@/components/containers-table-workspace/columns";
 import { useColumnVisibility } from "@/components/containers-table-workspace/hooks/use-column-visibility";
-import { useRuntimeMetrics } from "@/components/containers-table-workspace/hooks/use-runtime-metrics";
+import { useContainerStats } from "@/components/containers-table-workspace/hooks/use-container-stats";
 import { ContainersLiveConsoleDock } from "@/components/containers-table-workspace/live-console-dock";
 import { ContainersTableRow } from "@/components/containers-table-workspace/row";
 import { ContainersTableToolbar } from "@/components/containers-table-workspace/toolbar";
@@ -20,6 +20,7 @@ import {
 	DataTableHead,
 	DataTableHeader,
 } from "@/components/ui/data-table";
+import { getSocket } from "@/lib/socket-client";
 
 export function ContainersTableWorkspace({
 	containers,
@@ -57,13 +58,37 @@ export function ContainersTableWorkspace({
 	updateStateMap: UpdateStateRecord;
 }) {
 	const [selectedIds, setSelectedIds] = useState<Record<string, boolean>>({});
+	const [watchStackId, setWatchStackId] = useState(initialWatchStackId || "");
+	const [logDockOpen, setLogDockOpen] = useState(Boolean(initialWatchStackId));
 	const { visibleColumns, toggleColumn, isVisible } = useColumnVisibility();
-	const { containerStats, logDockOpen, setLogDockOpen, setWatchStackId, watchStackId } =
-		useRuntimeMetrics({
-			environmentId,
-			environmentKind,
-			initialWatchStackId,
-		});
+
+	// Only subscribe to stats for running containers
+	const runningContainerIds = useMemo(
+		() => containers.filter((c) => (c.State || "").toLowerCase() === "running").map((c) => c.ID),
+		[containers],
+	);
+
+	const { statsMap, loadingSet } = useContainerStats({
+		containerIds: runningContainerIds,
+		environmentId,
+		environmentKind,
+	});
+
+	// Listen for deployment updates
+	useEffect(() => {
+		const client = getSocket();
+		const onDeploymentUpdate = (event: { stackId?: string; status?: string }) => {
+			if (!event?.stackId) return;
+			if (event.status === "running" || event.status === "queued") {
+				setWatchStackId(event.stackId);
+				setLogDockOpen(true);
+			}
+		};
+		client.on("deployment:update", onDeploymentUpdate);
+		return () => {
+			client.off("deployment:update", onDeploymentUpdate);
+		};
+	}, []);
 
 	const protectedSet = useMemo(() => new Set(protectedContainerIds), [protectedContainerIds]);
 	const selectableIds = useMemo(
@@ -83,7 +108,7 @@ export function ContainersTableWorkspace({
 	);
 	const allSelectableSelected =
 		selectableIds.length > 0 && selectableIds.every((containerId) => selectedIds[containerId]);
-	const visibleCount = ALL_COLUMNS.filter((c) => visibleColumns.has(c.id)).length + 1; // +1 for checkbox
+	const visibleCount = ALL_COLUMNS.filter((c) => visibleColumns.has(c.id)).length + 1;
 	const handleSelectChange = useCallback((containerId: string, checked: boolean) => {
 		setSelectedIds((current) => ({
 			...current,
@@ -148,30 +173,27 @@ export function ContainersTableWorkspace({
 				</DataTableHeader>
 				<DataTableBody>
 					{containers.length ? (
-						containers.map((container) => {
-							const containerName = container.Names || container.Name || "";
-							const rowStatsKey = containerName.replace(/^\//, "");
-							return (
-								<ContainersTableRow
-									key={`${container.ID}-${container.Names}`}
-									container={container}
-									environmentId={environmentId}
-									managerUrl={managerUrl}
-									isVisible={isVisible}
-									isProtected={protectedSet.has(container.ID)}
-									protectedLabel={protectedContainerLabels[container.ID]}
-									isSelected={Boolean(selectedIds[container.ID])}
-									onSelectChange={handleSelectChange}
-									controlContainerAction={controlContainerAction}
-									checkContainerUpdatesAction={checkContainerUpdatesAction}
-									applyContainerUpdatesAction={applyContainerUpdatesAction}
-									setContainerUpdatePolicyAction={setContainerUpdatePolicyAction}
-									updatePolicyMap={updatePolicyMap}
-									updateStateMap={updateStateMap}
-									rowStats={containerStats[rowStatsKey]}
-								/>
-							);
-						})
+						containers.map((container) => (
+							<ContainersTableRow
+								key={`${container.ID}-${container.Names}`}
+								container={container}
+								environmentId={environmentId}
+								managerUrl={managerUrl}
+								isVisible={isVisible}
+								isProtected={protectedSet.has(container.ID)}
+								protectedLabel={protectedContainerLabels[container.ID]}
+								isSelected={Boolean(selectedIds[container.ID])}
+								onSelectChange={handleSelectChange}
+								controlContainerAction={controlContainerAction}
+								checkContainerUpdatesAction={checkContainerUpdatesAction}
+								applyContainerUpdatesAction={applyContainerUpdatesAction}
+								setContainerUpdatePolicyAction={setContainerUpdatePolicyAction}
+								updatePolicyMap={updatePolicyMap}
+								updateStateMap={updateStateMap}
+								rowStats={statsMap[container.ID]}
+								isLoading={loadingSet.has(container.ID)}
+							/>
+						))
 					) : (
 						<DataTableEmpty colSpan={visibleCount}>
 							No containers matched the current filters.
