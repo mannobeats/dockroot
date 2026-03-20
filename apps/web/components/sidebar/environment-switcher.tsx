@@ -1,4 +1,4 @@
-import { ChevronsUpDown, Server } from "lucide-react";
+import { Check, ChevronsUpDown, Globe, Monitor } from "lucide-react";
 import type { SidebarEnvironment } from "./types";
 
 interface EnvironmentSwitcherProps {
@@ -9,6 +9,17 @@ interface EnvironmentSwitcherProps {
 	selectedEnvironment?: SidebarEnvironment;
 	onToggle: () => void;
 	onSelect: (environmentId: string) => void;
+}
+
+function EnvironmentIcon({ kind, className }: { kind: string; className?: string }) {
+	if (kind === "agent") return <Globe className={className} />;
+	return <Monitor className={className} />;
+}
+
+function kindLabel(kind: string) {
+	if (kind === "agent") return "Remote";
+	if (kind === "local") return "Local";
+	return kind;
 }
 
 export function EnvironmentSwitcher({
@@ -37,12 +48,16 @@ export function EnvironmentSwitcher({
 					}}
 					title={
 						selectedEnvironment
-							? `${selectedEnvironment.name} (${selectedEnvironment.kind})`
+							? `${selectedEnvironment.name} (${kindLabel(selectedEnvironment.kind)})`
 							: "Switch environment"
 					}
-					className="flex h-8 w-full items-center justify-center rounded-lg text-muted transition-colors duration-150 hover:bg-foreground/[0.04] hover:text-foreground"
+					className={`flex h-8 w-full items-center justify-center rounded-lg transition-colors duration-150 ${
+						envOpen
+							? "bg-foreground/[0.06] text-foreground"
+							: "text-muted hover:bg-foreground/[0.04] hover:text-foreground"
+					}`}
 				>
-					<Server className="h-3.5 w-3.5" />
+					<EnvironmentIcon kind={selectedEnvironment?.kind || "local"} className="h-3.5 w-3.5" />
 				</button>
 			) : (
 				<button
@@ -51,20 +66,32 @@ export function EnvironmentSwitcher({
 						event.stopPropagation();
 						onToggle();
 					}}
-					className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors duration-150 hover:bg-foreground/[0.04]"
+					className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors duration-150 ${
+						envOpen ? "bg-foreground/[0.06]" : "hover:bg-foreground/[0.04]"
+					}`}
 				>
-					<div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-foreground/[0.06]">
-						<Server className="h-3 w-3 text-muted" />
+					<div
+						className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
+							selectedEnvironment?.kind === "agent"
+								? "bg-violet-500/10 text-violet-500"
+								: "bg-accent/10 text-accent"
+						}`}
+					>
+						<EnvironmentIcon kind={selectedEnvironment?.kind || "local"} className="h-3.5 w-3.5" />
 					</div>
 					<div className="min-w-0 flex-1">
-						<p className="truncate text-[12px] font-medium leading-tight">
+						<p className="truncate text-[12px] font-semibold leading-tight">
 							{selectedEnvironment?.name || "Select environment"}
 						</p>
 						<p className="truncate text-[10px] leading-tight text-muted">
-							{selectedEnvironment?.kind || "none"}
+							{selectedEnvironment ? kindLabel(selectedEnvironment.kind) : "none"}
 						</p>
 					</div>
-					<ChevronsUpDown className="h-3 w-3 shrink-0 text-muted/60" />
+					<ChevronsUpDown
+						className={`h-3 w-3 shrink-0 transition-colors ${
+							envOpen ? "text-foreground" : "text-muted/40"
+						}`}
+					/>
 				</button>
 			)}
 
@@ -73,11 +100,16 @@ export function EnvironmentSwitcher({
 					role="listbox"
 					onClick={(event) => event.stopPropagation()}
 					onKeyDown={undefined}
-					className={`absolute z-50 mt-1 overflow-hidden rounded-xl border border-default/12 bg-surface shadow-[0_8px_30px_rgba(0,0,0,0.12)] ${
-						collapsed ? "left-full top-0 ml-1 w-52" : "left-2 right-2"
+					className={`absolute z-50 mt-1 overflow-hidden rounded-xl border border-default/12 bg-surface shadow-[0_8px_30px_rgba(0,0,0,0.16)] ${
+						collapsed ? "left-full top-0 ml-1 w-56" : "left-2 right-2"
 					}`}
 				>
-					<div className="p-1">
+					<div className="px-2.5 pb-1.5 pt-2.5">
+						<p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted/50">
+							Environments
+						</p>
+					</div>
+					<div className="px-1 pb-1">
 						{environments.map((environment) => {
 							const isActive = environment.id === selectedEnvironmentId;
 							return (
@@ -87,21 +119,26 @@ export function EnvironmentSwitcher({
 									role="option"
 									aria-selected={isActive}
 									onClick={() => onSelect(environment.id)}
-									className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[12px] transition-colors duration-100 ${
+									className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left text-[12px] transition-colors duration-100 ${
 										isActive
 											? "bg-foreground/[0.06] text-foreground"
 											: "text-muted hover:bg-foreground/[0.04] hover:text-foreground"
 									}`}
 								>
 									<div
-										className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-											isActive ? "bg-accent" : "bg-default/20"
+										className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${
+											environment.kind === "agent"
+												? "bg-violet-500/10 text-violet-500"
+												: "bg-accent/10 text-accent"
 										}`}
-									/>
+									>
+										<EnvironmentIcon kind={environment.kind} className="h-3 w-3" />
+									</div>
 									<div className="min-w-0 flex-1">
 										<p className="truncate font-medium">{environment.name}</p>
+										<p className="text-[10px] text-muted">{kindLabel(environment.kind)}</p>
 									</div>
-									<span className="shrink-0 text-[10px] text-muted">{environment.kind}</span>
+									{isActive ? <Check className="h-3.5 w-3.5 shrink-0 text-accent" /> : null}
 								</button>
 							);
 						})}
