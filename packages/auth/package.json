@@ -8,6 +8,6 @@
 	"dependencies": {
 		"@dockroot/db": "workspace:*",
 		"better-auth": "^1.5.5",
-		"drizzle-orm": "^0.45.1"
+		"drizzle-orm": "^0.45.2"
 	}
 }
